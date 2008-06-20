@@ -1,0 +1,74 @@
+Create a Library for Handling S3 Requests
+-----------------------------------------
+
+Instead of building the S3 functionality directly into the fuses3 tool,
+create an S3 library that such a tool would use.
+
+- C library
+  - Would like to use C++ but since all the libraries that libs3 would be
+    based on are C libraries, it seems useful to make the library a C
+    library.  The C++ functionality likely to be used in such a library
+    would be minimal anyway.
+
+- Support single requests, and also multiple requests handled by a single
+  API.  This would be curl_easy and curl_multi.  This is because it is known
+  that some operations (like listing a directory and doing HEAD on each element
+  in the directory one by one) will require multiple requests in flight at
+  once to be done efficiently.
+
+- Support methods for:
+
+Service operations:
+
+  - listbuckets
+
+Bucket operations:
+
+  - testbucket
+  - createbucket
+  - deletebucket
+
+ACL operations:
+
+  - setbucketacl
+  - addbucketacl
+  - removebucketacl
+  - clearbucketacl
+  - setobjectacl
+  - addobjectacl
+  - removeobjectacl
+  - clearobjectacl
+
+Object operations:
+
+  - putobject
+  - copyobject
+  - getobject
+  - headobject
+  - deleteobject
+
+- Configuration
+
+    - http/https
+    - bucket
+    - pathstyle
+    - accesskey
+    - securekey
+    - user agent info
+    - http proxy (someday)
+    - network interface (someday)
+    - low speed limit (someday)
+    - low speed time (someday)
+
+- Miscellaneous
+
+    - All methods will return an error code and will take as an argument
+      an optional pointer to an error context to fill out in the event of
+      an error, which includes a string description of the error.
+
+    - Data structures defined to represent all structured values passed to
+      S3 and returned from S3 (no XML crap)
+
+-------------------------------------------------------------------------------
+
+The API is described in libs3.h.
