@@ -15,9 +15,11 @@
  * 
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the
+ *
  * Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor,
  * Boston, MA  02110-1301, USA.
+ *
  ************************************************************************** **/
 
 /** **************************************************************************
@@ -137,49 +139,53 @@ typedef enum S3CannedAcl
 /**
  * S3ResponseHeaders is passed to the header callback function which is called
  * when the complete response status code and headers have been received.
+ * Some of the fields of this structure are optional and may not be provided
+ * in the response, and some will always be provided in the response.
  **/
 typedef struct S3ResponseHeaders
 {
     /**
-     * HTTP status result code
+     * HTTP status result code.  This field is always provided.
      **/
     int resultCode;
     /**
-     * If non-NULL, identifies the request ID and may be used when reporting
-     * problems to Amazon
+     * This optional field identifies the request ID and may be used when
+     * reporting problems to Amazon.  It may or may not be provided.
      **/
     const char *requestId;
     /**
-     * If non-NULL, identifies the request ID and may be used when reporting
-     * problems to Amazon
+     * This optional field identifies the request ID and may be used when
+     * reporting problems to Amazon.  It may or may not be provided.
      **/
     const char *requestId2;
     /**
-     * If non-NULL, this is the content type of the data which is returned by
-     * the request
+     * This optional field is the content type of the data which is returned
+     * by the request.  It may or may not be provided; if not provided, the
+     * default can be assumed to be "binary/octet-stream".
      **/
     const char *contentType;
     /**
-     * If nonnegative, this is the content length of the data which is
-     * returned in the response.  A negative value means that this value was
-     * not provided in the response.  A value of 0 means that there is no
-     * content provided.
+     * This optional field is the content length of the data which is returned
+     * in the response.  A negative value means that this value was not
+     * provided in the response.  A value of 0 means that there is no content
+     * provided.
      **/
     int64_t contentLength;
     /**
-     * If non-NULL, this names the server which serviced the request
+     * This optional field names the server which serviced the request.  It
+     * may or may not be provided.
      **/
     const char *server;
     /**
-     * If non-NULL, this provides a string identifying the unique contents of
-     * the resource identified by the request, such that the contents can be
-     * assumed not to be changed if the same eTag is returned at a later time
-     * decribing the same resource.
+     * This optional field provides a string identifying the unique contents
+     * of the resource identified by the request, such that the contents can
+     * be assumed not to be changed if the same eTag is returned at a later
+     * time decribing the same resource.  It may or may not be provided.
      **/
     const char *eTag;
     /**
-     * If non-NULL, provides the last modified time, relative to the Unix
-     * epoch, of the contents
+     * This optional field provides the last modified time, relative to the
+     * Unix epoch, of the contents.  It may or may not be provided.
      **/
     struct timeval *lastModified;
     /**
@@ -251,14 +257,38 @@ typedef struct S3AclGrant
 } S3AclGrant;
 
 
+/**
+ * This is a single entry supplied to the list bucket callback by a call to
+ * S3_list_bucket.  It identifies a single matching key from the list
+ * operation.  All fields of this structure are non-optional and will be
+ * present.
+ **/
 typedef struct ListBucketContent
 {
+    /**
+     * This is the next key in the list bucket results.
+     **/
     const char *key;
+    /**
+     * This is the last modified date of the object identified by the key.
+     **/
     struct timeval lastModified;
+    /**
+     * This gives a tag which gives a signature of the contents of the object.
+     **/
     const char *eTag;
+    /**
+     * This is the size of the object
+     **/
     uint64_t size;
 } ListBucketContent;
 
+
+/**
+ * S3OptionalHeaders is the set of headers that may optionally be set by the
+ * user when putting objects to S3.  Each field of this structure is optional
+ * and may or may not be present.
+ **/
 
 // contentType is optional
 // md5 is optional
@@ -270,14 +300,52 @@ typedef struct ListBucketContent
 // expires is optional
 typedef struct S3OptionalHeaders
 {
+    /**
+     * If present, this is the Content-Type that should be associated with the
+     * object.  If not provided, S3 defaults to "binary/octet-stream".
+     **/
     const char *contentType;
+    /**
+     * If present, this provides the MD5 signature of the contents, and is
+     * used to validate the contents.  This is highly recommended by Amazon
+     * but not required.
+     **/
     const char *md5;
+    /**
+     * If present, this gives the filename to save the downloaded file to,
+     * whenever the object is downloaded via a web browser.  This is only
+     * relevent for objects which are intended to be shared to users via web
+     * browsers and which is additionally intended to be downloaded rather
+     * than viewed.
+     **/
     const char *contentDispositionFilename;
+    /**
+     * If present, this identifies the content encoding of the object.  This
+     * is only applicable to encoded (usually, compressed) content, and only
+     * relevent if the object is intended to be downloaded via a browser.
+     **/
     const char *contentEncoding;
+    /**
+     * If present, this gives an expiration date for the content.  This
+     * information is typically only delivered to users who download the
+     * content via a web browser.
+     **/
     struct timeval *expires;
+    /**
+     * This identifies the "canned ACL" that should be used for this object.
+     * The default (0) gives only the owner of the object access to it.
+     **/
     S3CannedAcl cannedAcl;
+    /**
+     * This is the number of headers in the metaHeaders field
+     **/
     int metaHeadersCount;
-    // All must be prefixed by 'x-amz-meta-'
+    /**
+     * Each zero-terminated string here is a single metadata header to be
+     * applied to the object.  Each of these must be of the form
+     * x-amz-meta-${METANAME}:${VALUE}, where the ${METANAME} and ${VALUE} are
+     * entirely up to the application.
+     **/
     const char **metaHeaders;
 } S3PutHeaders;
 
@@ -286,29 +354,39 @@ typedef struct S3OptionalHeaders
  * Callback Signatures
  ************************************************************************** **/
 
-typedef S3CallbackStatus (S3ResponseHeadersCallback)
-    (void *pCallbackData, const S3ResponseHeadersData *pMetaData);
+/**
+ * This callback is made whenever the response headers become available for
+ * any request.
+ *
+ * @param pCallbackData is the callback data as specified when the S3Request
+ *        for which this callback was specified was initialized
+ * @param pMetaData is the headers (includes the response status code) that
+ *        are available from the response.
+ * @return S3Status???
+ **/
+typedef S3Status (S3ResponseHeadersCallback)(void *pCallbackData, 
+                                             const S3ResponseHeadersData *pMD);
                                     
 /**
- * Returns 0 if it wants more bucket callbacks, 1 if it wants no more.
+ *
  **/
-typedef S3CallbackStatus (S3ListBucketCallback)(void *pCallbackData,
-                                                const char *ownerId, 
-                                                const char *ownerDisplayName,
-                                                const char *bucketName,
-                                                struct timeval *pCreationDate);
+typedef S3Status (S3ListBucketsCallback)(void *pCallbackData,
+                                         const char *ownerId, 
+                                         const char *ownerDisplayName,
+                                         const char *bucketName,
+                                         struct timeval *pCreationDate);
 
-typedef S3CallbackStatus (S3ListBucketCallback)(void *pCallbackData,
-                                                bool isTruncated,
-                                                int contentsLength, 
-                                                ListBucketContent *pContents);
+typedef S3Status (S3ListBucketCallback)(void *pCallbackData,
+                                        bool isTruncated,
+                                        int contentsLength, 
+                                        ListBucketContent *pContents);
 
-typedef S3CallbackStatus (S3PutObjectCallback)(void *pCallbackData,
-                                               int *bufferSizeReturn,
-                                               char **bufferReturn);
+typedef S3Status (S3PutObjectCallback)(void *pCallbackData,
+                                       int *bufferSizeReturn,
+                                       char **bufferReturn);
 
-typedef S3CallbackStatus (S3GetObjectCallback)(void *pCallbackData,
-                                               int bufferSize, char *buffer);
+typedef S3Status (S3GetObjectCallback)(void *pCallbackData,
+                                       int bufferSize, char *buffer);
 
 
 /** **************************************************************************
