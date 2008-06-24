@@ -22,21 +22,30 @@
  *
  ************************************************************************** **/
 
+#ifndef LIBS3_H
+#define LIBS3_H
+
+#include <stdint.h>
+#include <sys/time.h>
+
 /** **************************************************************************
  * Overview
  * --------
  *
  * xxx todo
+ * NOTE: Response headers from Amazon S3 are limited to 4K (2K of metas is all
+ * that Amazon supports, and Amazon is allowed an additional 2K of headers).
  * 
  * Threading
  * ---------
  * 
  * 1. All arguments passed to any function must not be modified directly until
- *    the function returns (obviously).
+ *    the function returns.
  * 2. All S3RequestContext and S3Request arguments passed to all functions may
- *    not be used by any other thread until the function returns.
+ *    not be passed to any other libs3 function by any other thread until the
+ *    function returns.
  * 3. All functions may be called simultaneously by multiple threads as long
- *    as (1) and (2) are guaranteed.
+ *    as (1) and (2) are observed.
  *
  ************************************************************************** **/
 
@@ -62,7 +71,15 @@
  **/
 typedef enum
 {
-    S3StatusOK                          = 0
+    S3StatusOK                                  = 0,
+    S3StatusOutOfMemory                         = 1,
+    S3StatusFailedToCreateMutex                 = 2,
+    S3StatusInvalidBucketNameTooLong            = 3,
+    S3StatusInvalidBucketNameFirstCharacter     = 4,
+    S3StatusInvalidBucketNameCharacter          = 5,
+    S3StatusInvalidBucketNameCharacterSequence  = 6,
+    S3StatusInvalidBucketNameTooShort           = 7,
+    S3StatusInvalidBucketNameDotQuadNotation    = 8
 } S3Status;
 
 
@@ -135,6 +152,9 @@ typedef enum S3CannedAcl
 /** **************************************************************************
  * Data Types
  ************************************************************************** **/
+
+struct S3Mutex;
+
 
 /**
  * S3ResponseHeaders is passed to the header callback function which is called
@@ -249,12 +269,40 @@ typedef struct S3AclGrant
              **/
             const char *displayName;
         } canonicalUser;
-    };
+    } grantee;
     /**
      * This is the S3Permission to be granted to the grantee
      **/
     S3Permission permission;
 } S3AclGrant;
+
+
+/**
+ * A context for working with objects within a bucket.  A bucket context holds
+ * all information necessary for working with a bucket, and may be used
+ * repeatedly over many consecutive (or simultaneous) calls into libs3 bucket
+ * operation functions.
+ **/
+typedef struct S3BucketContext
+{
+    /**
+     * The name of the bucket to use in the bucket context
+     **/
+    const char *bucketName;
+    /**
+     * The URI style to use for all URIs sent to Amazon S3 while working with
+     * this bucket context
+     **/
+    S3UriStyle uriStyle;
+    /**
+     * The Amazon Access Key ID to use for access to the bucket
+     **/
+    const char *accessKeyId;
+    /**
+     *  The Amazon Secret Access Key to use for access to the bucket
+     **/
+    const char *secretAccessKey;
+} S3BucketContext;
 
 
 /**
@@ -290,6 +338,7 @@ typedef struct ListBucketContent
  * and may or may not be present.
  **/
 
+/*
 // contentType is optional
 // md5 is optional
 // contentDispositionFilename: Set on the object so that if someone downloads
@@ -298,7 +347,8 @@ typedef struct ListBucketContent
 //   header that users downloading the object from S3 will get.  Use with
 //   care.
 // expires is optional
-typedef struct S3OptionalHeaders
+*/
+typedef struct S3RequestHeaders
 {
     /**
      * If present, this is the Content-Type that should be associated with the
@@ -347,46 +397,134 @@ typedef struct S3OptionalHeaders
      * entirely up to the application.
      **/
     const char **metaHeaders;
-} S3PutHeaders;
+} S3RequestHeaders;
+
+
+/**
+ * Users of this API should treat this object as opaque
+ **/
+typedef struct S3Request
+{
+} S3Request;
+
+/**
+ * Users of this API should treat this object as opaque
+ **/
+typedef struct S3RequestContext
+{
+} S3RequestContext;
 
 
 /** **************************************************************************
  * Callback Signatures
  ************************************************************************** **/
 
+
+typedef unsigned long (S3ThreadSelfCallback)();
+
+typedef struct S3Mutex *(S3MutexCreateCallback)();
+
+typedef void (S3MutexLockCallback)(struct S3Mutex *mutex);
+
+typedef void (S3MutexUnlockCallback)(struct S3Mutex *mutex);
+
+typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
+
 /**
  * This callback is made whenever the response headers become available for
  * any request.
  *
- * @param pCallbackData is the callback data as specified when the S3Request
+ * @param callbackData is the callback data as specified when the S3Request
  *        for which this callback was specified was initialized
- * @param pMetaData is the headers (includes the response status code) that
+ * @param headers is the headers (includes the response status code) that
  *        are available from the response.
  * @return S3Status???
  **/
-typedef S3Status (S3ResponseHeadersCallback)(void *pCallbackData, 
-                                             const S3ResponseHeadersData *pMD);
+typedef S3Status (S3ResponseHeadersCallback)(void *callbackData, 
+                                             const S3ResponseHeaders *headers);
                                     
 /**
+ * This callback is made for each bucket resulting from a list buckets
+ * operation.
  *
+ * @param callbackData is the callback data as specified when the S3Request
+ *        for which this callback was specified was initialized
+ * @param ownerId is the ID of the owner of the bucket
+ * @param ownerDisplayName is the owner display name of the owner of the bucket
+ * @param bucketName is the name of the bucket
+ * @param creationDate if present is the creation date of the bucket
+ * @return S3Status???
  **/
-typedef S3Status (S3ListBucketsCallback)(void *pCallbackData,
+typedef S3Status (S3ListBucketsCallback)(void *callbackData,
                                          const char *ownerId, 
                                          const char *ownerDisplayName,
                                          const char *bucketName,
-                                         struct timeval *pCreationDate);
+                                         const struct timeval *creationDate);
 
-typedef S3Status (S3ListBucketCallback)(void *pCallbackData,
-                                        bool isTruncated,
+
+/**
+ * This callback is made once for each object resulting from a list bucket
+ * operation.
+ *
+ * @param callbackData is the callback data as specified when the S3Request
+ *        for which this callback was specified was initialized
+ * @param isTruncated is true if the list bucket request was truncated by the
+ *        S3 service, in which case the remainder of the list may be obtained
+ *        by querying again using the Marker parameter to start the query
+ *        after this set of results
+ * @param nextMarker if present, gives the largest (alphabetically) key
+ *        returned in the response, which, if isTruncated is true, may be used
+ *        as the marker in a subsequent list buckets operation to continue
+ *        listing
+ * @param contentsLength is the number of ListBucketContent structures in the
+ *        contents parameter
+ * @param contents is an array of ListBucketContent structures, each one
+ *        describing an object in the bucket
+ * @return S3Status???
+ **/
+typedef S3Status (S3ListBucketCallback)(void *callbackData,
+                                        int isTruncated,
+                                        const char *nextMarker,
                                         int contentsLength, 
-                                        ListBucketContent *pContents);
+                                        const ListBucketContent *contents);
 
-typedef S3Status (S3PutObjectCallback)(void *pCallbackData,
+
+/**
+ * This callback is made during a put object operation, to obtain the next
+ * chunk of data to put to the S3 service as the contents of the object.  This
+ * callback is made repeatedly, each time acquiring the next chunk of data to
+ * write to the service, until either the return code is ??? or
+ * bufferSizeReturn is returned as 0, indicating that there is no more data to
+ * put to the service.
+ *
+ * @param callbackData is the callback data as specified when the S3Request
+ *        for which this callback was specified was initialized
+ * @param bufferSizeReturn returns the number of bytes that are being returned
+ *        in the bufferReturn parameter
+ * @param bufferReturn returns the bext set of bytes to be written to the
+ *        service as the contents of the object being put
+ * @return S3Status???
+ **/
+typedef S3Status (S3PutObjectCallback)(void *callbackData,
                                        int *bufferSizeReturn,
-                                       char **bufferReturn);
+                                       const char **bufferReturn);
 
-typedef S3Status (S3GetObjectCallback)(void *pCallbackData,
-                                       int bufferSize, char *buffer);
+
+/**
+ * This callback is made during a get object operation, to provide the next
+ * chunk of data available from the S3 service constituting the contents of
+ * the object being fetched.  This callback is made repeatedly, each time
+ * providing the next chunk of data read, until the complete object contents
+ * have been passed through the callback in this way, or the callback
+ * returns ???.
+ *
+ * @param callbackData is the callback data as specified when the S3Request
+ *        for which this callback was specified was initialized
+ * @param bufferSize gives the number of bytes in buffer
+ * @param buffer is the data being passed into the callback
+ **/
+typedef S3Status (S3GetObjectCallback)(void *callbackData,
+                                       int bufferSize, const char *buffer);
 
 
 /** **************************************************************************
@@ -394,54 +532,130 @@ typedef S3Status (S3GetObjectCallback)(void *pCallbackData,
  ************************************************************************** **/
 
 /**
- * Initialize libs3.
+ * Initializes libs3 for use.  This function must be called before any other
+ * libs3 function is called.  It may safely be called more than once, but for
+ * each call to S3_initialize(), a corresponding call to S3_deinitialize()
+ * must be made when the application is finished using libs3.
+ *
+ * @param userAgentInfo is a string that will be included in the User-Agent
+ *        header of every request made to the S3 service.  You may provide
+ *        NULL or the empty string if you don't care about this.  The value
+ *        will not be copied by this function and must remain unaltered by the
+ *        caller until S3_deinitialize() is called.
+ * @return S3Status ???
  **/
-S3Status S3_initialize(const char *userAgentInfo);
+S3Status S3_initialize(const char *userAgentInfo,
+                       S3ThreadSelfCallback *threadSelfCallback,
+                       S3MutexCreateCallback *mutexCreateCallback,
+                       S3MutexLockCallback *mutexLockCallback,
+                       S3MutexUnlockCallback *mutexUnlockCallback,
+                       S3MutexDestroyCallback *mutexDestroyCallback);
 
 
 /**
- * Must be called once per program for each occurrence of libs3_initialize().
+ * Must be called once per program for each call to libs3_initialize().  After
+ * this call is complete, no libs3 function may be called except
+ * S3_initialize().
  **/
 void S3_deinitialize();
 
 
-S3Status S3_validate_bucket_name(const char *bucket, S3UriStyle uriStyle);
+/**
+ * This function may be used to validate an S3 bucket name as being in the
+ * correct form for use with the S3 service.  Amazon S3 limits the allowed
+ * characters in S3 bucket names, as well as imposing some additional rules on
+ * the length of bucket names and their structure.  There are actually two
+ * limits; one for bucket names used only in path-style URIs, and a more
+ * strict limit used for bucket names used in virtual-host-style URIs.  It is
+ * advisable to use only bucket names which meet the more strict requirements
+ * regardless of how the bucket expected to be used.
+ *
+ * This method does NOT validate that the bucket is available for use in the
+ * S3 service, so the return value of this function cannot be used to decide
+ * whether or not a bucket with the give name already exists in Amazon S3 or
+ * is accessible by the caller.  It merely validates that the bucket name is
+ * valid for use with S3.
+ *
+ * @param *bucketName is the bucket name to validate
+ * @param uriStyle gives the URI style to validate the bucket name against.
+ *        It is advisable to always use S3UriStyleVirtuallHost.
+ * @return S3Status ???
+ **/
+S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
 
-// Converts an XML representation of an ACL to a structured representation.
-// aclXml is the XML representation of the ACL aclCountReturn returns the
-// number of S3Acl objects in the result pAclsReturn must be passed in as an
-// array of at least S3_ACL_MAXCOUNT S3Acl structures.  The first
-// [*aclCountReturn] structures will be filled in with the ACLs represented by
-// the input XML.
-S3Status S3_convert_acl(char *aclXml, int *aclGrantCountReturn, 
-                        S3AclGrant *pAclGrantsReturn);
 
 /**
- * Create a bucket context, for working with objects within a bucket
+ * Converts an XML representation of an ACL to a libs3 structured
+ * representation.  This method is not strictly necessary for working with
+ * ACLs using libs3, but may be convenient for users of the library who read
+ * ACLs from elsewhere in XML format and need to use these ACLs with libs3.
+ *
+ * @param aclXml is the XML representation of the ACL.  This must be a
+ *        zero-terminated character string in ASCII format.
+ * @param aclGrantCountReturn returns the number of S3AclGrant structures
+ *        returned in the aclGrantsReturned array
+ * @param aclGransReturned must be passed in as an array of at least
+ *        S3_ACL_MAXCOUNT structures, and on return from this function, the
+ *        first aclGrantCountReturn structures will be filled in with the ACLs
+ *        represented by the input XML.
+ * @return S3Status ???
  **/
-S3Status S3_initialize_bucket_context(S3BucketContext *pBucketContext,
-                                      const char *bucketName,
-                                      S3UriStyle uriStyle,
-                                      const char *accessKeyId,
-                                      const char *secretAccessKey);
+S3Status S3_convert_acl(char *aclXml, int *aclGrantCountReturn,
+                        S3AclGrant *aclGrantsReturn);
 
 
 /** **************************************************************************
  * Request Management Functions
  ************************************************************************** **/
 
-// We limit response headers to 4K (2K of metas is all that Amazon supports,
-// and we allow Amazon an additional 2K of headers)
+/**
+ * All requests to Amazon S3 must be associated with an initialized S3Request
+ * structure.  S3Request structures, once initialized, can be used to initiate
+ * and manage a request to the S3 service.
+ *
+ * @param request is the S3Request structure to initialize
+ * @param callback is the callback which will be made when the S3 response
+ *        headers and response code is available.  This callback will be made
+ *        for exactly once for every (valid) call to S3_complete_request.
+ * @param callbackData will be passed in via the callbackData parameter to the
+ *        callback 
+ * @return S3Status ???
+ **/
+S3Status S3_initialize_request(S3Request *request, 
+                               S3ResponseHeadersCallback *callback,
+                               void *callbackData);
 
-S3Status S3_initialize_request(S3Request *pRequest, 
-                               S3ResponseHeadersCallback *pCallback,
-                               void *pCallbackData);
+/**
+ * This function must be called on all S3Request structures after they have
+ * been initialized, and when they are no longer needed.
+ *
+ * @param request is the S3Request structure to be deinitialized.
+ * @return S3Status ???
+ **/
+S3Status S3_deinitialize_request(S3Request *request);
 
-// Removes it from the request context, and must be called on all requests
-S3Status S3_deinitialize_request(S3Request *pRequest);
-
-// Removes it from the request context and finishes it
-S3Status S3_complete_request(S3Request *pRequest);
+/**
+ * This function completes a S3Request.  This may be called after the request
+ * has been set up by one of the Bucket, Access Control List, or Object
+ * functions.  This call will return only after the request has been
+ * completely sent to S3, and the response completely read in and handled (by
+ * calling the callbacks supplied when the S3Request was initialized, and the
+ * request was set up), or there has been an error, or one of the callbacks
+ * has returned a status indicating that the request is to be aborted
+ * prematurely.
+ *
+ * If, instead, the caller wishes to manage multiple S3Request structures at
+ * once, S3RequestContext may be used, and it will take care of driving the
+ * S3Request to completion, in which case this function should not be called
+ * on the S3Request.
+ *
+ * After this function returns, the S3Request structure will be in the
+ * initialized state, ready to handle another request to S3.
+ *
+ * @param request is the S3Request to complete
+ * @return S3Status ???
+ **/
+S3Status S3_complete_request(S3Request *request);
 
 
 /** **************************************************************************
@@ -449,93 +663,143 @@ S3Status S3_complete_request(S3Request *pRequest);
  ************************************************************************** **/
 
 /**
- * List all S3 buckets belonging to the access key id
+ * Sets up an S3Request to lists all S3 buckets belonging to the access key
+ * id.
+ *
+ * @param request is an initialized S3Request structure, which will handle the
+ *        S3 request and its response
+ * @param accessKeyId gives the Amazon Access Key ID for which to list owned
+ *        buckets
+ * @param secretAccessKey gives the Amazon Secret Access Key for which to list
+ *        owned buckets
+ * @param callback will be called back once for each bucket listed in the
+ *        response to this operation
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        callback
+ * @return S3Status ???
  **/
-
-S3Status S3_list_buckets(S3Request *pRequest, 
+S3Status S3_list_buckets(S3Request *request, 
                          const char *accessKeyId, const char *secretAccessKey,
-                         S3ListBucketCallback *pCallback);
+                         S3ListBucketCallback *callback,
+                         void *callbackData);
+                         
                             
-
 /**
  * Tests the existence of an S3 bucket, additionally returning the bucket's
- * location.
+ * location if it exists and is accessible.
+ *
+ * @param request is an initialized S3Request structure, which will handle the
+ *        S3 request and its response
+ * @param accessKeyId gives the Amazon Access Key ID for which to test the
+ *        exitence and accessibility of the bucket
+ * @param secretAccessKey gives the Amazon Secret Access Key for which to test
+ *        the exitence and accessibility of the bucket
+ * @param bucketName is the bucket name to test
+ * @param locationConstraintReturnSize gives the number of bytes in the
+ *        locationConstraintReturn parameter
+ * @param locationConstraintReturn provides the location into which to write
+ *        the name of the location constraint naming the geographic location
+ *        of the S3 bucket.  This must have at least as many characters in it
+ *        as specified by locationConstraintReturn, and should start out
+ *        NULL-terminated.  On successful return of this function, this will
+ *        be set to the name of the geographic location of S3 bucket, or will
+ *        be left as a zero-length string if no location was available.
+ * @return S3Status ???
  **/
-
-S3Status S3_test_bucket(S3Request *pRequest,
+S3Status S3_test_bucket(S3Request *request,
                         const char *accessKeyId, const char *secretAccessKey,
                         const char *bucketName, 
-                        const char *locationConstraintReturn,
-                        int locationConstraintReturnSize);
+                        int locationConstraintReturnSize,
+                        const char *locationConstraintReturn);
                            
 /**
  * Creates a new bucket.
+ *
+ * @param request is an initialized S3Request structure, which will handle the
+ *        S3 request and its response
+ * @param accessKeyId gives the Amazon Access Key ID for the owner of the
+ *        bucket which will be created
+ * @param secretAccessKey gives the Amazon Secret Access Key for the owner of
+ *        the bucket which will be created
+ * @param bucketName is the name of the bucket to be created
+ * @param locationConstraint, if non-NULL, gives the geographic location for
+ *        the bucket to create.
+ * @return S3Status ???
  **/
-
-S3Status S3_create_bucket(S3Request *pRequest,
+S3Status S3_create_bucket(S3Request *request,
                           const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName, 
                           const char *locationConstraint);
 
 /**
- * Deletes a new bucket.
+ * Deletes a bucket.  The bucket must be empty.
+ *
+ * @param request is an initialized S3Request structure, which will handle the
+ *        S3 request and its response
+ * @param accessKeyId gives the Amazon Access Key ID for the bucket
+ * @param secretAccessKey gives the Amazon Secret Access Key for the bucket
+ * @param bucketName is the name of the bucket to be deleted
+ * @return S3Status ???
  **/
-S3Status S3_delete_bucket(S3Request *pRequest,
+S3Status S3_delete_bucket(S3Request *request,
                           const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName);
 
 
-S3Status S3_list_bucket(S3Request *pRequest, S3BucketContext *pBucketContext,
+/**
+ * Lists keys within a bucket.
+ *
+ * @param request is an initialized S3Request structure, which will handle the
+ *        S3 request and its response
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param prefix if present, gives a prefix for matching keys
+ * @param marker if present, only keys occuring after this value will be
+ *        listed
+ * @param delimiter if present, causes keys that contain the same string
+ *        between the prefix and the first occurrence of the delimiter to be
+ *        rolled up into a single result element
+ * @param maxkeys is the maximum number of keys to return
+ * @param callback is the callback which will be called repeatedly with
+ *        resulting keys
+ * @param callbackData will be passed into the callback
+ * @return S3Status ???
+ **/
+S3Status S3_list_bucket(S3Request *request, S3BucketContext *bucketContext,
                         const char *prefix, const char *marker, 
                         const char *delimiter, int maxkeys,
-                        S3ListBucketCallback *pCallback,
-                        void *pCallbackData);
+                        S3ListBucketCallback *callback,
+                        void *callbackData);
 
 
-/** **************************************************************************
- * Access Control List Functions
- ************************************************************************** **/
-
-// key is optional, if not present the ACL applies to the bucket
-// aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
-// and does not need to be zero-terminated
-S3Status S3_set_acl(S3Request *pRequest, S3BucketContext *pBucketContext,
-                    const char *key, int aclGrantCount, 
-                    S3AclGrant *pAclGrants);
-
-S3Status S3_add_acl_grants(S3Request *pRequest, 
-                           S3BucketContext *pBucketContext,
-                           const char *key, int aclGrantCount, 
-                           S3AclGrant *pAclGrants);
-
-S3Status S3_remove_acl_grants(S3Request *pRequest, 
-                              S3BucketContext *pBucketContext,
-                              const char *key, int aclGrantsCount, 
-                              S3AclGrants *pAclGrants);
-
-S3Status S3_clear_acl(S3Request *pRequest, S3BucketContext *pBucketContext,
-                      const char *key);
-
+/**
+ * xxx todo - document remaining functions
+ **/
 
 /** **************************************************************************
  * Object Functions
  ************************************************************************** **/
 
+/*
 // xxx todo - possible Cache-Control
-S3Status S3_put_object(S3Request *pRequest, S3BucketContext *pBucketContext,
-                       const char *key, uint64_t contentLength;
-                       S3OptionalHeaders *pOptionalHeaders,
-                       S3PutObjectCallback *pCallback, void *pCallbackData);
+*/
+S3Status S3_put_object(S3Request *request, S3BucketContext *bucketContext,
+                       const char *key, uint64_t contentLength,
+                       const S3RequestHeaders *requestHeaders,
+                       S3PutObjectCallback *callback, void *callbackData);
                         
 
+/*
 // destinationBucket NULL means the same bucket as in pBucketContext
 // destinationKey NULL means the same object key as [key]
 // if pOptionalHeaders is NULL, existing headers will not be changed
-S3Status S3_copy_object(S3Request *pRequest, S3BucketContext *pBucketContext,
+*/
+S3Status S3_copy_object(S3Request *request, S3BucketContext *bucketContext,
                         const char *key, const char *destinationBucket,
                         const char *destinationKey,
-                        S3OptionalHeaders *pOptionalHeaders);
+                        const S3RequestHeaders *requestHeaders);
 
+/*
 // NOTE: ensure that if Range is requested, that Range is returned, and if
 // not, fail and close the request.  We expect S3 to be sensible about
 // Range and anything not returned properly must indicate an error in the
@@ -546,22 +810,50 @@ S3Status S3_copy_object(S3Request *pRequest, S3BucketContext *pBucketContext,
 // The response has to have the exact same set of ranges, or it is an error.
 // In this way, the caller can be sure that they will get exactly what they
 // expect.
-S3Status S3_get_object(S3Request *pRequest, S3BucketContext *pBucketContext,
-                       const char *key, const timeval *ifModifiedSince,
-                       const timeval *ifUnmodifiedSince, 
+*/
+S3Status S3_get_object(S3Request *request, S3BucketContext *bucketContext,
+                       const char *key, const struct timeval *ifModifiedSince,
+                       const struct timeval *ifUnmodifiedSince, 
                        const char *ifMatchETag, const char *ifNotMatchETag,
                        const char *byteRange,
-                       S3GetObjectCallback *pCallback, void *pCallbackData);
+                       S3GetObjectCallback *callback, void *callbackData);
 
 
-S3Status S3_head_object(S3Request *pRequest, S3BucketContext *pBucketContext,
-                        const char *key, const timeval *ifModifiedSince,
-                        const timeval *ifUnmodifiedSince, 
+S3Status S3_head_object(S3Request *request, S3BucketContext *bucketContext,
+                        const char *key, const struct timeval *ifModifiedSince,
+                        const struct timeval *ifUnmodifiedSince, 
                         const char *ifMatchETag, const char *ifNotMatchETag);
                          
 
-S3Status S3_delete_object(S3Request *pRequest, S3BucketContext *pBucketContext,
+S3Status S3_delete_object(S3Request *request, S3BucketContext *bucketContext,
                           const char *key);
+
+/** **************************************************************************
+ * Access Control List Functions
+ ************************************************************************** **/
+
+/*
+// key is optional, if not present the ACL applies to the bucket
+// aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
+// and does not need to be zero-terminated
+*/
+S3Status S3_set_acl(S3Request *request, S3BucketContext *bucketContext,
+                    const char *key, int aclGrantCount, 
+                    S3AclGrant *aclGrants);
+
+S3Status S3_add_acl_grants(S3Request *request, 
+                           S3BucketContext *bucketContext,
+                           const char *key, int aclGrantCount, 
+                           S3AclGrant *aclGrants);
+
+S3Status S3_remove_acl_grants(S3Request *request, 
+                              S3BucketContext *bucketContext,
+                              const char *key, int aclGrantsCount, 
+                              S3AclGrant *aclGrants);
+
+S3Status S3_clear_acl(S3Request *request, S3BucketContext *bucketContext,
+                      const char *key);
+
 
 /** **************************************************************************
  * Request Context Management Functions
@@ -571,17 +863,19 @@ S3Status S3_delete_object(S3Request *pRequest, S3BucketContext *pBucketContext,
  * Request context - allows multiple S3Requests to be processed at one
  * time.
  **/
-S3Status S3_initialize_request_context(S3RequestContext *pContext,
+S3Status S3_initialize_request_context(S3RequestContext *context,
                                        S3Protocol protocol);
 
+/*
 // Removes all S3Requests but does not stop them
-S3Status S3_deinitialize_request_context(S3RequestContext *pContext);
+*/
+S3Status S3_deinitialize_request_context(S3RequestContext *context);
 
-S3Status S3_add_request_to_request_context(S3RequestContext *pContext,
-                                           S3Request *pRequest);
+S3Status S3_add_request_to_request_context(S3RequestContext *context,
+                                           S3Request *request);
 
-S3Status S3_remove_request_from_request_context(S3RequestContext *pContext,
-                                                S3Request *pRequest);
+S3Status S3_remove_request_from_request_context(S3RequestContext *context,
+                                                S3Request *request);
 
 /**
  * Some methods for driving a request context:
@@ -597,19 +891,29 @@ S3Status S3_remove_request_from_request_context(S3RequestContext *pContext,
  * completing without returning a "stop" status.  However, the entire
  * request context can be deinitialized which will stop all requests in it.
  **/
+/*
 // This will run the request context to completion, not by busy-waiting, but
 // using select
-S3Status S3_complete_request_context(S3RequestContext *pContext);
+*/
+S3Status S3_complete_request_context(S3RequestContext *context);
 
 
+/*
 // These allow the application to control when to let libs3 do work on the
 // requests.  Each call will do all the work possible without network blocking
 // on all requests in the request context.
-S3Status S3_runonce_request_context(S3RequestContext *pContext, 
-                                    int *pRequestsRemainingReturn);
-// xxx the function for getting the fdsets
+*/
+S3Status S3_runonce_request_context(S3RequestContext *context, 
+                                    int *requestsRemainingReturn);
+
+/*
+// xxx todo the function for getting the fdsets
+*/
 
 
 /**
+ * xxx todo
  * Service Logging ...
  **/
+
+#endif /* LIBS3_H */
