@@ -31,6 +31,7 @@
 #endif
 #include <pthread.h>
 #include "libs3.h"
+#include "private.h"
 
 typedef struct S3Mutex CRYPTO_dynlock_value;
 
@@ -45,17 +46,17 @@ static S3MutexDestroyCallback *mutexDestroyCallbackG;
 static void locking_callback(int mode, int index, const char *file, int line)
 {
     if (mode & CRYPTO_LOCK) {
-        (*mutexLockCallbackG)(pLocksG[index]);
+        mutex_lock(pLocksG[index]);
     }
     else {
-        (*mutexUnlockCallbackG)(pLocksG[index]);
+        mutex_unlock(pLocksG[index]);
     }
 }
 
 
 static struct CRYPTO_dynlock_value *dynlock_create(const char *file, int line)
 {
-    return (struct CRYPTO_dynlock_value *) (*mutexCreateCallbackG)();
+    return (struct CRYPTO_dynlock_value *) mutex_create();
 }
 
 
@@ -63,10 +64,10 @@ static void dynlock_lock(int mode, struct CRYPTO_dynlock_value *pLock,
                          const char *file, int line)
 {
     if (mode & CRYPTO_LOCK) {
-        (*mutexLockCallbackG)((struct S3Mutex *) pLock);
+        mutex_lock((struct S3Mutex *) pLock);
     }
     else {
-        (*mutexUnlockCallbackG)((struct S3Mutex *) pLock);
+        mutex_unlock((struct S3Mutex *) pLock);
     }
 }
 
@@ -74,9 +75,80 @@ static void dynlock_lock(int mode, struct CRYPTO_dynlock_value *pLock,
 static void dynlock_destroy(struct CRYPTO_dynlock_value *pLock,
                             const char *file, int line)
 {
-    (*mutexDestroyCallbackG)((struct S3Mutex *) pLock);
+    mutex_destroy((struct S3Mutex *) pLock);
 }
 
+
+struct S3Mutex *mutex_create()
+{
+    return (*mutexCreateCallbackG)();
+}
+
+void mutex_lock(struct S3Mutex *mutex)
+{
+    return (*mutexLockCallbackG)(mutex);
+}
+
+void mutex_unlock(struct S3Mutex *mutex)
+{
+    return (*mutexUnlockCallbackG)(mutex);
+}
+
+void mutex_destroy(struct S3Mutex *mutex)
+{
+    return (*mutexDestroyCallbackG)(mutex);
+}
+
+PrivateData *create_private_data(S3RequestHandler *handler,
+                                 S3ListServiceCallback *listServiceCallback,
+                                 S3ListBucketCallback *listBucketCallback,
+                                 S3PutObjectCallback *putObjectCallback,
+                                 S3GetObjectCallback *getObjectCallback,
+                                 void *data)
+{
+    PrivateData *ret = (PrivateData *) malloc(sizeof(PrivateData));
+
+    if (ret) {
+        ret->headersCallback = handler->headersCallback;
+        ret->errorCallback = handler->errorCallback;
+        ret->completeCallback = handler->completeCallback;
+        ret->listServiceCallback = listServiceCallback;
+        ret->listBucketCallback = listBucketCallback;
+        ret->putObjectCallback = putObjectCallback;
+        ret->getObjectCallback = getObjectCallback;
+        ret->data = data;
+    }
+
+    return ret;
+}
+
+S3Status handle_multi_request(CurlRequest *request, 
+                              S3RequestContext *requestContext)
+{
+    switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
+    case CURLM_OK:
+        return S3StatusOK;
+    // xxx todo - more specific errors
+    default:
+        pool_release(request);
+        return S3StatusFailure;
+    }
+}
+
+S3Status handle_easy_request(CurlRequest *request)
+{
+    CURLcode status = curl_easy_perform(request->curl);
+
+    pool_release(request);
+
+    switch (status) {
+    case CURLE_OK:
+        return S3StatusOK;
+    // xxx todo - more specific errors
+    default:
+        return S3StatusFailure;
+    }
+}
 
 S3Status S3_initialize(const char *userAgentInfo,
                        S3ThreadSelfCallback *threadSelfCallback,
@@ -113,13 +185,19 @@ S3Status S3_initialize(const char *userAgentInfo,
     CRYPTO_set_dynlock_lock_callback(dynlock_lock);
     CRYPTO_set_dynlock_destroy_callback(dynlock_destroy);
 
+    S3Status status = pool_initialize(userAgentInfo);
+    if (status != S3StatusOK) {
+        S3_deinitialize();
+        return status;
+    }
+
     return S3StatusOK;
 }
 
 
 void S3_deinitialize()
 {
-    int count, i;
+    pool_deinitialize();
 
     CRYPTO_set_dynlock_destroy_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
@@ -127,8 +205,8 @@ void S3_deinitialize()
     CRYPTO_set_locking_callback(NULL);
     CRYPTO_set_id_callback(NULL);
 
-    count = CRYPTO_num_locks();
-    for (i = 0; i < count; i++) {
+    int count = CRYPTO_num_locks();
+    for (int i = 0; i < count; i++) {
         (*mutexDestroyCallbackG)(pLocksG[i]);
     }
 

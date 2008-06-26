@@ -22,43 +22,72 @@
  *
  ************************************************************************** **/
 
+#include <curl/curl.h>
 #include "libs3.h"
+#include "private.h"
 
-S3Status S3_initialize_request_context(S3RequestContext *context,
-                                       S3Protocol protocol)
+
+S3Status S3_create_request_context(S3RequestContext **requestContextReturn,
+                                   S3Protocol protocol)
 {
-    return S3StatusOK;
+    return ((*requestContextReturn = (S3RequestContext *) curl_multi_init()) ?
+            S3StatusOK : S3StatusFailedToCreateRequestContext);
 }
 
 
-S3Status S3_deinitialize_request_context(S3RequestContext *context)
+void S3_destroy_request_context(S3RequestContext *requestContext)
 {
-    return S3StatusOK;
+    curl_multi_cleanup(requestContext->curlm);
 }
 
 
-S3Status S3_add_request_to_request_context(S3RequestContext *context,
-                                           S3Request *request)
+S3Status S3_runall_request_context(S3RequestContext *requestContext)
 {
-    return S3StatusOK;
+    int requestsRemaining;
+    S3Status status;
+
+    do {
+        S3_runonce_request_context(requestContext, &requestsRemaining);
+    } while ((status == S3StatusOK) && requestsRemaining);
+
+    return status;
 }
 
 
-S3Status S3_remove_request_from_request_context(S3RequestContext *context,
-                                                S3Request *request)
-{
-    return S3StatusOK;
-}
-
-
-S3Status S3_complete_request_context(S3RequestContext *context)
-{
-    return S3StatusOK;
-}
-
-
-S3Status S3_runonce_request_context(S3RequestContext *context, 
+S3Status S3_runonce_request_context(S3RequestContext *requestContext, 
                                     int *requestsRemainingReturn)
 {
-    return S3StatusOK;
+    CURLMcode status;
+
+    do {
+        status = curl_multi_perform(requestContext->curlm,
+                                    requestsRemainingReturn);
+        
+        CURLMsg *msg;
+        int junk;
+        while ((msg = curl_multi_info_read(requestContext->curlm, &junk))) {
+            if ((msg->msg != CURLMSG_DONE) ||
+                (curl_multi_remove_handle(requestContext->curlm, 
+                                          msg->easy_handle) != CURLM_OK)) {
+                return S3StatusFailure;
+            }
+            // Get the private data for the easy handle
+            PrivateData *pd;
+            if (curl_easy_getinfo(msg->easy_handle, CURLOPT_PRIVATE, 
+                                  (char **) &pd) != CURLE_OK) {
+                return S3StatusFailure;
+            }
+            // Make response complete callback
+            (*pd->completeCallback)(pd->data);
+        }
+    } while (status == CURLM_CALL_MULTI_PERFORM);
+
+    switch (status) {
+    case CURLM_OK:
+        return S3StatusOK;
+    case CURLM_OUT_OF_MEMORY:
+        return S3StatusOutOfMemory;
+    default:
+        return S3StatusFailure;
+    }
 }

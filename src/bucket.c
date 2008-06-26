@@ -24,47 +24,41 @@
 
 #include "libs3.h"
 
-S3Status S3_list_buckets(S3Request *request, 
-                         const char *accessKeyId, const char *secretAccessKey,
-                         S3ListBucketCallback *callback,
-                         void *callbackData)
+S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
+                        const char *bucketName, 
+                        int locationConstraintReturnSize,
+                        const char *locationConstraintReturn,
+                        S3RequestContext *requestContext,
+                        S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
                          
                             
-S3Status S3_test_bucket(S3Request *request,
-                        const char *accessKeyId, const char *secretAccessKey,
-                        const char *bucketName, 
-                        int locationConstraintReturnSize,
-                        const char *locationConstraintReturn)
+S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
+                          const char *bucketName, 
+                          const char *locationConstraint,
+                          S3RequestContext *requestContext,
+                          S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
                            
-S3Status S3_create_bucket(S3Request *request,
-                          const char *accessKeyId, const char *secretAccessKey,
-                          const char *bucketName, 
-                          const char *locationConstraint)
+S3Status S3_delete_bucket(const char *accessKeyId, const char *secretAccessKey,
+                          const char *bucketName,
+                          S3RequestContext *requestContext,
+                          S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_delete_bucket(S3Request *request,
-                          const char *accessKeyId, const char *secretAccessKey,
-                          const char *bucketName)
-{
-    return S3StatusOK;
-}
-
-
-S3Status S3_list_bucket(S3Request *request, S3BucketContext *bucketContext,
+S3Status S3_list_bucket(S3BucketContext *bucketContext,
                         const char *prefix, const char *marker, 
                         const char *delimiter, int maxkeys,
-                        S3ListBucketCallback *callback,
-                        void *callbackData)
+                        S3RequestContext *requestContext,
+                        S3ListBucketHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }

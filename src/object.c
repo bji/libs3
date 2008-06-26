@@ -24,46 +24,53 @@
 
 #include "libs3.h"
 
-S3Status S3_put_object(S3Request *request, S3BucketContext *bucketContext,
+S3Status S3_put_object(S3BucketContext *bucketContext,
                        const char *key, uint64_t contentLength,
-                       const S3RequestHeaders *optionalHeaders,
-                       S3PutObjectCallback *callback, void *callbackData)
+                       const S3RequestHeaders *requestHeaders,
+                       S3RequestContext *requestContext,
+                       S3PutObjectHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_copy_object(S3Request *request, S3BucketContext *bucketContext,
+S3Status S3_copy_object(S3BucketContext *bucketContext,
                         const char *key, const char *destinationBucket,
                         const char *destinationKey,
-                        const S3RequestHeaders *optionalHeaders)
+                        const S3RequestHeaders *requestHeaders,
+                        S3RequestContext *requestContext,
+                        S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_get_object(S3Request *request, S3BucketContext *bucketContext,
+S3Status S3_get_object(S3BucketContext *bucketContext,
                        const char *key, const struct timeval *ifModifiedSince,
                        const struct timeval *ifUnmodifiedSince, 
                        const char *ifMatchETag, const char *ifNotMatchETag,
-                       const char *byteRange,
-                       S3GetObjectCallback *callback, void *callbackData)
+                       const char *byteRange, S3RequestContext *requestContext,
+                       S3GetObjectHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_head_object(S3Request *request, S3BucketContext *bucketContext,
+S3Status S3_head_object(S3BucketContext *bucketContext,
                         const char *key, const struct timeval *ifModifiedSince,
                         const struct timeval *ifUnmodifiedSince, 
-                        const char *ifMatchETag, const char *ifNotMatchETag)
+                        const char *ifMatchETag, const char *ifNotMatchETag,
+                        S3RequestContext *requestContext,
+                        S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
                          
 
-S3Status S3_delete_object(S3Request *request, S3BucketContext *bucketContext,
-                          const char *key)
+S3Status S3_delete_object(S3BucketContext *bucketContext,
+                          const char *key,
+                          S3RequestContext *requestContext,
+                          S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }

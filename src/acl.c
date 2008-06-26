@@ -24,34 +24,37 @@
 
 #include "libs3.h"
 
-S3Status S3_set_acl(S3Request *request, S3BucketContext *bucketContext,
-                    const char *key, int aclGrantCount, 
-                    S3AclGrant *aclGrants)
+S3Status S3_set_acl(S3BucketContext *bucketContext, const char *key,
+                    int aclGrantCount, S3AclGrant *aclGrants,
+                    S3RequestContext *requestContext,
+                    S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_add_acl_grants(S3Request *request, 
-                           S3BucketContext *bucketContext,
-                           const char *key, int aclGrantCount, 
-                           S3AclGrant *aclGrants)
+S3Status S3_add_acl_grants(S3BucketContext *bucketContext, const char *key,
+                           int aclGrantCount, S3AclGrant *aclGrants,
+                           S3RequestContext *requestContext,
+                           S3RequestHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_remove_acl_grants(S3Request *request, 
-                              S3BucketContext *bucketContext,
-                              const char *key, int aclGrantsCount, 
-                              S3AclGrant *aclGrants)
+S3Status S3_remove_acl_grants(S3BucketContext *bucketContext, const char *key,
+                              int aclGrantsCount, S3AclGrant *aclGrants,
+                              S3RequestContext *requestContext,
+                              void *callbackData)
 {
     return S3StatusOK;
 }
 
 
-S3Status S3_clear_acl(S3Request *request, S3BucketContext *bucketContext,
-                      const char *key)
+S3Status S3_clear_acl(S3BucketContext *bucketContext, const char *key,
+                      S3RequestContext *requestContext,
+                      S3RequestHandler *requestHandler,
+                      void *callbackData)
 {
     return S3StatusOK;
 }
