@@ -23,9 +23,27 @@
  ************************************************************************** **/
 
 #include <stdlib.h>
+#include <string.h>
 #include "libs3.h"
 #include "private.h"
 
+
+static size_t write_function(void *ptr, size_t size, size_t nmemb,
+                             void *stream)
+{
+    PrivateData *pd = (PrivateData *) stream;
+    (void) pd;
+
+    char *data = (char *) malloc((size * nmemb) + 1);
+    memcpy(data, ptr, size * nmemb);
+    data[size * nmemb] = 0;
+
+    printf("data: %s\n", data);
+
+    free(data);
+
+    return (size * nmemb);
+}
 
 S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
                          S3RequestContext *requestContext,
@@ -51,7 +69,13 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
     }
 
     // Set the request-specific curl options
-    
+
+    // Write function
+    if (curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION,
+                         write_function) != CURLE_OK) {
+        pool_release(request);
+        return S3StatusFailure;
+    }
 
     // Compose the URL
     

@@ -162,6 +162,15 @@ struct S3Mutex;
 typedef struct S3RequestContext S3RequestContext;
 
 
+typedef struct S3MetaHeader
+{
+    // This is the part after x-amz-meta-
+    const char *name;
+
+    // This is everything after the colon, not including \r\n
+    const char *value;
+} S3MetaHeader;
+
 /**
  * S3ResponseHeaders is passed to the header callback function which is called
  * when the complete response status code and headers have been received.
@@ -220,11 +229,9 @@ typedef struct S3ResponseHeaders
      **/
     int metaHeadersCount;
     /**
-     * These are the metadata headers associated with the resource.  These are
-     * strings of the form:
-     * x-amz-meta-${NAME}:${VALUE}
+     * These are the metadata headers associated with the resource.
      **/
-    const char **metaHeaders;
+    const S3MetaHeader *metaHeaders;
 } S3ResponseHeaders;
 
 
