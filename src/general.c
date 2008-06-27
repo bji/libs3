@@ -30,7 +30,6 @@
 #error "Threading support required in OpenSSL library, but not provided"
 #endif
 #include <pthread.h>
-#include "libs3.h"
 #include "private.h"
 
 typedef struct S3Mutex CRYPTO_dynlock_value;
@@ -99,116 +98,6 @@ void mutex_destroy(struct S3Mutex *mutex)
     return (*mutexDestroyCallbackG)(mutex);
 }
 
-PrivateData *create_private_data(CURL *curl,
-                                 S3RequestHandler *handler,
-                                 S3ListServiceCallback *listServiceCallback,
-                                 S3ListBucketCallback *listBucketCallback,
-                                 S3PutObjectCallback *putObjectCallback,
-                                 S3GetObjectCallback *getObjectCallback,
-                                 void *data)
-{
-    PrivateData *ret = (PrivateData *) calloc(sizeof(PrivateData));
-
-    if (ret) {
-        ret->curl = curl;
-        ret->headersCallback = handler->headersCallback;
-        ret->errorCallback = handler->errorCallback;
-        ret->completeCallback = handler->completeCallback;
-        ret->listServiceCallback = listServiceCallback;
-        ret->listBucketCallback = listBucketCallback;
-        ret->putObjectCallback = putObjectCallback;
-        ret->getObjectCallback = getObjectCallback;
-        ret->data = data;
-    }
-
-    return ret;
-}
-
-S3Status handle_multi_request(CurlRequest *request, 
-                              S3RequestContext *requestContext)
-{
-    switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
-    case CURLM_OK:
-        return S3StatusOK;
-    // xxx todo - more specific errors
-    default:
-        pool_release(request);
-        return S3StatusFailure;
-    }
-}
-
-S3Status handle_easy_request(CurlRequest *request)
-{
-    CURLcode status = curl_easy_perform(request->curl);
-
-    pool_release(request);
-
-    switch (status) {
-    case CURLE_OK:
-        return S3StatusOK;
-    // xxx todo - more specific errors
-    default:
-        return S3StatusFailure;
-    }
-}
-
-size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *fstream)
-{
-    PrivateData *pd = (PrivateData *) fstream;
-    S3ResponseHeadersPrivate *responseHeaders = &(pd->responseHeaders);
-
-    // Curl might call back the header function after the body has been
-    // received, for 'chunked encoded' contents.  We don't handle this as of
-    // yet, and it's not clear that it would ever be useful.
-    if (pd->headersCallbackMade) {
-        return;
-    }
-
-    // If we haven't gotten the result code yet, attempt to get it now.  It
-    // should be available as soon as the first header is available.
-    if (!responseHeaders->resultCodeSet) {
-        responseHeaders->resultCodeSet = 1;
-        if (curl_easy_getinfo(pd->curl, CURLINFO_RESPONSE_CODE,
-                              &(responseHeaders->resultCode)) != CURLE_OK) {
-            // Weird, couldn't get the status.  Set it to 0
-            responseHeaders->resultCode = 0;
-        }
-    }
-
-    // The header must end in \r\n, so we can set the \r to 0 to terminate it
-    size_t len = size * nmemb;
-    char *header = (char *) ptr;
-    header[len - 2] = 0;
-    
-    // Find the colon to split the header up
-    char *colon = header;
-    while (*colon && (*colon != ':')) {
-        colon++;
-    }
-    
-    int namelen = colon - header;
-    
-    if (!strncmp(header, "RequestId", namelen)) {
-    }
-    else if (!strncmp(header, "RequestId2", namelen)) {
-    }
-    else if (!strncmp(header, "ContentType", namelen)) {
-    }
-    else if (!strncmp(header, "ContentLength", namelen)) {
-    }
-    else if (!strncmp(header, "Server", namelen)) {
-    }
-    else if (!strncmp(header, "ETag", namelen)) {
-    }
-    else if (!strncmp(header, "LastModified", namelen)) {
-    }
-    else if (!strncmp(header, "x-amz-meta-", 
-                      (namelen > strlen("x-amz-meta-") ? 
-                       strlen("x-amz-meta-") : namelen))) {
-        
-    }
-}
-
 S3Status S3_initialize(const char *userAgentInfo,
                        S3ThreadSelfCallback *threadSelfCallback,
                        S3MutexCreateCallback *mutexCreateCallback,
@@ -244,7 +133,7 @@ S3Status S3_initialize(const char *userAgentInfo,
     CRYPTO_set_dynlock_lock_callback(dynlock_lock);
     CRYPTO_set_dynlock_destroy_callback(dynlock_destroy);
 
-    S3Status status = pool_initialize(userAgentInfo);
+    S3Status status = curl_request_api_initialize(userAgentInfo);
     if (status != S3StatusOK) {
         S3_deinitialize();
         return status;
@@ -256,7 +145,7 @@ S3Status S3_initialize(const char *userAgentInfo,
 
 void S3_deinitialize()
 {
-    pool_deinitialize();
+    curl_request_api_deinitialize();
 
     CRYPTO_set_dynlock_destroy_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);

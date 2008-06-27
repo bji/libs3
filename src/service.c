@@ -24,15 +24,13 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "libs3.h"
 #include "private.h"
 
 
-static size_t write_function(void *ptr, size_t size, size_t nmemb,
-                             void *stream)
+static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
 {
-    PrivateData *pd = (PrivateData *) stream;
-    (void) pd;
+    CurlRequest *curlRequest = (CurlRequest *) obj;
+    (void) curlRequest;
 
     char *data = (char *) malloc((size * nmemb) + 1);
     memcpy(data, ptr, size * nmemb);
@@ -45,35 +43,27 @@ static size_t write_function(void *ptr, size_t size, size_t nmemb,
     return (size * nmemb);
 }
 
+
 S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
                          S3RequestContext *requestContext,
                          S3ListServiceHandler *handler, void *callbackData)
 {
-    PrivateData *privateData = 
-        create_private_data(&(handler->requestHandler),
-                            handler->listServiceCallback,
-                            0, 0, 0, callbackData);
-
-    if (!privateData) {
-        return S3StatusOutOfMemory;
-    }
-
     // Get a CurlRequest from the pool
-    CurlRequest *request;
+    CurlRequest *curlRequest;
 
-    S3Status status = pool_get(privateData, &request);
+    S3Status status = curl_request_get
+        (&(handler->responseHandler), callbackData, &curlRequest);
 
     if (status != S3StatusOK) {
-        free(privateData);
         return status;
     }
 
     // Set the request-specific curl options
 
     // Write function
-    if (curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION,
+    if (curl_easy_setopt(curlRequest->curl, CURLOPT_WRITEFUNCTION,
                          write_function) != CURLE_OK) {
-        pool_release(request);
+        curl_request_release(curlRequest);
         return S3StatusFailure;
     }
 
@@ -82,10 +72,11 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
 
     // If there is a request context, just add the curl_easy to the curl_multi
     if (requestContext) {
-        return handle_multi_request(request, requestContext);
+        return curl_request_multi_add(curlRequest, requestContext);
     }
     // Else, run the curl_easy to completion
     else {
-        return handle_easy_request(request);
+        curl_request_easy_perform(curlRequest);
+        return S3StatusOK;
     }
 }

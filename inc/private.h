@@ -47,33 +47,48 @@ typedef struct CurlRequest
     // The callback data to pass to all of the callbacks
     void *callbackData;
 
-    // Header callback stuff --------------------------------------------------
+    // responseHeaders.metaHeaders strings get copied into here.  Since S3
+    // supports a max of 2K for all values and keys, limiting to 2K here is
+    // sufficient
+    char metaHeaderStrings[S3_MAX_META_HEADER_SIZE];
+
+    // The length thus far of metaHeaderStrings
+    int metaHeaderStringsLen;
+
+    // The maximum number of meta headers possible is:
+    //   2K / strlen("x-amz-meta-a:\0\0")
+    S3MetaHeader metaHeaders[S3_MAX_META_HEADER_SIZE / 
+                             (sizeof(S3_META_HEADER_NAME_PREFIX "a:") + 1)];
+
+
+    // If S3 sends back an error, we store the error text here
+    char errorMessage[256];
+
+    // If S3 sends back an error, we store the further details here
+    char errorFurtherDetails[1024];
+
+    // Callback stuff ---------------------------------------------------------
+
     // Callback to make when headers are available
     S3ResponseHeadersCallback *headersCallback;
 
     // The structure to pass to the headers callback
     S3ResponseHeaders responseHeaders;
 
-    // This is nonzero after the result code has been set in the
-    // responseHeaders structure, which typically happens when the first
-    // curl header callback happens
-    int resultCodeSet;
-
-    // responseHeaders.metaHeaders strings get copied into here.  Since S3
-    // supports a max of 2K for all values and keys, limiting to 2K here is
-    // sufficient
-    char metaHeaderStrings[S3_MAX_META_HEADER_SIZE];
-
-    // The maximum number of meta headers possible is:
-    //   2K / strlen("x-amz-meta-a:\0\0")
-    S3MetaHeader metaHeaderArray[S3_MAX_META_HEADER_SIZE / 
-                                 (sizeof(S3_META_HEADER_NAME_PREFIX) + 1)];
-
-    // The callback to make if an error occurs
-    S3ErrorCallback *errorCallback;
+    // This is set to nonzero after the haders callback has been made
+    int headersCallbackMade;
 
     // The callback to make when the response has been completely handled
     S3ResponseCompleteCallback *completeCallback;
+
+    // This is set to nonzero after the complete callback has been made
+    int completeCallbackMade;
+    
+    // This will be 0 if S3 didn't send any XML error
+    int receivedS3Error;
+
+    // If S3 did send an XML error, this is it
+    S3Error s3Error;
 
     // The callbacks to make for the data payload of the response
     union {
@@ -120,15 +135,19 @@ void curl_request_api_deinitialize();
 S3Status curl_request_get(S3ResponseHandler *handler, void *callbackData,
                           CurlRequest **curlRequestReturn);
 
+// Release a CurlRequest that is no longer needed
 void curl_request_release(CurlRequest *curlRequest);
 
-S3Status handle_multi_request(CurlRequest *request, 
-                              S3RequestContext *requestContext);
+// Add a CurlRequest to a S3RequestContext
+S3Status curl_request_multi_add(CurlRequest *curlRequest,
+                                S3RequestContext *requestContext);
 
-S3Status handle_easy_request(CurlRequest *request);
+// Perform a CurlRequest
+void curl_request_easy_perform(CurlRequest *curlRequest);
 
-// Curl callbacks
-size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *fstream);
+// Finish a request; ensures that all callbacks have been made, and also
+// releases the request
+void curl_request_finish(CurlRequest *curlRequest, S3Status status);
 
 
 #endif /* PRIVATE_H */

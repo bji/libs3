@@ -71,20 +71,88 @@
  **/
 typedef enum
 {
-    S3StatusOK                                  ,
-    S3StatusFailure                             ,
-    S3StatusOutOfMemory                         ,
-    S3StatusFailedToCreateMutex                 ,
-    S3StatusInvalidBucketNameTooLong            ,
-    S3StatusInvalidBucketNameFirstCharacter     ,
-    S3StatusInvalidBucketNameCharacter          ,
-    S3StatusInvalidBucketNameCharacterSequence  ,
-    S3StatusInvalidBucketNameTooShort           ,
-    S3StatusInvalidBucketNameDotQuadNotation    ,
-    S3StatusFailedToCreateRequest               ,
-    S3StatusFailedToInitializeRequest           ,
-    S3StatusFailedToCreateRequestContext        
+    S3StatusOK                                              ,
+    S3StatusFailure                                         ,
+    S3StatusOutOfMemory                                     ,
+    S3StatusFailedToCreateMutex                             ,
+    S3StatusInvalidBucketNameTooLong                        ,
+    S3StatusInvalidBucketNameFirstCharacter                 ,
+    S3StatusInvalidBucketNameCharacter                      ,
+    S3StatusInvalidBucketNameCharacterSequence              ,
+    S3StatusInvalidBucketNameTooShort                       ,
+    S3StatusInvalidBucketNameDotQuadNotation                ,
+    S3StatusFailedToCreateRequest                           ,
+    S3StatusFailedToInitializeRequest                       ,
+    S3StatusFailedToCreateRequestContext
 } S3Status;
+
+
+typedef enum
+{
+    S3ErrorCodeAccessDenied                                 ,
+    S3ErrorCodeAccountProblem                               ,
+    S3ErrorCodeAmbiguousGrantByEmailAddress                 ,
+    S3ErrorCodeBadDigest                                    ,
+    S3ErrorCodeBucketAlreadyExists                          ,
+    S3ErrorCodeBucketAlreadyOwnedByYou                      ,
+    S3ErrorCodeBucketNotEmpty                               ,
+    S3ErrorCodeCredentialsNotSupported                      ,
+    S3ErrorCodeCrossLocationLoggingProhibited               ,
+    S3ErrorCodeEntityTooSmall                               ,
+    S3ErrorCodeEntityTooLarge                               ,
+    S3ErrorCodeExpiredToken                                 ,
+    S3ErrorCodeIncompleteBody                               ,
+    S3ErrorCodeIncorrectNumberOfFilesInPostRequest          ,
+    S3ErrorCodeInlineDataTooLarge                           ,
+    S3ErrorCodeInternalError                                ,
+    S3ErrorCodeInvalidAccessKeyId                           ,
+    S3ErrorCodeInvalidAddressingHeader                      ,
+    S3ErrorCodeInvalidArgument                              ,
+    S3ErrorCodeInvalidBucketName                            ,
+    S3ErrorCodeInvalidDigest                                ,
+    S3ErrorCodeInvalidLocationConstraint                    ,
+    S3ErrorCodeInvalidPayer                                 ,
+    S3ErrorCodeInvalidPolicyDocument                        ,
+    S3ErrorCodeInvalidRange                                 ,
+    S3ErrorCodeInvalidSecurity                              ,
+    S3ErrorCodeInvalidSOAPRequest                           ,
+    S3ErrorCodeInvalidStorageClass                          ,
+    S3ErrorCodeInvalidTargetBucketForLogging                ,
+    S3ErrorCodeInvalidToken                                 ,
+    S3ErrorCodeInvalidURI                                   ,
+    S3ErrorCodeKeyTooLong                                   ,
+    S3ErrorCodeMalformedACLError                            ,
+    S3ErrorCodeMalformedXML                                 ,
+    S3ErrorCodeMaxMessageLengthExceeded                     ,
+    S3ErrorCodeMaxPostPreDataLengthExceededError            ,
+    S3ErrorCodeMetadataTooLarge                             ,
+    S3ErrorCodeMethodNotAllowed                             ,
+    S3ErrorCodeMissingAttachment                            ,
+    S3ErrorCodeMissingContentLength                         ,
+    S3ErrorCodeMissingSecurityElement                       ,
+    S3ErrorCodeMissingSecurityHeader                        ,
+    S3ErrorCodeNoLoggingStatusForKey                        ,
+    S3ErrorCodeNoSuchBucket                                 ,
+    S3ErrorCodeNoSuchKey                                    ,
+    S3ErrorCodeNotImplemented                               ,
+    S3ErrorCodeNotSignedUp                                  ,
+    S3ErrorCodeOperationAborted                             ,
+    S3ErrorCodePermanentRedirect                            ,
+    S3ErrorCodePreconditionFailed                           ,
+    S3ErrorCodeRedirect                                     ,
+    S3ErrorCodeRequestIsNotMultiPartContent                 ,
+    S3ErrorCodeRequestTimeout                               ,
+    S3ErrorCodeRequestTimeTooSkewed                         ,
+    S3ErrorCodeRequestTorrentOfBucketError                  ,
+    S3ErrorCodeSignatureDoesNotMatch                        ,
+    S3ErrorCodeSlowDown                                     ,
+    S3ErrorCodeTemporaryRedirect                            ,
+    S3ErrorCodeTokenRefreshRequired                         ,
+    S3ErrorCodeTooManyBuckets                               ,
+    S3ErrorCodeUnexpectedContent                            ,
+    S3ErrorCodeUnresolvableGrantByEmailAddress              ,
+    S3ErrorCodeUserKeyMustBeSpecified                        
+} S3ErrorCode;
 
 
 /**
@@ -179,10 +247,6 @@ typedef struct S3MetaHeader
  **/
 typedef struct S3ResponseHeaders
 {
-    /**
-     * HTTP status result code.  This field is always provided.
-     **/
-    int resultCode;
     /**
      * This optional field identifies the request ID and may be used when
      * reporting problems to Amazon.  It may or may not be provided.
@@ -413,6 +477,18 @@ typedef struct S3RequestHeaders
 } S3RequestHeaders;
 
 
+typedef struct S3Error
+{
+    S3ErrorCode code;
+
+    const char *message;
+
+    const char *resource;
+
+    const char *furtherDetails;
+} S3Error;
+
+
 /** **************************************************************************
  * Callback Signatures
  ************************************************************************** **/
@@ -445,9 +521,8 @@ typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
 typedef S3Status (S3ResponseHeadersCallback)(const S3ResponseHeaders *headers,
                                              void *callbackData);
 
-typedef void (S3ErrorCallback)(void *callbackData);
-
-typedef void (S3ResponseCompleteCallback)(void *callbackData);
+typedef void (S3ResponseCompleteCallback)(S3Status status, int httpResponseCode,
+                                          S3Error *error, void *callbackData);
 
                                     
 /**
@@ -661,23 +736,20 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
 // xxx todo the function for getting the fdsets
 */
 
-typedef struct S3RequestHandler
+typedef struct S3ResponseHandler
 {
     // Headers callback
     S3ResponseHeadersCallback *headersCallback;
     
-    // Error callback
-    S3ErrorCallback *errorCallback;
-
     // Request complete callback - always called if the call which initiates
     // the request doesn't return an error code
     S3ResponseCompleteCallback *completeCallback;
-} S3RequestHandler;
+} S3ResponseHandler;
 
 
 typedef struct S3ListServiceHandler
 {
-    S3RequestHandler requestHandler;
+    S3ResponseHandler responseHandler;
 
     // list buckets callback
     S3ListServiceCallback *listServiceCallback;
@@ -686,7 +758,7 @@ typedef struct S3ListServiceHandler
 
 typedef struct S3ListBucketHandler
 {
-    S3RequestHandler requestHandler;
+    S3ResponseHandler responseHandler;
 
     S3ListBucketCallback *listBucketCallback;
 } S3ListBucketHandler;
@@ -694,7 +766,7 @@ typedef struct S3ListBucketHandler
 
 typedef struct S3PutObjectHandler
 {
-    S3RequestHandler requestHandler;
+    S3ResponseHandler responseHandler;
 
     S3PutObjectCallback *putObjectCallback;
 } S3PutObjectHandler;
@@ -702,7 +774,7 @@ typedef struct S3PutObjectHandler
 
 typedef struct S3GetObjectHandler
 {
-    S3RequestHandler requestHandler;
+    S3ResponseHandler responseHandler;
 
     S3GetObjectCallback *getObjectCallback;
 } S3GetObjectHandler;
@@ -766,7 +838,7 @@ S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
                         int locationConstraintReturnSize,
                         const char *locationConstraintReturn,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData);
+                        S3ResponseHandler *handler, void *callbackData);
 
                            
 /**
@@ -788,7 +860,7 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName, 
                           const char *locationConstraint,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData);
+                          S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -805,7 +877,7 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
 S3Status S3_delete_bucket(const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData);
+                          S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -863,7 +935,7 @@ S3Status S3_copy_object(S3BucketContext *bucketContext,
                         const char *destinationKey,
                         const S3RequestHeaders *requestHeaders,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData);
+                        S3ResponseHandler *handler, void *callbackData);
 
 
 /*
@@ -891,13 +963,13 @@ S3Status S3_head_object(S3BucketContext *bucketContext,
                         const struct timeval *ifUnmodifiedSince, 
                         const char *ifMatchETag, const char *ifNotMatchETag,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData);
+                        S3ResponseHandler *handler, void *callbackData);
                          
 
 S3Status S3_delete_object(S3BucketContext *bucketContext,
                           const char *key,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData);
+                          S3ResponseHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -912,13 +984,13 @@ S3Status S3_delete_object(S3BucketContext *bucketContext,
 S3Status S3_set_acl(S3BucketContext *bucketContext, const char *key, 
                     int aclGrantCount, S3AclGrant *aclGrants, 
                     S3RequestContext *requestContext,
-                    S3RequestHandler *handler, void *callbackData);
+                    S3ResponseHandler *handler, void *callbackData);
 
 
 S3Status S3_add_acl_grants(S3BucketContext *bucketContext, const char *key,
                            int aclGrantCount, S3AclGrant *aclGrants,
                            S3RequestContext *requestContext,
-                           S3RequestHandler *handler, void *callbackData);
+                           S3ResponseHandler *handler, void *callbackData);
                            
 
 S3Status S3_remove_acl_grants(S3BucketContext *bucketContext, const char *key,
@@ -929,8 +1001,7 @@ S3Status S3_remove_acl_grants(S3BucketContext *bucketContext, const char *key,
 
 S3Status S3_clear_acl(S3BucketContext *bucketContext, const char *key,
                       S3RequestContext *requestContext,
-                      S3RequestHandler *requestHandler,
-                      void *callbackData);
+                      S3ResponseHandler *hander, void *callbackData);
 
 
 /**

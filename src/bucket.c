@@ -22,14 +22,14 @@
  *
  ************************************************************************** **/
 
-#include "libs3.h"
+#include "private.h"
 
 S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
                         const char *bucketName, 
                         int locationConstraintReturnSize,
                         const char *locationConstraintReturn,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData)
+                        S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
@@ -39,7 +39,7 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName, 
                           const char *locationConstraint,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData)
+                          S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
@@ -48,7 +48,7 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
 S3Status S3_delete_bucket(const char *accessKeyId, const char *secretAccessKey,
                           const char *bucketName,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData)
+                          S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }

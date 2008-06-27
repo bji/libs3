@@ -23,7 +23,6 @@
  ************************************************************************** **/
 
 #include <curl/curl.h>
-#include "libs3.h"
 #include "private.h"
 
 
@@ -71,14 +70,25 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                                           msg->easy_handle) != CURLM_OK)) {
                 return S3StatusFailure;
             }
-            // Get the private data for the easy handle
-            PrivateData *pd;
+            CurlRequest *curlRequest;
             if (curl_easy_getinfo(msg->easy_handle, CURLOPT_PRIVATE, 
-                                  (char **) &pd) != CURLE_OK) {
+                                  (char **) &curlRequest) != CURLE_OK) {
                 return S3StatusFailure;
             }
             // Make response complete callback
-            (*pd->completeCallback)(pd->data);
+            S3Status status;
+            switch (msg->data.result) {
+            case CURLE_OK:
+                status = S3StatusOK;
+                break;
+                // xxx todo fill the rest in
+            default:
+                status = S3StatusFailure;
+                break;
+            }
+            // Finish the request, ensuring that all callbacks have been made,
+            // and also releases the request
+            curl_request_finish(curlRequest, status);
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 

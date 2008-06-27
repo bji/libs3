@@ -22,7 +22,7 @@
  *
  ************************************************************************** **/
 
-#include "libs3.h"
+#include "private.h"
 
 S3Status S3_put_object(S3BucketContext *bucketContext,
                        const char *key, uint64_t contentLength,
@@ -39,7 +39,7 @@ S3Status S3_copy_object(S3BucketContext *bucketContext,
                         const char *destinationKey,
                         const S3RequestHeaders *requestHeaders,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData)
+                        S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
@@ -61,7 +61,7 @@ S3Status S3_head_object(S3BucketContext *bucketContext,
                         const struct timeval *ifUnmodifiedSince, 
                         const char *ifMatchETag, const char *ifNotMatchETag,
                         S3RequestContext *requestContext,
-                        S3RequestHandler *handler, void *callbackData)
+                        S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
@@ -70,7 +70,7 @@ S3Status S3_head_object(S3BucketContext *bucketContext,
 S3Status S3_delete_object(S3BucketContext *bucketContext,
                           const char *key,
                           S3RequestContext *requestContext,
-                          S3RequestHandler *handler, void *callbackData)
+                          S3ResponseHandler *handler, void *callbackData)
 {
     return S3StatusOK;
 }
