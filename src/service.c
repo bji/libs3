@@ -32,15 +32,23 @@ static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
     CurlRequest *curlRequest = (CurlRequest *) obj;
     (void) curlRequest;
 
-    char *data = (char *) malloc((size * nmemb) + 1);
-    memcpy(data, ptr, size * nmemb);
-    data[size * nmemb] = 0;
+    int len = size * nmemb;
 
-    printf("data: %s\n", data);
+    if (len == 0) {
+        return 0;
+    }
 
-    free(data);
+    char *str = (char *ptr);
 
-    return (size * nmemb);
+    char c = str[len - 1];
+    str[len - 1] = 0;
+    
+    printf("data: %s", str);
+    if (c) {
+        printf("%c\n", c);
+    }
+
+    return len;
 }
 
 

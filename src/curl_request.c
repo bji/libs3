@@ -136,23 +136,18 @@ static S3Status initialize_curl_handle(CURL *handle, CurlRequest *curlRequest)
     // Follow any redirection directives that S3 sends
     curl_easy_setopt_safe(CURLOPT_FOLLOWLOCATION, 1);
 
-    // A safety valve for servers that go bananas with redirects
+    // A safety valve in case S3 goes bananas with redirects
     curl_easy_setopt_safe(CURLOPT_MAXREDIRS, 10);
 
     // Set the User-Agent; maybe Amazon will track these?
-    // Mozilla/4.0 (compatible; fuses3 X.Y; PLATFORM (possibly Private))
     curl_easy_setopt_safe(CURLOPT_USERAGENT, userAgentG);
 
-    // Ask S3 to tell us file times, which we can use for fallbacks if we
-    // don't get x-amz-meta-mtime
-    curl_easy_setopt_safe(CURLOPT_FILETIME, 1);
-
     // Set the low speed limit and time; we abort transfers that stay at
-    // less than 1K per second for more than 60 seconds.
+    // less than 1K per second for more than 15 seconds.
     // xxx todo - make these configurable
     // xxx todo - allow configurable max send and receive speed
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_LIMIT, 1024);
-    curl_easy_setopt_safe(CURLOPT_LOW_SPEED_TIME, 60);
+    curl_easy_setopt_safe(CURLOPT_LOW_SPEED_TIME, 15);
 
     // Tell Curl to keep up to POOL_SIZE connections open at once
     curl_easy_setopt_safe(CURLOPT_MAXCONNECTS, POOL_SIZE);
