@@ -70,9 +70,9 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                                           msg->easy_handle) != CURLM_OK)) {
                 return S3StatusFailure;
             }
-            CurlRequest *curlRequest;
+            Request *request;
             if (curl_easy_getinfo(msg->easy_handle, CURLOPT_PRIVATE, 
-                                  (char **) &curlRequest) != CURLE_OK) {
+                                  (char **) &request) != CURLE_OK) {
                 return S3StatusFailure;
             }
             // Make response complete callback
@@ -88,7 +88,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
             }
             // Finish the request, ensuring that all callbacks have been made,
             // and also releases the request
-            curl_request_finish(curlRequest, status);
+            request_finish(request, status);
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 

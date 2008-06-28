@@ -34,9 +34,9 @@
 #define S3_META_HEADER_NAME_PREFIX "x-amz-meta-"
 #define S3_MAX_META_HEADER_SIZE 2048
 
-// This is the data associated with a curl request, and is set in the private
-// data of the curl request
-typedef struct CurlRequest
+// This is the data associated with a request, and is set in the private data
+// of the curl request
+typedef struct Request
 {
     // The CURL structure driving the request
     CURL *curl;
@@ -97,7 +97,7 @@ typedef struct CurlRequest
         S3PutObjectCallback *putObjectCallback;
         S3GetObjectCallback *getObjectCallback;
     } u;
-} CurlRequest;
+} Request;
 
 
 struct S3RequestContext
@@ -121,33 +121,33 @@ void mutex_unlock(struct S3Mutex *mutex);
 void mutex_destroy(struct S3Mutex *mutex);
 
 
-// CurlRequest functions
+// Request functions
 // ------------------------------------------------------
 
 // Initialize the API
-S3Status curl_request_api_initialize(const char *userAgentInfo);
+S3Status request_api_initialize(const char *userAgentInfo);
 
 // Deinitialize the API
-void curl_request_api_deinitialize();
+void request_api_deinitialize();
 
-// Get a CurlRequest that has been initialized, except for the data payload
+// Get a Request that has been initialized, except for the data payload
 // callback pointer
-S3Status curl_request_get(S3ResponseHandler *handler, void *callbackData,
-                          CurlRequest **curlRequestReturn);
+S3Status request_get(S3ResponseHandler *handler, void *callbackData,
+                          Request **requestReturn);
 
-// Release a CurlRequest that is no longer needed
-void curl_request_release(CurlRequest *curlRequest);
+// Release a Request that is no longer needed
+void request_release(Request *request);
 
-// Add a CurlRequest to a S3RequestContext
-S3Status curl_request_multi_add(CurlRequest *curlRequest,
+// Add a Request to a S3RequestContext
+S3Status request_multi_add(Request *request,
                                 S3RequestContext *requestContext);
 
-// Perform a CurlRequest
-void curl_request_easy_perform(CurlRequest *curlRequest);
+// Perform a Request
+void request_easy_perform(Request *request);
 
 // Finish a request; ensures that all callbacks have been made, and also
 // releases the request
-void curl_request_finish(CurlRequest *curlRequest, S3Status status);
+void request_finish(Request *request, S3Status status);
 
 
 #endif /* PRIVATE_H */

@@ -29,7 +29,7 @@
 
 static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
 {
-    CurlRequest *curlRequest = (CurlRequest *) obj;
+    Request *curlRequest = (Request *) obj;
     (void) curlRequest;
 
     int len = size * nmemb;
@@ -38,7 +38,7 @@ static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
         return 0;
     }
 
-    char *str = (char *ptr);
+    char *str = (char *) ptr;
 
     char c = str[len - 1];
     str[len - 1] = 0;
@@ -56,10 +56,10 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
                          S3RequestContext *requestContext,
                          S3ListServiceHandler *handler, void *callbackData)
 {
-    // Get a CurlRequest from the pool
-    CurlRequest *curlRequest;
+    // Get a Request from the pool
+    Request *curlRequest;
 
-    S3Status status = curl_request_get
+    S3Status status = request_get
         (&(handler->responseHandler), callbackData, &curlRequest);
 
     if (status != S3StatusOK) {
@@ -71,7 +71,7 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
     // Write function
     if (curl_easy_setopt(curlRequest->curl, CURLOPT_WRITEFUNCTION,
                          write_function) != CURLE_OK) {
-        curl_request_release(curlRequest);
+        request_release(curlRequest);
         return S3StatusFailure;
     }
 
@@ -80,11 +80,11 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
 
     // If there is a request context, just add the curl_easy to the curl_multi
     if (requestContext) {
-        return curl_request_multi_add(curlRequest, requestContext);
+        return request_multi_add(curlRequest, requestContext);
     }
     // Else, run the curl_easy to completion
     else {
-        curl_request_easy_perform(curlRequest);
+        request_easy_perform(curlRequest);
         return S3StatusOK;
     }
 }

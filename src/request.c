@@ -1,5 +1,5 @@
 /** **************************************************************************
- * curl_request.c
+ * request.c
  * 
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
  * 
@@ -35,7 +35,7 @@ static char userAgentG[USER_AGENT_SIZE];
 
 static struct S3Mutex *poolMutexG;
 
-static CurlRequest *poolG[POOL_SIZE];
+static Request *poolG[POOL_SIZE];
 
 static int poolCountG;
 
@@ -44,13 +44,13 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     size_t len = size * nmemb;
     char *header = (char *) ptr;
-    CurlRequest *curlRequest = (CurlRequest *) data;
-    S3ResponseHeaders *responseHeaders = &(curlRequest->responseHeaders);
+    Request *request = (Request *) data;
+    S3ResponseHeaders *responseHeaders = &(request->responseHeaders);
 
     // Curl might call back the header function after the body has been
     // received, for 'chunked encoded' contents.  We don't handle this as of
     // yet, and it's not clear that it would ever be useful.
-    if (curlRequest->headersCallbackMade) {
+    if (request->headersCallbackMade) {
         return len;
     }
 
@@ -94,20 +94,20 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 
-static S3Status initialize_curl_handle(CURL *handle, CurlRequest *curlRequest)
+static S3Status initialize_curl_handle(CURL *handle, Request *request)
 {
     CURLcode status;
     
-#define curl_easy_setopt_safe(opt, val)                              \
-    if ((status = curl_easy_setopt(handle, opt, val)) != CURLE_OK) { \
-        return S3StatusFailedToInitializeRequest;                    \
+#define curl_easy_setopt_safe(opt, val)                                 \
+    if ((status = curl_easy_setopt(handle, opt, val)) != CURLE_OK) {    \
+        return S3StatusFailedToInitializeRequest;                       \
     }
 
     // Debugging only
     // curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
 
     // Always set the PrivateData in the private data
-    curl_easy_setopt_safe(CURLOPT_PRIVATE, curlRequest);
+    curl_easy_setopt_safe(CURLOPT_PRIVATE, request);
 
     // Always set the headers callback and its data
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
@@ -156,110 +156,110 @@ static S3Status initialize_curl_handle(CURL *handle, CurlRequest *curlRequest)
 }
 
 
-static void curl_request_destroy(CurlRequest *curlRequest)
+static void request_destroy(Request *request)
 {
-    if (curlRequest->headers) {
-        curl_slist_free_all(curlRequest->headers);
+    if (request->headers) {
+        curl_slist_free_all(request->headers);
     }
     
-    curl_easy_cleanup(curlRequest->curl);
+    curl_easy_cleanup(request->curl);
 
-    free(curlRequest);
+    free(request);
 }
 
 
-static S3Status curl_request_initialize(CurlRequest *curlRequest,
+static S3Status request_initialize(Request *request,
                                         S3ResponseHandler *handler,
                                         void *callbackData)
 {
     // This must be done before any error is returned
-    curlRequest->headers = 0;
+    request->headers = 0;
 
-    S3Status status = initialize_curl_handle(curlRequest->curl, curlRequest);
+    S3Status status = initialize_curl_handle(request->curl, request);
     if (status != S3StatusOK) {
         return status;
     }
 
-    curlRequest->callbackData = callbackData;
+    request->callbackData = callbackData;
 
-    curlRequest->metaHeaderStringsLen = 0;
+    request->metaHeaderStringsLen = 0;
 
-    curlRequest->headersCallback = handler->headersCallback;
+    request->headersCallback = handler->headersCallback;
 
-    curlRequest->responseHeaders.requestId = 0;
+    request->responseHeaders.requestId = 0;
     
-    curlRequest->responseHeaders.requestId2 = 0;
+    request->responseHeaders.requestId2 = 0;
 
-    curlRequest->responseHeaders.contentType = 0;
+    request->responseHeaders.contentType = 0;
 
-    curlRequest->responseHeaders.contentLength = 0;
+    request->responseHeaders.contentLength = 0;
 
-    curlRequest->responseHeaders.server = 0;
+    request->responseHeaders.server = 0;
 
-    curlRequest->responseHeaders.eTag = 0;
+    request->responseHeaders.eTag = 0;
 
-    curlRequest->responseHeaders.lastModified = 0;
+    request->responseHeaders.lastModified = 0;
 
-    curlRequest->responseHeaders.metaHeadersCount = 0;
+    request->responseHeaders.metaHeadersCount = 0;
 
-    curlRequest->responseHeaders.metaHeaders = curlRequest->metaHeaders;
+    request->responseHeaders.metaHeaders = request->metaHeaders;
     
-    curlRequest->headersCallbackMade = 0;
+    request->headersCallbackMade = 0;
 
-    curlRequest->completeCallback = handler->completeCallback;
+    request->completeCallback = handler->completeCallback;
 
-    curlRequest->receivedS3Error = 0;
+    request->receivedS3Error = 0;
 
     return S3StatusOK;
 }
 
 
-static S3Status curl_request_create(S3ResponseHandler *handler,
+static S3Status request_create(S3ResponseHandler *handler,
                                     void *callbackData,
-                                    CurlRequest **curlRequestReturn)
+                                    Request **requestReturn)
 {
-    CurlRequest *curlRequest = (CurlRequest *) malloc(sizeof(CurlRequest));
+    Request *request = (Request *) malloc(sizeof(Request));
 
-    if (!curlRequest) {
+    if (!request) {
         return S3StatusFailedToCreateRequest;
     }
 
-    if (!(curlRequest->curl = curl_easy_init())) {
-        free(curlRequest);
+    if (!(request->curl = curl_easy_init())) {
+        free(request);
         return S3StatusFailedToInitializeRequest;
     }
 
     S3Status status = 
-        curl_request_initialize(curlRequest, handler, callbackData);
+        request_initialize(request, handler, callbackData);
 
     if (status != S3StatusOK) {
-        curl_request_destroy(curlRequest);
+        request_destroy(request);
         return status;
     }
 
-    *curlRequestReturn = curlRequest;
+    *requestReturn = request;
 
     return S3StatusOK;
 }
 
 
-static S3Status curl_request_reinitialize(S3ResponseHandler *handler,
+static S3Status request_reinitialize(S3ResponseHandler *handler,
                                           void *callbackData,
-                                          CurlRequest *curlRequest)
+                                          Request *request)
 {
     // Reset the CURL handle for reuse
-    curl_easy_reset(curlRequest->curl);
+    curl_easy_reset(request->curl);
 
     // Free the headers
-    if (curlRequest->headers) {
-        curl_slist_free_all(curlRequest->headers);
+    if (request->headers) {
+        curl_slist_free_all(request->headers);
     }
 
-    return curl_request_initialize(curlRequest, handler, callbackData);
+    return request_initialize(request, handler, callbackData);
 }
 
 
-S3Status curl_request_api_initialize(const char *userAgentInfo)
+S3Status request_api_initialize(const char *userAgentInfo)
 {
     if (!(poolMutexG = mutex_create())) {
         return S3StatusFailedToCreateMutex;
@@ -291,124 +291,124 @@ S3Status curl_request_api_initialize(const char *userAgentInfo)
 }
 
 
-void curl_request_api_deinitialize()
+void request_api_deinitialize()
 {
     mutex_destroy(poolMutexG);
 
     while (poolCountG--) {
-        curl_request_destroy(poolG[poolCountG]);
+        request_destroy(poolG[poolCountG]);
     }
 }
 
 
-S3Status curl_request_get(S3ResponseHandler *handler, void *callbackData,
-                          CurlRequest **curlRequestReturn)
+S3Status request_get(S3ResponseHandler *handler, void *callbackData,
+                          Request **requestReturn)
 {
-    CurlRequest *curlRequest = 0;
+    Request *request = 0;
     
     // Try to get one from the pool.  We hold the lock for the shortest time
     // possible here.
     mutex_lock(poolMutexG);
 
     if (poolCountG) {
-        curlRequest = poolG[poolCountG--];
+        request = poolG[poolCountG--];
     }
     
     mutex_unlock(poolMutexG);
 
     // If we got something from the pool, then reinitialize it and return it
-    if (curlRequest) {
-        S3Status status = curl_request_reinitialize
-            (handler, callbackData, curlRequest);
+    if (request) {
+        S3Status status = request_reinitialize
+            (handler, callbackData, request);
 
         if (status != S3StatusOK) {
-            curl_request_destroy(curlRequest);
+            request_destroy(request);
             return status;
         }
 
-        *curlRequestReturn = curlRequest;
+        *requestReturn = request;
 
         return S3StatusOK;
     }
     else {
         // If there were none available in the pool, create one and return it
-        return curl_request_create(handler, callbackData, curlRequestReturn);
+        return request_create(handler, callbackData, requestReturn);
     }
 }
 
 
-void curl_request_release(CurlRequest *curlRequest)
+void request_release(Request *request)
 {
     mutex_lock(poolMutexG);
 
     // If the pool is full, destroy this one
     if (poolCountG == POOL_SIZE) {
         mutex_unlock(poolMutexG);
-        curl_request_destroy(curlRequest);
+        request_destroy(request);
     }
     // Else put this one at the front of the pool; we do this because we want
     // the most-recently-used curl handle to be re-used on the next request,
     // to maximize our chances of re-using a TCP connection before its HTTP
     // keep-alive times out
     else {
-        poolG[poolCountG++] = curlRequest;
+        poolG[poolCountG++] = request;
         mutex_unlock(poolMutexG);
     }
 }
 
 
-S3Status curl_request_multi_add(CurlRequest *curlRequest, 
+S3Status request_multi_add(Request *request, 
                                 S3RequestContext *requestContext)
 {
-    switch (curl_multi_add_handle(requestContext->curlm, curlRequest->curl)) {
+    switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
     case CURLM_OK:
         return S3StatusOK;
-    // xxx todo - more specific errors
+        // xxx todo - more specific errors
     default:
-        curl_request_release(curlRequest);
+        request_release(request);
         return S3StatusFailure;
     }
 }
 
 
-void curl_request_easy_perform(CurlRequest *curlRequest)
+void request_easy_perform(Request *request)
 {
-    CURLcode code = curl_easy_perform(curlRequest->curl);
+    CURLcode code = curl_easy_perform(request->curl);
 
     S3Status status;
     switch (code) {
     case CURLE_OK:
         status = S3StatusOK;
-    // xxx todo - more specific errors
+        // xxx todo - more specific errors
     default:
         status = S3StatusFailure;
     }
 
     // Finish the request, ensuring that all callbacks have been made, and
     // also releases the request
-    curl_request_finish(curlRequest, status);
+    request_finish(request, status);
 }
 
 
-void curl_request_finish(CurlRequest *curlRequest, S3Status status)
+void request_finish(Request *request, S3Status status)
 {
-    if (!curlRequest->headersCallbackMade) {
-        (*(curlRequest->headersCallback))(&(curlRequest->responseHeaders),
-                                          curlRequest->callbackData);
+    if (!request->headersCallbackMade) {
+        (*(request->headersCallback))(&(request->responseHeaders),
+                                      request->callbackData);
     }
 
-    if (!curlRequest->completeCallbackMade) {
+    if (!request->completeCallbackMade) {
         // Figure out the HTTP response code
         int httpResponseCode = 0;
 
         (void) curl_easy_getinfo
-            (curlRequest->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
+            (request->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
 
-        (*(curlRequest->completeCallback))
+        (*(request->completeCallback))
             (status, httpResponseCode, 
-             curlRequest->receivedS3Error ? &(curlRequest->s3Error) : 0,
-             curlRequest->callbackData);
+             request->receivedS3Error ? &(request->s3Error) : 0,
+             request->callbackData);
     }
 
-    curl_request_release(curlRequest);
+    request_release(request);
 }

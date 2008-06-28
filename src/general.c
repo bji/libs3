@@ -133,7 +133,7 @@ S3Status S3_initialize(const char *userAgentInfo,
     CRYPTO_set_dynlock_lock_callback(dynlock_lock);
     CRYPTO_set_dynlock_destroy_callback(dynlock_destroy);
 
-    S3Status status = curl_request_api_initialize(userAgentInfo);
+    S3Status status = request_api_initialize(userAgentInfo);
     if (status != S3StatusOK) {
         S3_deinitialize();
         return status;
@@ -145,7 +145,7 @@ S3Status S3_initialize(const char *userAgentInfo,
 
 void S3_deinitialize()
 {
-    curl_request_api_deinitialize();
+    request_api_deinitialize();
 
     CRYPTO_set_dynlock_destroy_callback(NULL);
     CRYPTO_set_dynlock_lock_callback(NULL);
