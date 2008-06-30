@@ -55,6 +55,17 @@
  ************************************************************************** **/
 
 /**
+ * S3_MAX_KEY_LENGTH is the maximum length of keys that Amazon S3 supports.
+ **/
+#define S3_MAX_KEY_LENGTH               1024
+
+/**
+ * S3_MAX_META_HEADERS_SIZE is the maximum number of bytes that all
+ * x-amz-meta headers passed to Amazon S3 is allowed to contain
+ **/
+#define S3_MAX_META_HEADER_SIZE         2048
+
+/**
  * S3_ACL_GRANT_MAXCOUNT is the maximum number of ACL grants that may be
  * set on a bucket or object at one time.  It is also the maximum number of
  * ACL grants that the XML ACL parsing routine will parse.
@@ -83,7 +94,10 @@ typedef enum
     S3StatusInvalidBucketNameDotQuadNotation                ,
     S3StatusFailedToCreateRequest                           ,
     S3StatusFailedToInitializeRequest                       ,
-    S3StatusFailedToCreateRequestContext
+    S3StatusFailedToCreateRequestContext                    ,
+    S3StatusMetaHeadersTooLong                              ,
+    S3StatusBadMetaHeader                                   ,
+    S3StatusHeadersTooLong
 } S3Status;
 
 
@@ -366,6 +380,10 @@ typedef struct S3BucketContext
      * The name of the bucket to use in the bucket context
      **/
     const char *bucketName;
+    /**
+     * The protocol to use when accessing the bucket
+     **/
+    S3Protocol protocol;
     /**
      * The URI style to use for all URIs sent to Amazon S3 while working with
      * this bucket context
@@ -693,8 +711,7 @@ S3Status S3_convert_acl(char *aclXml, int *aclGrantCountReturn,
  * Request context - allows multiple S3Requests to be processed at one
  * time.
  **/
-S3Status S3_create_request_context(S3RequestContext **requestContextReturn,
-                                   S3Protocol protocol);
+S3Status S3_create_request_context(S3RequestContext **requestContextReturn);
 
 
 /*
@@ -801,7 +818,8 @@ typedef struct S3GetObjectHandler
  *        callback
  * @return S3Status ???
  **/
-S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
+S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
+                         const char *secretAccessKey,
                          S3RequestContext *requestContext,
                          S3ListServiceHandler *handler, void *callbackData);
                          
@@ -833,8 +851,8 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
  *        be left as a zero-length string if no location was available.
  * @return S3Status ???
  **/
-S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
-                        const char *bucketName, 
+S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
+                        const char *secretAccessKey, const char *bucketName, 
                         int locationConstraintReturnSize,
                         const char *locationConstraintReturn,
                         S3RequestContext *requestContext,
@@ -856,7 +874,8 @@ S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
  *        the bucket to create.
  * @return S3Status ???
  **/
-S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
+S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
+                          const char *secretAccessKey,
                           const char *bucketName, 
                           const char *locationConstraint,
                           S3RequestContext *requestContext,
@@ -874,8 +893,8 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
  * @param bucketName is the name of the bucket to be deleted
  * @return S3Status ???
  **/
-S3Status S3_delete_bucket(const char *accessKeyId, const char *secretAccessKey,
-                          const char *bucketName,
+S3Status S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
+                          const char *secretAccessKey, const char *bucketName,
                           S3RequestContext *requestContext,
                           S3ResponseHandler *handler, void *callbackData);
 
@@ -1009,4 +1028,13 @@ S3Status S3_clear_acl(S3BucketContext *bucketContext, const char *key,
  * Service Logging ...
  **/
 
+/**
+ * xxx todo
+ * function for generating an HTTP authenticated query string
+ **/
+
+/**
+ * xxx todo
+ * functions for generating form stuff for posting to s3
+ **/
 #endif /* LIBS3_H */

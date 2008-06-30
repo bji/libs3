@@ -29,8 +29,8 @@
 
 static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
 {
-    Request *curlRequest = (Request *) obj;
-    (void) curlRequest;
+    Request *request = (Request *) obj;
+    (void) request;
 
     int len = size * nmemb;
 
@@ -52,15 +52,23 @@ static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
 }
 
 
-S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
+S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
+                         const char *secretAccessKey,
                          S3RequestContext *requestContext,
                          S3ListServiceHandler *handler, void *callbackData)
 {
-    // Get a Request from the pool
-    Request *curlRequest;
+    // Compose the x-amz- headers.  Do this first since it may fail and we
+    // want to fail before doing any real work.
+    XAmzHeaders xAmzHeaders;
+    S3Status status = request_compose_x_amz_headers(&xAmzHeaders, 0);
+    if (status != S3StatusOK) {
+        return status;
+    }
 
-    S3Status status = request_get
-        (&(handler->responseHandler), callbackData, &curlRequest);
+    // Get a Request from the pool
+    Request *request;
+
+    status = request_get(&(handler->responseHandler), callbackData, &request);
 
     if (status != S3StatusOK) {
         return status;
@@ -69,22 +77,53 @@ S3Status S3_list_service(const char *accessKeyId, const char *secretAccessKey,
     // Set the request-specific curl options
 
     // Write function
-    if (curl_easy_setopt(curlRequest->curl, CURLOPT_WRITEFUNCTION,
+    if (curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION,
                          write_function) != CURLE_OK) {
-        request_release(curlRequest);
+        request_release(request);
         return S3StatusFailure;
     }
 
     // Compose the URL
-    
+    char url[64];
+    snprintf(url, sizeof(url), "%s://%s/", 
+             (protocol == S3ProtocolHTTP) ? "http" : "https", HOSTNAME);
+    curl_easy_setopt(request->curl, CURLOPT_URL, url);
+
+    // Canonicalize the x-amz- headers
+    char canonicalizedAmzHeaders[MAX_AMZ_HEADER_SIZE];
+    canonicalize_amz_headers(canonicalizedAmzHeaders, &xAmzHeaders);
+
+    // Canonicalize the resource
+    char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE];
+    canonicalize_resource(canonicalizedResource, S3UriStylePath, 0, "/", 0);
+                                                    
+    // Compute the Authorization header
+    char authHeader[1024];
+    if ((status = auth_header_snprintf
+         (authHeader, sizeof(authHeader), accessKeyId, secretAccessKey,
+          "GET", 0, 0, canonicalizedAmzHeaders, canonicalizedResource))
+        != S3StatusOK) {
+        request_release(request);
+        return status;
+    }
+                                       
+    // Add the Authorization header
+    request->headers = curl_slist_append(request->headers, authHeader);
+
+    // Add the x-amz- headers
+    int i;
+    for (i = 0; i < xAmzHeaders.count; i++) {
+        request->headers = curl_slist_append
+            (request->headers, xAmzHeaders.headers[i]);
+    }
 
     // If there is a request context, just add the curl_easy to the curl_multi
     if (requestContext) {
-        return request_multi_add(curlRequest, requestContext);
+        return request_multi_add(request, requestContext);
     }
     // Else, run the curl_easy to completion
     else {
-        request_easy_perform(curlRequest);
+        request_easy_perform(request);
         return S3StatusOK;
     }
 }

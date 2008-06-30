@@ -22,13 +22,14 @@
  *
  ************************************************************************** **/
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
 #include "private.h"
 
 #define USER_AGENT_SIZE 256
-#define POOL_SIZE 8
+#define POOL_SIZE 32
 
 //
 static char userAgentG[USER_AGENT_SIZE];
@@ -38,6 +39,9 @@ static struct S3Mutex *poolMutexG;
 static Request *poolG[POOL_SIZE];
 
 static int poolCountG;
+
+static const char *urlSafeG = "-_.!~*'()/";
+static const char *hexG = "0123456789ABCDEF";
 
 
 static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
@@ -106,10 +110,12 @@ static S3Status initialize_curl_handle(CURL *handle, Request *request)
     // Debugging only
     // curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
 
-    // Always set the PrivateData in the private data
-    curl_easy_setopt_safe(CURLOPT_PRIVATE, request);
+    // Always set the request in all callback data
+    curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
+    curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
+    curl_easy_setopt_safe(CURLOPT_READDATA, request);
 
-    // Always set the headers callback and its data
+    // Always set the headers callback
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
 
     // Curl docs suggest that this is necessary for multithreaded code.
@@ -119,7 +125,7 @@ static S3Status initialize_curl_handle(CURL *handle, Request *request)
     curl_easy_setopt_safe(CURLOPT_NOSIGNAL, 1);
 
     // Turn off Curl's built-in progress meter
-    curl_easy_setopt_safe(CURLOPT_NOPROGRESS, 0);
+    curl_easy_setopt_safe(CURLOPT_NOPROGRESS, 1);
 
     // xxx todo - support setting the proxy for Curl to use (can't use https
     // for proxies though)
@@ -149,8 +155,8 @@ static S3Status initialize_curl_handle(CURL *handle, Request *request)
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_LIMIT, 1024);
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_TIME, 15);
 
-    // Tell Curl to keep up to POOL_SIZE connections open at once
-    curl_easy_setopt_safe(CURLOPT_MAXCONNECTS, POOL_SIZE);
+    // Tell Curl to keep up to POOL_SIZE / 2 connections open at once
+    curl_easy_setopt_safe(CURLOPT_MAXCONNECTS, POOL_SIZE / 2);
 
     return S3StatusOK;
 }
@@ -169,9 +175,22 @@ static void request_destroy(Request *request)
 
 
 static S3Status request_initialize(Request *request,
-                                        S3ResponseHandler *handler,
-                                        void *callbackData)
+                                   S3ResponseHandler *handler,
+                                   void *callbackData)
 {
+    if (request->used) {
+        // Reset the CURL handle for reuse
+        curl_easy_reset(request->curl);
+        
+        // Free the headers
+        if (request->headers) {
+            curl_slist_free_all(request->headers);
+        }
+    }
+    else {
+        request->used = 1;
+    }
+                        
     // This must be done before any error is returned
     request->headers = 0;
 
@@ -182,7 +201,7 @@ static S3Status request_initialize(Request *request,
 
     request->callbackData = callbackData;
 
-    request->metaHeaderStringsLen = 0;
+    request->responseMetaHeaderStringsLen = 0;
 
     request->headersCallback = handler->headersCallback;
 
@@ -202,11 +221,13 @@ static S3Status request_initialize(Request *request,
 
     request->responseHeaders.metaHeadersCount = 0;
 
-    request->responseHeaders.metaHeaders = request->metaHeaders;
+    request->responseHeaders.metaHeaders = request->responseMetaHeaders;
     
     request->headersCallbackMade = 0;
 
     request->completeCallback = handler->completeCallback;
+
+    request->completeCallbackMade = 0;
 
     request->receivedS3Error = 0;
 
@@ -224,13 +245,14 @@ static S3Status request_create(S3ResponseHandler *handler,
         return S3StatusFailedToCreateRequest;
     }
 
+    request->used = 0;
+
     if (!(request->curl = curl_easy_init())) {
         free(request);
         return S3StatusFailedToInitializeRequest;
     }
 
-    S3Status status = 
-        request_initialize(request, handler, callbackData);
+    S3Status status = request_initialize(request, handler, callbackData);
 
     if (status != S3StatusOK) {
         request_destroy(request);
@@ -240,22 +262,6 @@ static S3Status request_create(S3ResponseHandler *handler,
     *requestReturn = request;
 
     return S3StatusOK;
-}
-
-
-static S3Status request_reinitialize(S3ResponseHandler *handler,
-                                          void *callbackData,
-                                          Request *request)
-{
-    // Reset the CURL handle for reuse
-    curl_easy_reset(request->curl);
-
-    // Free the headers
-    if (request->headers) {
-        curl_slist_free_all(request->headers);
-    }
-
-    return request_initialize(request, handler, callbackData);
 }
 
 
@@ -302,7 +308,7 @@ void request_api_deinitialize()
 
 
 S3Status request_get(S3ResponseHandler *handler, void *callbackData,
-                          Request **requestReturn)
+                     Request **requestReturn)
 {
     Request *request = 0;
     
@@ -316,10 +322,9 @@ S3Status request_get(S3ResponseHandler *handler, void *callbackData,
     
     mutex_unlock(poolMutexG);
 
-    // If we got something from the pool, then reinitialize it and return it
+    // If we got something from the pool, then initialize it and return it
     if (request) {
-        S3Status status = request_reinitialize
-            (handler, callbackData, request);
+        S3Status status = request_initialize(request, handler, callbackData);
 
         if (status != S3StatusOK) {
             request_destroy(request);
@@ -357,9 +362,13 @@ void request_release(Request *request)
 }
 
 
-S3Status request_multi_add(Request *request, 
-                                S3RequestContext *requestContext)
+S3Status request_multi_add(Request *request, S3RequestContext *requestContext)
 {
+    if (request->headers) {
+        (void) curl_easy_setopt(request->curl, CURLOPT_HTTPHEADER,
+                                request->headers);
+    }
+
     switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
     case CURLM_OK:
         return S3StatusOK;
@@ -373,6 +382,11 @@ S3Status request_multi_add(Request *request,
 
 void request_easy_perform(Request *request)
 {
+    if (request->headers) {
+        (void) curl_easy_setopt(request->curl, CURLOPT_HTTPHEADER,
+                                request->headers);
+    }
+
     CURLcode code = curl_easy_perform(request->curl);
 
     S3Status status;
@@ -380,6 +394,7 @@ void request_easy_perform(Request *request)
     case CURLE_OK:
         status = S3StatusOK;
         // xxx todo - more specific errors
+        break;
     default:
         status = S3StatusFailure;
     }
@@ -411,4 +426,157 @@ void request_finish(Request *request, S3Status status)
     }
 
     request_release(request);
+}
+
+S3Status request_compose_x_amz_headers(XAmzHeaders *xAmzHeaders,
+                                       const S3RequestHeaders *requestHeaders)
+{
+    if (requestHeaders) {
+        // Check to make sure that the meta request headers are not too long
+        if (requestHeaders->metaHeadersCount > MAX_META_HEADER_COUNT) {
+            return S3StatusMetaHeadersTooLong;
+        }
+        int i, total = 0;
+        for (i = 0; i < requestHeaders->metaHeadersCount; i++) {
+            total += strlen(requestHeaders->metaHeaders[i]);
+        }
+        if (total > S3_MAX_META_HEADER_SIZE) {
+            return S3StatusMetaHeadersTooLong;
+        }
+    }
+
+    // Initialize xAmzHeaders
+    xAmzHeaders->count = 0;
+    xAmzHeaders->headers_raw[0] = 0;
+
+    int len = 0;
+
+    // Append a header to xAmzHeaders, trimming whitespace from it
+#define headers_append(isNewHeader, format, ...)                        \
+    do {                                                                \
+        if (isNewHeader) {                                              \
+            xAmzHeaders->headers[xAmzHeaders->count++] =                \
+                &(xAmzHeaders->headers_raw[len]);                       \
+        }                                                               \
+        len += snprintf(&(xAmzHeaders->headers_raw[len]),               \
+                        sizeof(xAmzHeaders->headers_raw) - len,         \
+                        format, __VA_ARGS__) + 1;                       \
+        if (len >= sizeof(xAmzHeaders->headers_raw)) {                  \
+            return S3StatusMetaHeadersTooLong;                          \
+        }                                                               \
+        while ((len > 0) && (xAmzHeaders->headers_raw[len] == ' ')) {   \
+            len--;                                                      \
+        }                                                               \
+    } while (0)
+
+#define header_name_tolower_copy(str, l)                                \
+    do {                                                                \
+        xAmzHeaders->headers[xAmzHeaders->count++] =                    \
+            &(xAmzHeaders->headers_raw[len]);                           \
+        if ((len + l) >= sizeof(xAmzHeaders->headers_raw)) {            \
+            return S3StatusMetaHeadersTooLong;                          \
+        }                                                               \
+        int todo = l;                                                   \
+        while (todo--) {                                                \
+            if ((*str >= 'A') && (*str <= 'Z')) {                       \
+                xAmzHeaders->headers_raw[len++] = 'a' + (*str - 'A');   \
+            }                                                           \
+            else {                                                      \
+                xAmzHeaders->headers_raw[len++] = *str;                 \
+            }                                                           \
+            str++;                                                      \
+        }                                                               \
+    } while (0)
+
+    // Add the x-amz-acl header, if necessary
+    if (requestHeaders) {
+        const char *cannedAclString;
+        switch (requestHeaders->cannedAcl) {
+        case S3CannedAclNone:
+            cannedAclString = 0;
+            break;
+        case S3CannedAclRead:
+            cannedAclString = "public-read";
+            break;
+        case S3CannedAclReadWrite:
+            cannedAclString = "public-read-write";
+            break;
+        default: // S3CannedAclAuthenticatedRead
+            cannedAclString = "authenticated-read";
+            break;
+        }
+        if (cannedAclString) {
+            headers_append(1, "x-amz-acl: %s", cannedAclString);
+        }
+    }
+
+    // Add the x-amz-date header
+    time_t now = time(NULL);
+    char date[64];
+    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
+    headers_append(1, "x-amz-date: %s", date);
+
+    if (!requestHeaders) {
+        return S3StatusOK;
+    }
+
+    // Check and copy in the x-amz-meta headers
+    int i;
+    for (i = 0; i < requestHeaders->metaHeadersCount; i++) {
+        if (strncmp(requestHeaders->metaHeaders[i], META_HEADER_NAME_PREFIX,
+                    sizeof(META_HEADER_NAME_PREFIX) - 1)) {
+            return S3StatusBadMetaHeader;
+        }
+        // Now find the colon
+        const char *c = &(requestHeaders->
+                          metaHeaders[i][sizeof(META_HEADER_NAME_PREFIX)]);
+        while (*c && isalnum(*c)) {
+            c++;
+        }
+        if (*c != ':') {
+            return S3StatusBadMetaHeader;
+        }
+        c++;
+        header_name_tolower_copy(requestHeaders->metaHeaders[i],
+                                 c - requestHeaders->metaHeaders[i]);
+        // Skip whitespace
+        while (*c && isblank(*c)) {
+            c++;
+        }
+        if (!*c) {
+            return S3StatusBadMetaHeader;
+        }
+        // Copy in a space and then the value
+        headers_append(0, " %s", c);
+    }
+
+    return S3StatusOK;
+}
+
+void request_encode_key(char *buffer, const char *key)
+{
+    while (*key) {
+        const char *urlsafe = urlSafeG;
+        int isurlsafe = 0;
+        while (*urlsafe) {
+            if (*urlsafe == *key) {
+                isurlsafe = 1;
+                break;
+            }
+            urlsafe++;
+        }
+        if (isurlsafe || isalnum(*key)) {
+            *buffer++ = *key++;
+        }
+        else if (*key == ' ') {
+            *buffer++ = '+';
+            key++;
+        }
+        else {
+            *buffer++ = '%';
+            *buffer++ = hexG[*key / 16];
+            *buffer++ = hexG[*key % 16];
+            key++;
+        }
+    }
 }

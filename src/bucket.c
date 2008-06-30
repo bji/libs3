@@ -24,8 +24,8 @@
 
 #include "private.h"
 
-S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
-                        const char *bucketName, 
+S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
+                        const char *secretAccessKey, const char *bucketName, 
                         int locationConstraintReturnSize,
                         const char *locationConstraintReturn,
                         S3RequestContext *requestContext,
@@ -35,8 +35,8 @@ S3Status S3_test_bucket(const char *accessKeyId, const char *secretAccessKey,
 }
                          
                             
-S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
-                          const char *bucketName, 
+S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
+                          const char *secretAccessKey, const char *bucketName, 
                           const char *locationConstraint,
                           S3RequestContext *requestContext,
                           S3ResponseHandler *handler, void *callbackData)
@@ -45,8 +45,8 @@ S3Status S3_create_bucket(const char *accessKeyId, const char *secretAccessKey,
 }
 
                            
-S3Status S3_delete_bucket(const char *accessKeyId, const char *secretAccessKey,
-                          const char *bucketName,
+S3Status S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
+                          const char *secretAccessKey, const char *bucketName,
                           S3RequestContext *requestContext,
                           S3ResponseHandler *handler, void *callbackData)
 {

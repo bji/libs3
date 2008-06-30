@@ -20,10 +20,15 @@ all: libs3
 
 libs3: lib/libs3.a
 
-lib/libs3.a: src/acl.o src/bucket.o src/general.o src/object.o \
-             src/request.o src/request_context.o src/service.o
+lib/libs3.a: src/acl.o src/auth_header.o src/bucket.o src/general.o \
+             src/object.o src/request.o src/request_context.o src/service.o
 	$(AR) cr $@ $^
+
+test: bin/test
+
+bin/test: src/test.o lib/libs3.a
+	$(CC) -o $@ $^ -lpthread -lcurl -lssl
 
 .PHONY: clean
 clean:
-	rm -f src/*.o bin/libs3.a
+	rm -f src/*.o lib/libs3.a bin/test

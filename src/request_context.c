@@ -26,8 +26,7 @@
 #include "private.h"
 
 
-S3Status S3_create_request_context(S3RequestContext **requestContextReturn,
-                                   S3Protocol protocol)
+S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
 {
     return ((*requestContextReturn = (S3RequestContext *) curl_multi_init()) ?
             S3StatusOK : S3StatusFailedToCreateRequestContext);
@@ -42,14 +41,9 @@ void S3_destroy_request_context(S3RequestContext *requestContext)
 
 S3Status S3_runall_request_context(S3RequestContext *requestContext)
 {
-    int requestsRemaining;
-    S3Status status;
-
-    do {
-        S3_runonce_request_context(requestContext, &requestsRemaining);
-    } while ((status == S3StatusOK) && requestsRemaining);
-
-    return status;
+    // This should use the socket stuff to watch the fds and run only
+    // when there is data ready
+    return S3StatusFailure;
 }
 
 
@@ -61,7 +55,16 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
     do {
         status = curl_multi_perform(requestContext->curlm,
                                     requestsRemainingReturn);
-        
+
+        switch (status) {
+        case CURLM_OK:
+            break;
+        case CURLM_OUT_OF_MEMORY:
+            return S3StatusOutOfMemory;
+        default:
+            return S3StatusFailure;
+        }
+
         CURLMsg *msg;
         int junk;
         while ((msg = curl_multi_info_read(requestContext->curlm, &junk))) {
@@ -92,12 +95,5 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 
-    switch (status) {
-    case CURLM_OK:
-        return S3StatusOK;
-    case CURLM_OUT_OF_MEMORY:
-        return S3StatusOutOfMemory;
-    default:
-        return S3StatusFailure;
-    }
+    return S3StatusOK;
 }
