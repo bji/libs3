@@ -23,6 +23,10 @@
  ************************************************************************** **/
 
 #include <ctype.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
@@ -107,7 +111,7 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 // to be the count of the total number of x-amz- headers thus created).
 static S3Status compose_amz_headers(RequestParams *params)
 {
-    S3RequestHeaders *headers = params->requestHeaders;
+    const S3RequestHeaders *headers = params->requestHeaders;
 
     params->amzHeadersCount = 0;
     params->amzHeadersRaw[0] = 0;
@@ -118,8 +122,8 @@ static S3Status compose_amz_headers(RequestParams *params)
 #define headers_append(isNewHeader, format, ...)                        \
     do {                                                                \
         if (isNewHeader) {                                              \
-            amzHeaders[params->amzHeadersCount++] =                     \
-                &(amzHeadersRaw[len]);                                  \
+            params->amzHeaders[params->amzHeadersCount++] =             \
+                &(params->amzHeadersRaw[len]);                          \
         }                                                               \
         len += snprintf(&(params->amzHeadersRaw[len]),                  \
                         sizeof(params->amzHeadersRaw) - len,            \
@@ -135,20 +139,20 @@ static S3Status compose_amz_headers(RequestParams *params)
 
 #define header_name_tolower_copy(str, l)                                \
     do {                                                                \
-        amzHeaders[params->amzHeadersCount++] =                         \
+        params->amzHeaders[params->amzHeadersCount++] =                 \
             &(params->amzHeadersRaw[len]);                              \
-        if ((len + l) >= sizeof(params->amzHeadersRaw)) {               \
+        if ((len + (l)) >= sizeof(params->amzHeadersRaw)) {             \
             return S3StatusMetaHeadersTooLong;                          \
         }                                                               \
         int todo = l;                                                   \
         while (todo--) {                                                \
-            if ((*str >= 'A') && (*str <= 'Z')) {                       \
-                params->amzHeadersRaw[len++] = 'a' + (*str - 'A');      \
+            if ((*(str) >= 'A') && (*(str) <= 'Z')) {                   \
+                params->amzHeadersRaw[len++] = 'a' + (*(str) - 'A');    \
             }                                                           \
             else {                                                      \
-                params->amzHeadersRaw[len++] = *str;                    \
+                params->amzHeadersRaw[len++] = *(str);                  \
             }                                                           \
-            str++;                                                      \
+            (str)++;                                                    \
         }                                                               \
     } while (0)
 
@@ -157,7 +161,7 @@ static S3Status compose_amz_headers(RequestParams *params)
                     (params->httpRequestType == HttpRequestTypeCOPY))) {
         int i;
         for (i = 0; i < headers->metaHeadersCount; i++) {
-            char *header = headers->metaHeaders[i];
+            const char *header = headers->metaHeaders[i];
             while (isblank(*header)) {
                 header++;
             }
@@ -185,13 +189,10 @@ static S3Status compose_amz_headers(RequestParams *params)
             // Copy in a space and then the value
             headers_append(0, " %s", c);
         }
-    }
 
-    // Add the x-amz-acl header, if necessary
-    if ((params->httpRequestType == HttpRequestTypePUT) ||
-        (params->httpRequestType == HttpRequestTypeCOPY)) {
+        // Add the x-amz-acl header, if necessary
         const char *cannedAclString;
-        switch (params->cannedAcl) {
+        switch (params->requestHeaders->cannedAcl) {
         case S3CannedAclNone:
             cannedAclString = 0;
             break;
@@ -354,7 +355,8 @@ static void canonicalize_amz_headers(RequestParams *params)
 // URL encodes the params->key value into params->urlEncodedKey
 static S3Status encode_key(RequestParams *params)
 {
-    const char *key = params->key, *buffer = params->urlEncodedKey;
+    const char *key = params->key;
+    char *buffer = params->urlEncodedKey;
     int len = 0;
 
     if (key) while (*key) {
@@ -386,6 +388,8 @@ static S3Status encode_key(RequestParams *params)
     }
 
     *buffer = 0;
+
+    return S3StatusOK;
 }
 
 
@@ -406,6 +410,10 @@ static void canonicalize_resource(RequestParams *params)
 
     if (params->urlEncodedKey[0]) {
         append(params->urlEncodedKey);
+    }
+    else {
+        buffer[len++] = '/';
+        buffer[len++] = 0;
     }
 
     if (params->subResource && params->subResource[0]) {
@@ -531,14 +539,14 @@ static S3Status compose_auth_header(RequestParams *params)
 
     signbuf_append("%s", "\n"); // Date - we always use x-amz-date
 
-    signbuf_append("%s", canonicalizedAmzHeaders);
+    signbuf_append("%s", params->canonicalizedAmzHeaders);
 
-    signbuf_append("%s", canonicalizedResource);
+    signbuf_append("%s", params->canonicalizedResource);
 
     unsigned int md_len;
     unsigned char md[EVP_MAX_MD_SIZE];
 	
-    HMAC(EVP_sha1(), secretAccessKey, strlen(secretAccessKey),
+    HMAC(EVP_sha1(), params->secretAccessKey, strlen(params->secretAccessKey),
          (unsigned char *) signbuf, len, md, &md_len);
 
     BIO *base64 = BIO_push(BIO_new(BIO_f_base64()), BIO_new(BIO_s_mem()));
@@ -551,13 +559,64 @@ static S3Status compose_auth_header(RequestParams *params)
     BIO_get_mem_ptr(base64, &base64mem);
     base64mem->data[base64mem->length - 1] = 0;
 
-    snprintf(buffer, bufferSize, "Authorization: AWS %s:%s", accessKeyId,
-             base64mem->data);
+    snprintf(params->authorizationHeader, sizeof(params->authorizationHeader),
+             "Authorization: AWS %s:%s", params->accessKeyId, base64mem->data);
 
     BIO_free_all(base64);
 
     return S3StatusOK;
 }
+
+
+// Compose the URI to use for the request given the request parameters
+S3Status compose_uri(Request *request, const RequestParams *params)
+{
+    int len = 0;
+
+#define uri_append(fmt, ...)                            \
+    do {                                                \
+        len += snprintf(&(request->uri[len]),           \
+                        sizeof(request->uri) - len,     \
+                        fmt, __VA_ARGS__);              \
+        if (len >= sizeof(request->uri)) {              \
+            return S3StatusUriTooLong;                  \
+        }                                               \
+    } while (0)
+
+    uri_append("http%s://", (params->protocol == S3ProtocolHTTP) ? "" : "s");
+
+    if (params->bucketName && params->bucketName[0]) {
+        if (params->uriStyle == S3UriStyleVirtualHost) {
+            uri_append("%s.s3.amazonaws.com", params->bucketName);
+        }
+        else {
+            uri_append("s3.amazonaws.com/%s", params->bucketName);
+        }
+    }
+    else {
+        uri_append("%s", "s3.amazonaws.com");
+    }
+
+    if (params->key && params->key[0]) {
+        uri_append("%s", params->key);
+        
+        if (params->queryParams) {
+            uri_append("%s", params->queryParams);
+        }
+        else if (params->subResource && params->subResource[0]) {
+            uri_append("%s", params->subResource);
+        }
+    }
+    else {
+        uri_append("%s", "/");
+        if (params->subResource) {
+            uri_append("%s", params->subResource);
+        }
+    }
+
+    return S3StatusOK;
+}
+
 
 // Sets up the curl handle given the completely computed RequestParams
 static S3Status setup_curl(CURL *handle, Request *request,
@@ -621,13 +680,11 @@ static S3Status setup_curl(CURL *handle, Request *request,
     // Tell Curl to keep up to POOL_SIZE / 2 connections open at once
     curl_easy_setopt_safe(CURLOPT_MAXCONNECTS, POOL_SIZE / 2);
 
-    // The HTTP headers
-    struct curl_slist *headers = 0;
-
     // Append standard headers
 #define append_standard_header(fieldName)                               \
     if (params-> fieldName [0]) {                                       \
-        headers = curl_slist_append(headers, params-> fieldName);       \
+        request->headers = curl_slist_append(request->headers,          \
+                                          params-> fieldName);          \
     }
 
     append_standard_header(contentTypeHeader);
@@ -640,15 +697,14 @@ static S3Status setup_curl(CURL *handle, Request *request,
     // Append x-amz- headers
     int i;
     for (i = 0; i < params->amzHeadersCount; i++) {
-        headers = curl_slist_append(headers, params->amzHeaders[i]);
+        request->headers = 
+            curl_slist_append(request->headers, params->amzHeaders[i]);
     }
 
     // Set the HTTP headers
-    curl_easy_setopt_safe(CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt_safe(CURLOPT_HTTPHEADER, request->headers);
 
-    // Set URI - copy it into the request first, because it must be stored
-    // someplace that will last as long as the curl handle does
-    strcpy(request->uri, params->uri);
+    // Set URI
     curl_easy_setopt_safe(CURLOPT_URL, request->uri);
 
     // Set request type
@@ -706,7 +762,7 @@ static S3Status request_initialize(Request *request,
 
     // Compute the URL
     S3Status status;
-    if ((status = compose_uri(params, request->uri)) != S3StatusOK) {
+    if ((status = compose_uri(request, params)) != S3StatusOK) {
         return status;
     }
 
@@ -715,9 +771,10 @@ static S3Status request_initialize(Request *request,
         return status;
     }
 
-    // Now set up for receiving the response    
+    // Now set up for receiving the response
+    S3ResponseHandler *handler = params->handler;
 
-    request->callbackData = callbackData;
+    request->callbackData = params->callbackData;
 
     request->responseMetaHeaderStringsLen = 0;
 

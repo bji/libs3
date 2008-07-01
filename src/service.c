@@ -57,65 +57,34 @@ S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
                          S3RequestContext *requestContext,
                          S3ListServiceHandler *handler, void *callbackData)
 {
-    // Compose the x-amz- headers.  Do this first since it may fail and we
-    // want to fail before doing any real work.
-    XAmzHeaders xAmzHeaders;
-    S3Status status = request_compose_x_amz_headers(&xAmzHeaders, 0);
-    if (status != S3StatusOK) {
-        return status;
-    }
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypeGET,
+        protocol,
+        S3UriStylePath,
+        0, // bucketName
+        0, // key
+        0, // queryParams
+        0, // subResource
+        accessKeyId,
+        secretAccessKey,
+        0, // requestHeaders
+        &(handler->responseHandler),
+        callbackData
+    };
 
-    // Get a Request from the pool
+    // Get the initialized request
     Request *request;
 
-    status = request_get(&(handler->responseHandler), callbackData, &request);
+    S3Status status = request_get(&params, &request);
 
     if (status != S3StatusOK) {
         return status;
     }
 
-    // Set the request-specific curl options
-
-    // Write function
-    if (curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION,
-                         write_function) != CURLE_OK) {
-        request_release(request);
-        return S3StatusFailure;
-    }
-
-    // Compose the URL
-    char url[64];
-    snprintf(url, sizeof(url), "%s://%s/", 
-             (protocol == S3ProtocolHTTP) ? "http" : "https", HOSTNAME);
-    curl_easy_setopt(request->curl, CURLOPT_URL, url);
-
-    // Canonicalize the x-amz- headers
-    char canonicalizedAmzHeaders[MAX_AMZ_HEADER_SIZE];
-    canonicalize_amz_headers(canonicalizedAmzHeaders, &xAmzHeaders);
-
-    // Canonicalize the resource
-    char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE];
-    canonicalize_resource(canonicalizedResource, S3UriStylePath, 0, "/", 0);
-                                                    
-    // Compute the Authorization header
-    char authHeader[1024];
-    if ((status = auth_header_snprintf
-         (authHeader, sizeof(authHeader), accessKeyId, secretAccessKey,
-          "GET", 0, 0, canonicalizedAmzHeaders, canonicalizedResource))
-        != S3StatusOK) {
-        request_release(request);
-        return status;
-    }
-                                       
-    // Add the Authorization header
-    request->headers = curl_slist_append(request->headers, authHeader);
-
-    // Add the x-amz- headers
-    int i;
-    for (i = 0; i < xAmzHeaders.count; i++) {
-        request->headers = curl_slist_append
-            (request->headers, xAmzHeaders.headers[i]);
-    }
+    // Set the callback -- xxx todo make this a part of the request_get too
+    curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, &write_function);
 
     // If there is a request context, just add the curl_easy to the curl_multi
     if (requestContext) {

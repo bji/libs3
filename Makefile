@@ -20,8 +20,8 @@ all: libs3
 
 libs3: lib/libs3.a
 
-lib/libs3.a: src/acl.o src/auth_header.o src/bucket.o src/general.o \
-             src/object.o src/request.o src/request_context.o src/service.o
+lib/libs3.a: src/acl.o src/bucket.o src/general.o src/object.o src/request.o \
+             src/request_context.o src/service.o
 	$(AR) cr $@ $^
 
 test: bin/test

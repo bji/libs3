@@ -97,7 +97,17 @@ typedef enum
     S3StatusFailedToCreateRequestContext                    ,
     S3StatusMetaHeadersTooLong                              ,
     S3StatusBadMetaHeader                                   ,
-    S3StatusHeadersTooLong
+    S3StatusBadContentType                                  ,
+    S3StatusContentTypeTooLong                              ,
+    S3StatusBadMD5                                          ,
+    S3StatusMD5TooLong                                      ,
+    S3StatusBadContentDispositionFilename                   ,
+    S3StatusContentDispositionFilenameTooLong               ,
+    S3StatusBadContentEncoding                              ,
+    S3StatusContentEncodingTooLong                          ,
+    S3StatusHeadersTooLong                                  ,
+    S3StatusKeyTooLong                                      ,
+    S3StatusUriTooLong
 } S3Status;
 
 
@@ -486,7 +496,7 @@ typedef struct S3RequestHeaders
      * information is typically only delivered to users who download the
      * content via a web browser.
      **/
-    struct timeval *expires;
+    const time_t *expires;
     /**
      * This identifies the "canned ACL" that should be used for this object.
      * The default (0) gives only the owner of the object access to it.

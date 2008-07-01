@@ -116,7 +116,7 @@ typedef struct RequestParams
     // The number of x-amz- headers
     int amzHeadersCount;
     // Storage for amzHeaders (the +256 is for x-amz-acl and x-amz-date)
-    char *amzHeadersRaw[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
+    char amzHeadersRaw[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
     // Canonicalized x-amz- headers
     char canonicalizedAmzHeaders[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
     // URL-Encoded key
@@ -135,8 +135,6 @@ typedef struct RequestParams
     char expiresHeader[128];
     // Authorization header
     char authorizationHeader[128];
-    // Uri
-    char uri[MAX_URI_SIZE + 1];
 } RequestParams;
 
 
@@ -149,6 +147,9 @@ typedef struct Request
 
     // The CURL structure driving the request
     CURL *curl;
+
+    // The HTTP headers to use for the curl request
+    struct curl_slist *headers;
 
     // libcurl requires that the uri be stored outside of the curl handle
     char uri[MAX_URI_SIZE + 1];
