@@ -87,18 +87,481 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
     else if (!strncmp(header, "x-amz-meta-", 
                       (namelen > strlen("x-amz-meta-") ? 
                        strlen("x-amz-meta-") : namelen))) {
-        
     }
     // Else if it is an empty header, then it's the last header
     else if (!header[0]) {
-        
     }
 
     return len;
 }
 
 
-static S3Status initialize_curl_handle(CURL *handle, Request *request)
+// This function 'normalizes' all x-amz-meta headers provided in
+// params->requestHeaders, which means it removes all whitespace from
+// them such that they all look exactly like this:
+// x-amz-meta-${NAME}: ${VALUE}
+// It also adds the x-amz-acl header, if necessary, and always adds the
+// x-amz-date header.  It copies the raw string values into
+// params->amzHeadersRaw, and creates an array of string pointers representing
+// these headers in params->amzHeaders (and also sets params->amzHeadersCount
+// to be the count of the total number of x-amz- headers thus created).
+static S3Status compose_amz_headers(RequestParams *params)
+{
+    S3RequestHeaders *headers = params->requestHeaders;
+
+    params->amzHeadersCount = 0;
+    params->amzHeadersRaw[0] = 0;
+    int len = 0;
+
+    // Append a header to amzHeaders, trimming whitespace from the end.
+    // Does NOT trim whitespace from the beginning.
+#define headers_append(isNewHeader, format, ...)                        \
+    do {                                                                \
+        if (isNewHeader) {                                              \
+            amzHeaders[params->amzHeadersCount++] =                     \
+                &(amzHeadersRaw[len]);                                  \
+        }                                                               \
+        len += snprintf(&(params->amzHeadersRaw[len]),                  \
+                        sizeof(params->amzHeadersRaw) - len,            \
+                        format, __VA_ARGS__);                           \
+        if (len >= sizeof(params->amzHeadersRaw)) {                     \
+            return S3StatusMetaHeadersTooLong;                          \
+        }                                                               \
+        while ((len > 0) && (params->amzHeadersRaw[len - 1] == ' ')) {  \
+            len--;                                                      \
+        }                                                               \
+        params->amzHeadersRaw[len++] = 0;                               \
+    } while (0)
+
+#define header_name_tolower_copy(str, l)                                \
+    do {                                                                \
+        amzHeaders[params->amzHeadersCount++] =                         \
+            &(params->amzHeadersRaw[len]);                              \
+        if ((len + l) >= sizeof(params->amzHeadersRaw)) {               \
+            return S3StatusMetaHeadersTooLong;                          \
+        }                                                               \
+        int todo = l;                                                   \
+        while (todo--) {                                                \
+            if ((*str >= 'A') && (*str <= 'Z')) {                       \
+                params->amzHeadersRaw[len++] = 'a' + (*str - 'A');      \
+            }                                                           \
+            else {                                                      \
+                params->amzHeadersRaw[len++] = *str;                    \
+            }                                                           \
+            str++;                                                      \
+        }                                                               \
+    } while (0)
+
+    // Check and copy in the x-amz-meta headers
+    if (headers && ((params->httpRequestType == HttpRequestTypePUT) ||
+                    (params->httpRequestType == HttpRequestTypeCOPY))) {
+        int i;
+        for (i = 0; i < headers->metaHeadersCount; i++) {
+            char *header = headers->metaHeaders[i];
+            while (isblank(*header)) {
+                header++;
+            }
+            if (strncmp(header, META_HEADER_NAME_PREFIX,
+                        sizeof(META_HEADER_NAME_PREFIX) - 1)) {
+                return S3StatusBadMetaHeader;
+            }
+            // Now find the colon
+            const char *c = &(header[sizeof(META_HEADER_NAME_PREFIX)]);
+            while (*c && isalnum(*c)) {
+                c++;
+            }
+            if (*c != ':') {
+                return S3StatusBadMetaHeader;
+            }
+            c++;
+            header_name_tolower_copy(header, c - header);
+            // Skip whitespace
+            while (*c && isblank(*c)) {
+                c++;
+            }
+            if (!*c) {
+                return S3StatusBadMetaHeader;
+            }
+            // Copy in a space and then the value
+            headers_append(0, " %s", c);
+        }
+    }
+
+    // Add the x-amz-acl header, if necessary
+    if ((params->httpRequestType == HttpRequestTypePUT) ||
+        (params->httpRequestType == HttpRequestTypeCOPY)) {
+        const char *cannedAclString;
+        switch (params->cannedAcl) {
+        case S3CannedAclNone:
+            cannedAclString = 0;
+            break;
+        case S3CannedAclRead:
+            cannedAclString = "public-read";
+            break;
+        case S3CannedAclReadWrite:
+            cannedAclString = "public-read-write";
+            break;
+        default: // S3CannedAclAuthenticatedRead
+            cannedAclString = "authenticated-read";
+            break;
+        }
+        if (cannedAclString) {
+            headers_append(1, "x-amz-acl: %s", cannedAclString);
+        }
+    }
+
+    // Add the x-amz-date header
+    time_t now = time(NULL);
+    char date[64];
+    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
+    headers_append(1, "x-amz-date: %s", date);
+
+    if (params->httpRequestType == HttpRequestTypeCOPY) {
+        // Add the x-amz-copy-source header
+        if (params->requestHeaders->sourceObject &&
+            params->requestHeaders->sourceObject[0]) {
+            headers_append(1, "x-amz-copy-source: %s", 
+                           params->requestHeaders->sourceObject);
+        }
+        // And the x-amz-metadata-directive header
+        if (params->requestHeaders->metaDataDirective != 
+            S3MetaDataDirectiveCopy) {
+            headers_append(1, "%s", "x-amz-metadata-directive: REPLACE");
+        }
+    }
+
+    return S3StatusOK;
+}
+
+
+// Simple comparison function for comparing two HTTP header names that are
+// embedded within an HTTP header line, returning true if header1 comes
+// before header2 alphabetically, false if not
+static int headerle(const char *header1, const char *header2)
+{
+    while (1) {
+        if (*header1 == ':') {
+            return (*header2 == ':');
+        }
+        else if (*header2 == ':') {
+            return 0;
+        }
+        else if (*header2 < *header1) {
+            return 0;
+        }
+        else if (*header2 > *header1) {
+            return 1;
+        }
+        header1++, header2++;
+    }
+}
+
+
+// Replace this with merge sort eventually, it's the best stable sort.  But
+// since typically the number of elements being sorted is small, it doesn't
+// matter that much which sort is used, and gnome sort is the world's simplest
+// stable sort.  Added a slight twist to the standard gnome_sort - don't go
+// forward +1, go forward to the last highest index considered.  This saves
+// all the string comparisons that would be done "going forward", and thus
+// only does the necessary string comparisons to move values back into their
+// sorted position.
+static void header_gnome_sort(const char **headers, int size)
+{
+    int i = 0, last_highest = 0;
+
+    while (i < size) {
+        if ((i == 0) || headerle(headers[i - 1], headers[i])) {
+            i = ++last_highest;
+        }
+        else {
+            const char *tmp = headers[i];
+            headers[i] = headers[i - 1];
+            headers[--i] = tmp;
+        }
+    }
+}
+
+
+// Canonicalizes the x-amz- headers into the canonicalizedAmzHeaders buffer
+static void canonicalize_amz_headers(RequestParams *params)
+{
+    // Make a copy of the headers that will be sorted
+    const char *sortedHeaders[MAX_META_HEADER_COUNT];
+
+    memcpy(sortedHeaders, params->amzHeaders,
+           (params->amzHeadersCount * sizeof(sortedHeaders[0])));
+
+    // Now sort these
+    header_gnome_sort(sortedHeaders, params->amzHeadersCount);
+
+    // Now copy this sorted list into the buffer, all the while:
+    // - folding repeated headers into single lines, and
+    // - folding multiple lines
+    // - removing the space after the colon
+    int lastHeaderLen, i;
+    char *buffer = params->canonicalizedAmzHeaders;
+    for (i = 0; i < params->amzHeadersCount; i++) {
+        const char *header = sortedHeaders[i];
+        const char *c = header;
+        // If the header names are the same, append the next value
+        if ((i > 0) && 
+            !strncmp(header, sortedHeaders[i - 1], lastHeaderLen)) {
+            // Replacing the previous newline with a comma
+            *(buffer - 1) = ',';
+            // Skip the header name and space
+            c += (lastHeaderLen + 1);
+        }
+        // Else this is a new header
+        else {
+            // Copy in everything up to the space in the ": "
+            while (*c != ' ') {
+                *buffer++ = *c++;
+            }
+            // Save the header len since it's a new header
+            lastHeaderLen = c - header;
+            // Skip the space
+            c++;
+        }
+        // Now copy in the value, folding the lines
+        while (*c) {
+            // If c points to a \r\n[whitespace] sequence, then fold
+            // this newline out
+            if ((*c == '\r') && (*(c + 1) == '\n') && isblank(*(c + 2))) {
+                c += 3;
+                while (isblank(*c)) {
+                    c++;
+                }
+                // Also, what has most recently been copied into buffer amy
+                // have been whitespace, and since we're folding whitespace
+                // out around this newline sequence, back buffer up over
+                // any whitespace it contains
+                while (isblank(*(buffer - 1))) {
+                    buffer--;
+                }
+                continue;
+            }
+            *buffer++ = *c++;
+        }
+        // Finally, add the newline
+        *buffer++ = '\n';
+    }
+
+    // Terminate the buffer
+    *buffer = 0;
+}
+
+
+// URL encodes the params->key value into params->urlEncodedKey
+static S3Status encode_key(RequestParams *params)
+{
+    const char *key = params->key, *buffer = params->urlEncodedKey;
+    int len = 0;
+
+    if (key) while (*key) {
+        if (++len > S3_MAX_KEY_SIZE) {
+            return S3StatusKeyTooLong;
+        }
+        const char *urlsafe = urlSafeG;
+        int isurlsafe = 0;
+        while (*urlsafe) {
+            if (*urlsafe == *key) {
+                isurlsafe = 1;
+                break;
+            }
+            urlsafe++;
+        }
+        if (isurlsafe || isalnum(*key)) {
+            *buffer++ = *key++;
+        }
+        else if (*key == ' ') {
+            *buffer++ = '+';
+            key++;
+        }
+        else {
+            *buffer++ = '%';
+            *buffer++ = hexG[*key / 16];
+            *buffer++ = hexG[*key % 16];
+            key++;
+        }
+    }
+
+    *buffer = 0;
+}
+
+
+// Canonicalizes the resource into params->canonicalizedResource
+static void canonicalize_resource(RequestParams *params)
+{
+    char *buffer = params->canonicalizedResource;
+    int len = 0;
+
+    *buffer = 0;
+
+#define append(str) len += sprintf(&(buffer[len]), "%s", str)
+
+    if (params->bucketName && params->bucketName[0]) {
+        buffer[len++] = '/';
+        append(params->bucketName);
+    }
+
+    if (params->urlEncodedKey[0]) {
+        append(params->urlEncodedKey);
+    }
+
+    if (params->subResource && params->subResource[0]) {
+        append(params->subResource);
+    }
+}
+
+
+static S3Status compose_standard_headers(RequestParams *params)
+{
+
+#define do_header(fmt, sourceField, destField, badError, tooLongError)  \
+    do {                                                                \
+        if (params->requestHeaders &&                                   \
+            params->requestHeaders-> sourceField &&                     \
+            params->requestHeaders-> sourceField[0]) {                  \
+            /* Skip whitespace at beginning of val */                   \
+            const char *val = params->requestHeaders-> sourceField;     \
+            while (*val && isblank(*val)) {                             \
+                val++;                                                  \
+            }                                                           \
+            if (!*val) {                                                \
+                return badError;                                        \
+            }                                                           \
+            /* Compose header, make sure it all fit */                  \
+            int len = snprintf(params-> destField,                      \
+                               sizeof(params-> destField), fmt, val);   \
+            if (len >= sizeof(params-> destField)) {                    \
+                return tooLongError;                                    \
+            }                                                           \
+            /* Now remove the whitespace at the end */                  \
+            while (isblank(params-> destField[len])) {                  \
+                len--;                                                  \
+            }                                                           \
+            params-> destField[len] = 0;                                \
+        }                                                               \
+        else {                                                          \
+            params-> destField[0] = 0;                                  \
+        }                                                               \
+    } while (0)
+
+
+    // 1. ContentType
+    do_header("Content-Type: %s", contentType, contentTypeHeader,
+              S3StatusBadContentType, S3StatusContentTypeTooLong);
+
+    // 2. MD5
+    do_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
+              S3StatusMD5TooLong);
+
+    // 3. Content-Disposition
+    do_header("Content-Disposition: attachment; filename=\"%s\"",
+              contentDispositionFilename, contentDispositionHeader,
+              S3StatusBadContentDispositionFilename,
+              S3StatusContentDispositionFilenameTooLong);
+
+    // 4. ContentEncoding
+    do_header("Content-Encoding: %s", contentEncoding, contentEncodingHeader,
+              S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
+
+    // 5. Expires
+    if (params->requestHeaders && params->requestHeaders->expires) {
+        char date[100];
+        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT",
+                 gmtime(params->requestHeaders->expires));
+        snprintf(params->expiresHeader, sizeof(params->expiresHeader),
+                 "Expires: %s", date);
+    }
+    else {
+        params->expiresHeader[0] = 0;
+    }
+
+    return S3StatusOK;
+}
+
+
+// Convert an HttpRequestType to an HTTP Verb string
+static const char *http_request_type_to_verb(HttpRequestType requestType)
+{
+    switch (requestType) {
+    case HttpRequestTypeGET:
+        return "GET";
+    case HttpRequestTypeHEAD:
+        return "HEAD";
+    case HttpRequestTypePUT:
+        return "PUT";
+    case HttpRequestTypeCOPY:
+        return "COPY";
+    default: // HttpRequestTypeDELETE
+        return "DELETE";
+    }
+}
+
+
+// Composes the Authorization header for the request
+static S3Status compose_auth_header(RequestParams *params)
+{
+    // We allow for:
+    // 17 bytes for HTTP-Verb + \n
+    // 129 bytes for MD5 + \n
+    // 129 bytes for Content-Type + \n
+    // 1 byte for Data + \n
+    // CanonicalizedAmzHeaders & CanonicalizedResource
+    char signbuf[17 + 129 + 129 + 1 + 
+                 (sizeof(params->canonicalizedAmzHeaders) - 1) +
+                 (sizeof(params->canonicalizedResource) - 1) + 1];
+    int len = 0;
+
+#define signbuf_append(format, ...)                             \
+    len += snprintf(&(signbuf[len]), sizeof(signbuf) - len,     \
+                    format, __VA_ARGS__)
+
+    signbuf_append("%s\n", http_request_type_to_verb(params->httpRequestType));
+
+    // For MD5 and Content-Type, use the value in the actual header, because
+    // it's already been trimmed
+    signbuf_append("%s\n", params->md5Header[0] ? 
+                   &(params->md5Header[sizeof("Content-MD5: ") - 1]) : "");
+
+    signbuf_append
+        ("%s\n", params->contentTypeHeader[0] ? 
+         &(params->contentTypeHeader[sizeof("Content-Type: ") - 1]) : "");
+
+    signbuf_append("%s", "\n"); // Date - we always use x-amz-date
+
+    signbuf_append("%s", canonicalizedAmzHeaders);
+
+    signbuf_append("%s", canonicalizedResource);
+
+    unsigned int md_len;
+    unsigned char md[EVP_MAX_MD_SIZE];
+	
+    HMAC(EVP_sha1(), secretAccessKey, strlen(secretAccessKey),
+         (unsigned char *) signbuf, len, md, &md_len);
+
+    BIO *base64 = BIO_push(BIO_new(BIO_f_base64()), BIO_new(BIO_s_mem()));
+    BIO_write(base64, md, md_len);
+    if (BIO_flush(base64) != 1) {
+        BIO_free_all(base64);
+        return S3StatusFailure;
+    }
+    BUF_MEM *base64mem;
+    BIO_get_mem_ptr(base64, &base64mem);
+    base64mem->data[base64mem->length - 1] = 0;
+
+    snprintf(buffer, bufferSize, "Authorization: AWS %s:%s", accessKeyId,
+             base64mem->data);
+
+    BIO_free_all(base64);
+
+    return S3StatusOK;
+}
+
+// Sets up the curl handle given the completely computed RequestParams
+static S3Status setup_curl(CURL *handle, Request *request,
+                           const RequestParams *params)
 {
     CURLcode status;
     
@@ -158,6 +621,54 @@ static S3Status initialize_curl_handle(CURL *handle, Request *request)
     // Tell Curl to keep up to POOL_SIZE / 2 connections open at once
     curl_easy_setopt_safe(CURLOPT_MAXCONNECTS, POOL_SIZE / 2);
 
+    // The HTTP headers
+    struct curl_slist *headers = 0;
+
+    // Append standard headers
+#define append_standard_header(fieldName)                               \
+    if (params-> fieldName [0]) {                                       \
+        headers = curl_slist_append(headers, params-> fieldName);       \
+    }
+
+    append_standard_header(contentTypeHeader);
+    append_standard_header(md5Header);
+    append_standard_header(contentDispositionHeader);
+    append_standard_header(contentEncodingHeader);
+    append_standard_header(expiresHeader);
+    append_standard_header(authorizationHeader);
+
+    // Append x-amz- headers
+    int i;
+    for (i = 0; i < params->amzHeadersCount; i++) {
+        headers = curl_slist_append(headers, params->amzHeaders[i]);
+    }
+
+    // Set the HTTP headers
+    curl_easy_setopt_safe(CURLOPT_HTTPHEADER, headers);
+
+    // Set URI - copy it into the request first, because it must be stored
+    // someplace that will last as long as the curl handle does
+    strcpy(request->uri, params->uri);
+    curl_easy_setopt_safe(CURLOPT_URL, request->uri);
+
+    // Set request type
+    switch (params->httpRequestType) {
+    case HttpRequestTypeHEAD:
+	curl_easy_setopt_safe(CURLOPT_NOBODY, 1);
+        break;
+    case HttpRequestTypePUT:
+        curl_easy_setopt_safe(CURLOPT_UPLOAD, 1);
+        break;
+    case HttpRequestTypeCOPY:
+	curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "COPY");
+        break;
+    case HttpRequestTypeDELETE:
+	curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "DELETE");
+        break;
+    default: // HttpRequestTypeGET
+        break;
+    }
+    
     return S3StatusOK;
 }
 
@@ -174,9 +685,8 @@ static void request_destroy(Request *request)
 }
 
 
-static S3Status request_initialize(Request *request,
-                                   S3ResponseHandler *handler,
-                                   void *callbackData)
+static S3Status request_initialize(Request *request, 
+                                   const RequestParams *params)
 {
     if (request->used) {
         // Reset the CURL handle for reuse
@@ -194,10 +704,18 @@ static S3Status request_initialize(Request *request,
     // This must be done before any error is returned
     request->headers = 0;
 
-    S3Status status = initialize_curl_handle(request->curl, request);
-    if (status != S3StatusOK) {
+    // Compute the URL
+    S3Status status;
+    if ((status = compose_uri(params, request->uri)) != S3StatusOK) {
         return status;
     }
+
+    // Set all of the curl handle options
+    if ((status = setup_curl(request->curl, request, params)) != S3StatusOK) {
+        return status;
+    }
+
+    // Now set up for receiving the response    
 
     request->callbackData = callbackData;
 
@@ -235,32 +753,42 @@ static S3Status request_initialize(Request *request,
 }
 
 
-static S3Status request_create(S3ResponseHandler *handler,
-                                    void *callbackData,
-                                    Request **requestReturn)
+static S3Status request_get_initialized(const RequestParams *params, 
+                                        Request **requestReturn)
 {
-    Request *request = (Request *) malloc(sizeof(Request));
+    Request *request = 0;
+    
+    // Try to get one from the pool.  We hold the lock for the shortest time
+    // possible here.
+    mutex_lock(poolMutexG);
 
+    if (poolCountG) {
+        request = poolG[poolCountG--];
+    }
+    
+    mutex_unlock(poolMutexG);
+
+    // If there wasn't one available in the pool, create one
     if (!request) {
-        return S3StatusFailedToCreateRequest;
+        if (!(request = (Request *) malloc(sizeof(Request)))) {
+            return S3StatusFailedToCreateRequest;
+        }
+        request->used = 0;
+        if (!(request->curl = curl_easy_init())) {
+            free(request);
+            return S3StatusFailedToInitializeRequest;
+        }
     }
 
-    request->used = 0;
-
-    if (!(request->curl = curl_easy_init())) {
-        free(request);
-        return S3StatusFailedToInitializeRequest;
-    }
-
-    S3Status status = request_initialize(request, handler, callbackData);
-
-    if (status != S3StatusOK) {
+    // Initialize it
+    S3Status status;
+    if ((status = request_initialize(request, params)) != S3StatusOK) {
         request_destroy(request);
         return status;
     }
 
     *requestReturn = request;
-
+    
     return S3StatusOK;
 }
 
@@ -307,38 +835,45 @@ void request_api_deinitialize()
 }
 
 
-S3Status request_get(S3ResponseHandler *handler, void *callbackData,
-                     Request **requestReturn)
+S3Status request_get(RequestParams *params, Request **requestReturn)
 {
-    Request *request = 0;
-    
-    // Try to get one from the pool.  We hold the lock for the shortest time
-    // possible here.
-    mutex_lock(poolMutexG);
+    S3Status status;
 
-    if (poolCountG) {
-        request = poolG[poolCountG--];
+    // Validate the bucket name
+    if (params->bucketName && 
+        ((status = S3_validate_bucket_name(params->bucketName,
+                                           params->uriStyle)) != S3StatusOK)) {
+        return status;
+    }
+
+    // Compose the amz headers
+    if ((status = compose_amz_headers(params)) != S3StatusOK) {
+        return status;
+    }
+
+    // Compute the canonicalized amz headers
+    canonicalize_amz_headers(params);
+
+    // URL encode the key
+    if ((status = encode_key(params)) != S3StatusOK) {
+        return status;
+    }
+
+    // Compute the canonicalized resource
+    canonicalize_resource(params);
+
+    // Compose standard headers
+    if ((status = compose_standard_headers(params)) != S3StatusOK) {
+        return status;
+    }
+
+    // Authorization
+    if ((status = compose_auth_header(params)) != S3StatusOK) {
+        return status;
     }
     
-    mutex_unlock(poolMutexG);
-
-    // If we got something from the pool, then initialize it and return it
-    if (request) {
-        S3Status status = request_initialize(request, handler, callbackData);
-
-        if (status != S3StatusOK) {
-            request_destroy(request);
-            return status;
-        }
-
-        *requestReturn = request;
-
-        return S3StatusOK;
-    }
-    else {
-        // If there were none available in the pool, create one and return it
-        return request_create(handler, callbackData, requestReturn);
-    }
+    // Get an initialized Request structure now
+    return request_get_initialized(params, requestReturn);
 }
 
 
@@ -364,11 +899,6 @@ void request_release(Request *request)
 
 S3Status request_multi_add(Request *request, S3RequestContext *requestContext)
 {
-    if (request->headers) {
-        (void) curl_easy_setopt(request->curl, CURLOPT_HTTPHEADER,
-                                request->headers);
-    }
-
     switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
     case CURLM_OK:
         return S3StatusOK;
@@ -382,11 +912,6 @@ S3Status request_multi_add(Request *request, S3RequestContext *requestContext)
 
 void request_easy_perform(Request *request)
 {
-    if (request->headers) {
-        (void) curl_easy_setopt(request->curl, CURLOPT_HTTPHEADER,
-                                request->headers);
-    }
-
     CURLcode code = curl_easy_perform(request->curl);
 
     S3Status status;
@@ -426,157 +951,4 @@ void request_finish(Request *request, S3Status status)
     }
 
     request_release(request);
-}
-
-S3Status request_compose_x_amz_headers(XAmzHeaders *xAmzHeaders,
-                                       const S3RequestHeaders *requestHeaders)
-{
-    if (requestHeaders) {
-        // Check to make sure that the meta request headers are not too long
-        if (requestHeaders->metaHeadersCount > MAX_META_HEADER_COUNT) {
-            return S3StatusMetaHeadersTooLong;
-        }
-        int i, total = 0;
-        for (i = 0; i < requestHeaders->metaHeadersCount; i++) {
-            total += strlen(requestHeaders->metaHeaders[i]);
-        }
-        if (total > S3_MAX_META_HEADER_SIZE) {
-            return S3StatusMetaHeadersTooLong;
-        }
-    }
-
-    // Initialize xAmzHeaders
-    xAmzHeaders->count = 0;
-    xAmzHeaders->headers_raw[0] = 0;
-
-    int len = 0;
-
-    // Append a header to xAmzHeaders, trimming whitespace from it
-#define headers_append(isNewHeader, format, ...)                        \
-    do {                                                                \
-        if (isNewHeader) {                                              \
-            xAmzHeaders->headers[xAmzHeaders->count++] =                \
-                &(xAmzHeaders->headers_raw[len]);                       \
-        }                                                               \
-        len += snprintf(&(xAmzHeaders->headers_raw[len]),               \
-                        sizeof(xAmzHeaders->headers_raw) - len,         \
-                        format, __VA_ARGS__) + 1;                       \
-        if (len >= sizeof(xAmzHeaders->headers_raw)) {                  \
-            return S3StatusMetaHeadersTooLong;                          \
-        }                                                               \
-        while ((len > 0) && (xAmzHeaders->headers_raw[len] == ' ')) {   \
-            len--;                                                      \
-        }                                                               \
-    } while (0)
-
-#define header_name_tolower_copy(str, l)                                \
-    do {                                                                \
-        xAmzHeaders->headers[xAmzHeaders->count++] =                    \
-            &(xAmzHeaders->headers_raw[len]);                           \
-        if ((len + l) >= sizeof(xAmzHeaders->headers_raw)) {            \
-            return S3StatusMetaHeadersTooLong;                          \
-        }                                                               \
-        int todo = l;                                                   \
-        while (todo--) {                                                \
-            if ((*str >= 'A') && (*str <= 'Z')) {                       \
-                xAmzHeaders->headers_raw[len++] = 'a' + (*str - 'A');   \
-            }                                                           \
-            else {                                                      \
-                xAmzHeaders->headers_raw[len++] = *str;                 \
-            }                                                           \
-            str++;                                                      \
-        }                                                               \
-    } while (0)
-
-    // Add the x-amz-acl header, if necessary
-    if (requestHeaders) {
-        const char *cannedAclString;
-        switch (requestHeaders->cannedAcl) {
-        case S3CannedAclNone:
-            cannedAclString = 0;
-            break;
-        case S3CannedAclRead:
-            cannedAclString = "public-read";
-            break;
-        case S3CannedAclReadWrite:
-            cannedAclString = "public-read-write";
-            break;
-        default: // S3CannedAclAuthenticatedRead
-            cannedAclString = "authenticated-read";
-            break;
-        }
-        if (cannedAclString) {
-            headers_append(1, "x-amz-acl: %s", cannedAclString);
-        }
-    }
-
-    // Add the x-amz-date header
-    time_t now = time(NULL);
-    char date[64];
-    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
-    headers_append(1, "x-amz-date: %s", date);
-
-    if (!requestHeaders) {
-        return S3StatusOK;
-    }
-
-    // Check and copy in the x-amz-meta headers
-    int i;
-    for (i = 0; i < requestHeaders->metaHeadersCount; i++) {
-        if (strncmp(requestHeaders->metaHeaders[i], META_HEADER_NAME_PREFIX,
-                    sizeof(META_HEADER_NAME_PREFIX) - 1)) {
-            return S3StatusBadMetaHeader;
-        }
-        // Now find the colon
-        const char *c = &(requestHeaders->
-                          metaHeaders[i][sizeof(META_HEADER_NAME_PREFIX)]);
-        while (*c && isalnum(*c)) {
-            c++;
-        }
-        if (*c != ':') {
-            return S3StatusBadMetaHeader;
-        }
-        c++;
-        header_name_tolower_copy(requestHeaders->metaHeaders[i],
-                                 c - requestHeaders->metaHeaders[i]);
-        // Skip whitespace
-        while (*c && isblank(*c)) {
-            c++;
-        }
-        if (!*c) {
-            return S3StatusBadMetaHeader;
-        }
-        // Copy in a space and then the value
-        headers_append(0, " %s", c);
-    }
-
-    return S3StatusOK;
-}
-
-void request_encode_key(char *buffer, const char *key)
-{
-    while (*key) {
-        const char *urlsafe = urlSafeG;
-        int isurlsafe = 0;
-        while (*urlsafe) {
-            if (*urlsafe == *key) {
-                isurlsafe = 1;
-                break;
-            }
-            urlsafe++;
-        }
-        if (isurlsafe || isalnum(*key)) {
-            *buffer++ = *key++;
-        }
-        else if (*key == ' ') {
-            *buffer++ = '+';
-            key++;
-        }
-        else {
-            *buffer++ = '%';
-            *buffer++ = hexG[*key / 16];
-            *buffer++ = hexG[*key % 16];
-            key++;
-        }
-    }
 }

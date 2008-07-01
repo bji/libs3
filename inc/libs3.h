@@ -55,13 +55,13 @@
  ************************************************************************** **/
 
 /**
- * S3_MAX_KEY_LENGTH is the maximum length of keys that Amazon S3 supports.
+ * S3_MAX_KEY_SIZE is the maximum size of keys that Amazon S3 supports.
  **/
-#define S3_MAX_KEY_LENGTH               1024
+#define S3_MAX_KEY_SIZE                 1024
 
 /**
- * S3_MAX_META_HEADERS_SIZE is the maximum number of bytes that all
- * x-amz-meta headers passed to Amazon S3 is allowed to contain
+ * S3_MAX_META_HEADERS_SIZE is the maximum number of bytes allowed for
+ * x-amz-meta header names and values in any request passed to Amazon S3
  **/
 #define S3_MAX_META_HEADER_SIZE         2048
 
@@ -226,13 +226,24 @@ typedef enum
  * updated.  Each canned ACL has a predefined value when expanded to a full
  * set of S3 ACL Grants.
  **/
-typedef enum S3CannedAcl
+typedef enum
 {
     S3CannedAclNone                     = 0, /* private */
     S3CannedAclRead                     = 1, /* public-read */
     S3CannedAclReadWrite                = 2, /* public-read-write */
     S3CannedAclAuthenticatedRead        = 3  /* authenticated-read */
 } S3CannedAcl;
+
+
+/**
+ * S3MetaDataDirective identifies what the S3 service should do with an
+ * object's metadata when the object is copied.
+ **/
+typedef enum
+{
+    S3MetaDataDirectiveCopy             = 0,
+    S3MetaDataDirectiveReplace          = 1
+} S3MetaDataDirective;
 
 
 /** **************************************************************************
@@ -479,10 +490,24 @@ typedef struct S3RequestHeaders
     /**
      * This identifies the "canned ACL" that should be used for this object.
      * The default (0) gives only the owner of the object access to it.
+     * This value is ignored for all operations except put_object and
+     * copy_object.
      **/
     S3CannedAcl cannedAcl;
     /**
-     * This is the number of headers in the metaHeaders field
+     * For copy operations, this identifies the source object; must be
+     * of the form /source_bucket/source_key.  This value is ignored for all
+     * operations except copy_object.
+     **/
+    const char *sourceObject;
+    /**
+     * For copy operations, this gives the metadata directive.  This value is
+     * ignored for all operations except copy_object.
+     **/
+    S3MetaDataDirective metaDataDirective;
+    /**
+     * This is the number of headers in the metaHeaders field.  Ignored and
+     * assumed to be 0, for all except put_object and copy_object operations.
      **/
     int metaHeadersCount;
     /**

@@ -36,26 +36,112 @@
 
 
 // Derived from S3 documentation
-// The maximum number of x-amz-meta headers that the user can supply is
-// limited by the fact that every x-amz-meta header must be of the form:
-// x-amz-meta-${NAME}: ${VALUE}
-// where NAME and VALUE must be at least 1 character long, so the shortest
-// x-amz-meta header would be:
-// x-amz-meta-n: v
-// So we take the S3's total limit of 2K and divide it by the length of that
+
+// This is the maximum number of x-amz-meta- headers that could be included in
+// a request to S3.  The smallest meta header is" x-amz-meta-n: v".  Since S3
+// doesn't count the ": " against the total, the smallest amount of data to
+// count for a header would be the length of "x-amz-meta-nv".
 #define MAX_META_HEADER_COUNT \
-    (S3_MAX_META_HEADER_SIZE / (sizeof(META_HEADER_NAME_PREFIX "n: v")))
-// Now the total that we allow for all x-amz- headers includes the ones that
-// we additionally add, which is x-amz-acl and x-amz-date
-// 256 bytes will be more than enough to cover those
-#define MAX_AMZ_HEADER_SIZE (S3_MAX_META_HEADER_SIZE + 256)
+    (S3_MAX_META_HEADER_SIZE / (sizeof(META_HEADER_NAME_PREFIX "nv") - 1))
 
-#define MAX_CANONICALIZED_RESOURCE_SIZE (S3_MAX_KEY_LENGTH + 1024)
+// This is the maximum number of bytes needed in a "compacted meta header"
+// buffer, which is a buffer storing all of the compacted meta headers.
+#define COMPACTED_META_HEADER_BUFFER_SIZE \
+    (MAX_META_HEADER_COUNT * sizeof(META_HEADER_NAME_PREFIX "n: v"))
 
-#define MAX_URLENCODED_KEY_SIZE (3 * S3_MAX_KEY_LENGTH)
+// Maximum url encoded key size; since every single character could require
+// URL encoding, it's 3 times the size of a key (since each url encoded
+// character takes 3 characters: %NN)
+#define MAX_URLENCODED_KEY_SIZE (3 * S3_MAX_KEY_SIZE)
 
-// This is the data associated with a request, and is set in the private data
-// of the curl request
+// This is the maximum size of a URI that could be passed to S3:
+// https://s3.amazonaws.com/${BUCKET}/${KEY}?acl
+// 255 is the maximum bucket length
+#define MAX_URI_SIZE \
+    ((sizeof("https://" HOSTNAME "/") - 1) + 255 + 1 + \
+     MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent" - 1)) + 1)
+
+// Maximum size of a canonicalized resource
+#define MAX_CANONICALIZED_RESOURCE_SIZE \
+    (1 + 255 + 1 + MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent") - 1) + 1)
+
+
+// Describes a type of HTTP request (these are our supported HTTP "verbs")
+typedef enum
+{
+    HttpRequestTypeGET,
+    HttpRequestTypeHEAD,
+    HttpRequestTypePUT,
+    HttpRequestTypeCOPY,
+    HttpRequestTypeDELETE
+} HttpRequestType;
+
+
+// This completely describes a request.  A RequestParams is not required to be
+// allocated from the heap and its lifetime is not assumed to extend beyond
+// the lifetime of the function to which it has been passed.
+typedef struct RequestParams
+{
+    // The following are supplied ---------------------------------------------
+
+    // Request type, affects the HTTP verb used
+    HttpRequestType httpRequestType;
+    // Protocol to use for request
+    S3Protocol protocol;
+    // URI style to use for request
+    S3UriStyle uriStyle;
+    // Bucket name, if any
+    const char *bucketName;
+    // Key, if any
+    const char *key;
+    // Query params - ready to append to URI (i.e. ?p1=v1?p2=v2)
+    const char *queryParams;
+    // sub resource, like ?acl, ?location, ?torrent
+    const char *subResource;
+    // AWS Access Key ID
+    const char *accessKeyId;
+    // AWS Secret Access Key
+    const char *secretAccessKey;
+    // Request headers
+    const S3RequestHeaders *requestHeaders;
+    // Response handler callback
+    S3ResponseHandler *handler;
+    // Response handler callback data
+    void *callbackData;
+    
+    // The following are computed ---------------------------------------------
+
+    // All x-amz- headers, in normalized form (i.e. NAME: VALUE, no other ws)
+    char *amzHeaders[MAX_META_HEADER_COUNT + 2]; // + 2 for acl and date
+    // The number of x-amz- headers
+    int amzHeadersCount;
+    // Storage for amzHeaders (the +256 is for x-amz-acl and x-amz-date)
+    char *amzHeadersRaw[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
+    // Canonicalized x-amz- headers
+    char canonicalizedAmzHeaders[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
+    // URL-Encoded key
+    char urlEncodedKey[MAX_URLENCODED_KEY_SIZE + 1];
+    // Canonicalized resource
+    char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE + 1];
+    // Content-Type header (or empty)
+    char contentTypeHeader[128];
+    // Content-MD5 header (or empty)
+    char md5Header[128];
+    // Content-Disposition header (or empty)
+    char contentDispositionHeader[128];
+    // Content-Encoding header (or empty)
+    char contentEncodingHeader[128];
+    // Expires header (or empty)
+    char expiresHeader[128];
+    // Authorization header
+    char authorizationHeader[128];
+    // Uri
+    char uri[MAX_URI_SIZE + 1];
+} RequestParams;
+
+
+// This is the stuff associated with a request that needs to be on the heap
+// (and thus live while a curl_multi is in use).
 typedef struct Request
 {
     // True if this request has already been used
@@ -64,22 +150,19 @@ typedef struct Request
     // The CURL structure driving the request
     CURL *curl;
 
-    // The headers that will be sent to S3
-    struct curl_slist *headers;
+    // libcurl requires that the uri be stored outside of the curl handle
+    char uri[MAX_URI_SIZE + 1];
 
     // The callback data to pass to all of the callbacks
     void *callbackData;
 
-    // responseHeaders.metaHeaders strings get copied into here.  Since S3
-    // supports a max of 2K for all values and keys, limiting to 2K here is
-    // sufficient
-    char responseMetaHeaderStrings[S3_MAX_META_HEADER_SIZE];
+    // responseHeaders.metaHeaders strings get copied into here
+    char responseMetaHeaderStrings[COMPACTED_META_HEADER_BUFFER_SIZE];
 
     // The length thus far of metaHeaderStrings
     int responseMetaHeaderStringsLen;
 
-    // The maximum number of meta headers possible is:
-    //   2K / strlen("x-amz-meta-a:\0\0")
+    // Response meta headers
     S3MetaHeader responseMetaHeaders[MAX_META_HEADER_COUNT];
 
     // Callback stuff ---------------------------------------------------------
@@ -148,9 +231,9 @@ S3Status request_api_initialize(const char *userAgentInfo);
 void request_api_deinitialize();
 
 // Get a Request that has been initialized, except for the data payload
-// callback pointer
-S3Status request_get(S3ResponseHandler *handler, void *callbackData,
-                          Request **requestReturn);
+// callback pointer, and is ready to execute via request_multi_add or
+// request_easy_perform
+S3Status request_get(RequestParams *params, Request **requestReturn);
 
 // Release a Request that is no longer needed
 void request_release(Request *request);
@@ -165,49 +248,6 @@ void request_easy_perform(Request *request);
 // Finish a request; ensures that all callbacks have been made, and also
 // releases the request
 void request_finish(Request *request, S3Status status);
-
-typedef struct XAmzHeaders
-{
-    int count;
-    char *headers[MAX_META_HEADER_COUNT];
-    char headers_raw[MAX_AMZ_HEADER_SIZE];
-} XAmzHeaders;
-
-// Composes the entire list of x-amz- headers, which includes all x-amz-meta-
-// headers and any other headers.  Each one is guaranteed to be of the form:
-// [HEADER]: [VALUE]
-// Where HEADER and VALUE have no whitespace in them, and they are separated
-// by exactly ": "
-// There may be duplicate x-amz-meta- headers returned
-// All header names will be lower cased
-S3Status request_compose_x_amz_headers(XAmzHeaders *xAmzHeaders,
-                                       const S3RequestHeaders *requestHeaders);
-
-// buffer must be at least MAX_URLENCODED_KEY_SIZE bytes
-void request_encode_key(char *buffer, const char *key);
-
-
-// Authorization functions
-// ------------------------------------------------------------
-
-// Canonicalizes the given x-amz- headers into the given buffer with the
-// given bufferSize.  buffer must be at least S3_MAX_AMZ_HEADER_SIZE bytes.
-void canonicalize_amz_headers(char *buffer, const XAmzHeaders *xAmzHeaders);
-
-// Canonicalizes a resource into buffer; buffer must be at least
-// MAX_CANONICALIZED_RESOURCE_SIZE bytes long.  subResource is one of:
-// "acl", "location", "logging", and "torrent"
-void canonicalize_resource(char *buffer, S3UriStyle uriStyle,
-                           const char *bucketName,
-                           const char *encodedKey, const char *subResource);
-
-S3Status auth_header_snprintf(char *buffer, int bufferSize,
-                              const char *accessKeyId,
-                              const char *secretAccessKey,
-                              const char *httpVerb, const char *md5,
-                              const char *contentType,
-                              const char *canonicalizedAmzHeaders,
-                              const char *canonicalizedResource);
 
 
 #endif /* PRIVATE_H */
