@@ -106,9 +106,23 @@ typedef struct RequestParams
     const S3RequestHeaders *requestHeaders;
     // Response handler callback
     S3ResponseHandler *handler;
+    // The callbacks to make for the data payload of the response
+    union {
+        S3ListServiceCallback *listServiceCallback;
+        S3ListBucketCallback *listBucketCallback;
+        S3PutObjectCallback *putObjectCallback;
+        S3GetObjectCallback *getObjectCallback;
+    } u;
     // Response handler callback data
     void *callbackData;
+    // The write callback to be called by curl, if needed; req will be passed
+    // in as the Request structure for this request
+    size_t (*curlWriteCallback)(void *data, size_t s, size_t n, void *req);
+    // The read callback to be called by curl, if needed; req will be passed
+    // in as the Request structure for this request
+    size_t (*curlReadCallback)(void *data, size_t s, size_t n, void *req);
     
+
     // The following are computed ---------------------------------------------
 
     // All x-amz- headers, in normalized form (i.e. NAME: VALUE, no other ws)
@@ -231,23 +245,14 @@ S3Status request_api_initialize(const char *userAgentInfo);
 // Deinitialize the API
 void request_api_deinitialize();
 
-// Get a Request that has been initialized, except for the data payload
-// callback pointer, and is ready to execute via request_multi_add or
-// request_easy_perform
-S3Status request_get(RequestParams *params, Request **requestReturn);
+// Perform a request; if context is 0, performs the request immediately;
+// otherwise, sets it up to be performed by context.  If S3StatusOK is
+// returned, the request was successfully completed/added to the context.
+// Otherwise, it was never even started due to an error with the request.
+S3Status request_perform(RequestParams *params, S3RequestContext *context);
 
-// Release a Request that is no longer needed
-void request_release(Request *request);
-
-// Add a Request to a S3RequestContext
-S3Status request_multi_add(Request *request,
-                                S3RequestContext *requestContext);
-
-// Perform a Request
-void request_easy_perform(Request *request);
-
-// Finish a request; ensures that all callbacks have been made, and also
-// releases the request
+// Called by the internal request code or internal request context code when a
+// curl has finished the request
 void request_finish(Request *request, S3Status status);
 
 

@@ -27,18 +27,18 @@
 #include "private.h"
 
 
-static size_t write_function(void *ptr, size_t size, size_t nmemb, void *obj)
+static size_t write_callback(void *data, size_t s, size_t n, void *req)
 {
-    Request *request = (Request *) obj;
+    Request *request = (Request *) req;
     (void) request;
 
-    int len = size * nmemb;
+    int len = s * n;
 
     if (len == 0) {
         return 0;
     }
 
-    char *str = (char *) ptr;
+    char *str = (char *) data;
 
     char c = str[len - 1];
     str[len - 1] = 0;
@@ -60,39 +60,23 @@ S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeGET,
-        protocol,
-        S3UriStylePath,
-        0, // bucketName
-        0, // key
-        0, // queryParams
-        0, // subResource
-        accessKeyId,
-        secretAccessKey,
-        0, // requestHeaders
-        &(handler->responseHandler),
-        callbackData
+        HttpRequestTypeGET,                 // httpRequestType
+        protocol,                           // protocol
+        S3UriStylePath,                     // uriStyle
+        0,                                  // bucketName
+        0,                                  // key
+        0,                                  // queryParams
+        0,                                  // subResource
+        accessKeyId,                        // accessKeyId
+        secretAccessKey,                    // secretAccessKey
+        0,                                  // requestHeaders 
+        &(handler->responseHandler),        // handler
+        { handler->listServiceCallback },   // special callbacks
+        callbackData,                       // callbackData
+        &write_callback,                    // curlWriteCallback
+        0                                   // curlReadCallback
     };
 
-    // Get the initialized request
-    Request *request;
-
-    S3Status status = request_get(&params, &request);
-
-    if (status != S3StatusOK) {
-        return status;
-    }
-
-    // Set the callback -- xxx todo make this a part of the request_get too
-    curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, &write_function);
-
-    // If there is a request context, just add the curl_easy to the curl_multi
-    if (requestContext) {
-        return request_multi_add(request, requestContext);
-    }
-    // Else, run the curl_easy to completion
-    else {
-        request_easy_perform(request);
-        return S3StatusOK;
-    }
+    // Perform the request
+    return request_perform(&params, requestContext);
 }

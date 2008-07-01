@@ -235,6 +235,115 @@ static S3Status compose_amz_headers(RequestParams *params)
 }
 
 
+// URL encodes the params->key value into params->urlEncodedKey
+static S3Status encode_key(RequestParams *params)
+{
+    const char *key = params->key;
+    char *buffer = params->urlEncodedKey;
+    int len = 0;
+
+    if (key) while (*key) {
+        if (++len > S3_MAX_KEY_SIZE) {
+            return S3StatusKeyTooLong;
+        }
+        const char *urlsafe = urlSafeG;
+        int isurlsafe = 0;
+        while (*urlsafe) {
+            if (*urlsafe == *key) {
+                isurlsafe = 1;
+                break;
+            }
+            urlsafe++;
+        }
+        if (isurlsafe || isalnum(*key)) {
+            *buffer++ = *key++;
+        }
+        else if (*key == ' ') {
+            *buffer++ = '+';
+            key++;
+        }
+        else {
+            *buffer++ = '%';
+            *buffer++ = hexG[*key / 16];
+            *buffer++ = hexG[*key % 16];
+            key++;
+        }
+    }
+
+    *buffer = 0;
+
+    return S3StatusOK;
+}
+
+
+static S3Status compose_standard_headers(RequestParams *params)
+{
+
+#define do_header(fmt, sourceField, destField, badError, tooLongError)  \
+    do {                                                                \
+        if (params->requestHeaders &&                                   \
+            params->requestHeaders-> sourceField &&                     \
+            params->requestHeaders-> sourceField[0]) {                  \
+            /* Skip whitespace at beginning of val */                   \
+            const char *val = params->requestHeaders-> sourceField;     \
+            while (*val && isblank(*val)) {                             \
+                val++;                                                  \
+            }                                                           \
+            if (!*val) {                                                \
+                return badError;                                        \
+            }                                                           \
+            /* Compose header, make sure it all fit */                  \
+            int len = snprintf(params-> destField,                      \
+                               sizeof(params-> destField), fmt, val);   \
+            if (len >= sizeof(params-> destField)) {                    \
+                return tooLongError;                                    \
+            }                                                           \
+            /* Now remove the whitespace at the end */                  \
+            while (isblank(params-> destField[len])) {                  \
+                len--;                                                  \
+            }                                                           \
+            params-> destField[len] = 0;                                \
+        }                                                               \
+        else {                                                          \
+            params-> destField[0] = 0;                                  \
+        }                                                               \
+    } while (0)
+
+
+    // 1. ContentType
+    do_header("Content-Type: %s", contentType, contentTypeHeader,
+              S3StatusBadContentType, S3StatusContentTypeTooLong);
+
+    // 2. MD5
+    do_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
+              S3StatusMD5TooLong);
+
+    // 3. Content-Disposition
+    do_header("Content-Disposition: attachment; filename=\"%s\"",
+              contentDispositionFilename, contentDispositionHeader,
+              S3StatusBadContentDispositionFilename,
+              S3StatusContentDispositionFilenameTooLong);
+
+    // 4. ContentEncoding
+    do_header("Content-Encoding: %s", contentEncoding, contentEncodingHeader,
+              S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
+
+    // 5. Expires
+    if (params->requestHeaders && params->requestHeaders->expires) {
+        char date[100];
+        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT",
+                 gmtime(params->requestHeaders->expires));
+        snprintf(params->expiresHeader, sizeof(params->expiresHeader),
+                 "Expires: %s", date);
+    }
+    else {
+        params->expiresHeader[0] = 0;
+    }
+
+    return S3StatusOK;
+}
+
+
 // Simple comparison function for comparing two HTTP header names that are
 // embedded within an HTTP header line, returning true if header1 comes
 // before header2 alphabetically, false if not
@@ -352,47 +461,6 @@ static void canonicalize_amz_headers(RequestParams *params)
 }
 
 
-// URL encodes the params->key value into params->urlEncodedKey
-static S3Status encode_key(RequestParams *params)
-{
-    const char *key = params->key;
-    char *buffer = params->urlEncodedKey;
-    int len = 0;
-
-    if (key) while (*key) {
-        if (++len > S3_MAX_KEY_SIZE) {
-            return S3StatusKeyTooLong;
-        }
-        const char *urlsafe = urlSafeG;
-        int isurlsafe = 0;
-        while (*urlsafe) {
-            if (*urlsafe == *key) {
-                isurlsafe = 1;
-                break;
-            }
-            urlsafe++;
-        }
-        if (isurlsafe || isalnum(*key)) {
-            *buffer++ = *key++;
-        }
-        else if (*key == ' ') {
-            *buffer++ = '+';
-            key++;
-        }
-        else {
-            *buffer++ = '%';
-            *buffer++ = hexG[*key / 16];
-            *buffer++ = hexG[*key % 16];
-            key++;
-        }
-    }
-
-    *buffer = 0;
-
-    return S3StatusOK;
-}
-
-
 // Canonicalizes the resource into params->canonicalizedResource
 static void canonicalize_resource(RequestParams *params)
 {
@@ -419,74 +487,6 @@ static void canonicalize_resource(RequestParams *params)
     if (params->subResource && params->subResource[0]) {
         append(params->subResource);
     }
-}
-
-
-static S3Status compose_standard_headers(RequestParams *params)
-{
-
-#define do_header(fmt, sourceField, destField, badError, tooLongError)  \
-    do {                                                                \
-        if (params->requestHeaders &&                                   \
-            params->requestHeaders-> sourceField &&                     \
-            params->requestHeaders-> sourceField[0]) {                  \
-            /* Skip whitespace at beginning of val */                   \
-            const char *val = params->requestHeaders-> sourceField;     \
-            while (*val && isblank(*val)) {                             \
-                val++;                                                  \
-            }                                                           \
-            if (!*val) {                                                \
-                return badError;                                        \
-            }                                                           \
-            /* Compose header, make sure it all fit */                  \
-            int len = snprintf(params-> destField,                      \
-                               sizeof(params-> destField), fmt, val);   \
-            if (len >= sizeof(params-> destField)) {                    \
-                return tooLongError;                                    \
-            }                                                           \
-            /* Now remove the whitespace at the end */                  \
-            while (isblank(params-> destField[len])) {                  \
-                len--;                                                  \
-            }                                                           \
-            params-> destField[len] = 0;                                \
-        }                                                               \
-        else {                                                          \
-            params-> destField[0] = 0;                                  \
-        }                                                               \
-    } while (0)
-
-
-    // 1. ContentType
-    do_header("Content-Type: %s", contentType, contentTypeHeader,
-              S3StatusBadContentType, S3StatusContentTypeTooLong);
-
-    // 2. MD5
-    do_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
-              S3StatusMD5TooLong);
-
-    // 3. Content-Disposition
-    do_header("Content-Disposition: attachment; filename=\"%s\"",
-              contentDispositionFilename, contentDispositionHeader,
-              S3StatusBadContentDispositionFilename,
-              S3StatusContentDispositionFilenameTooLong);
-
-    // 4. ContentEncoding
-    do_header("Content-Encoding: %s", contentEncoding, contentEncodingHeader,
-              S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
-
-    // 5. Expires
-    if (params->requestHeaders && params->requestHeaders->expires) {
-        char date[100];
-        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT",
-                 gmtime(params->requestHeaders->expires));
-        snprintf(params->expiresHeader, sizeof(params->expiresHeader),
-                 "Expires: %s", date);
-    }
-    else {
-        params->expiresHeader[0] = 0;
-    }
-
-    return S3StatusOK;
 }
 
 
@@ -632,13 +632,23 @@ static S3Status setup_curl(CURL *handle, Request *request,
     // Debugging only
     // curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
 
-    // Always set the request in all callback data
+    // Always set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
-    curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
-    curl_easy_setopt_safe(CURLOPT_READDATA, request);
-
-    // Always set the headers callback
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
+    
+    // Set write callback and data if one is provided
+    if (params->curlWriteCallback) {
+        curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, 
+                         params->curlWriteCallback);
+        curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
+    }
+
+    // Set read callback and data if one is provided
+    if (params->curlReadCallback) {
+        curl_easy_setopt(request->curl, CURLOPT_READFUNCTION,
+                         params->curlReadCallback);
+        curl_easy_setopt_safe(CURLOPT_READDATA, request);
+    }
 
     // Curl docs suggest that this is necessary for multithreaded code.
     // However, it also points out that DNS timeouts will not be honored
@@ -805,13 +815,14 @@ static S3Status request_initialize(Request *request,
     request->completeCallbackMade = 0;
 
     request->receivedS3Error = 0;
+    
+    memcpy(&(request->u), &(params->u), sizeof(request->u));
 
     return S3StatusOK;
 }
 
 
-static S3Status request_get_initialized(const RequestParams *params, 
-                                        Request **requestReturn)
+static S3Status request_get(const RequestParams *params, Request **reqReturn)
 {
     Request *request = 0;
     
@@ -844,9 +855,29 @@ static S3Status request_get_initialized(const RequestParams *params,
         return status;
     }
 
-    *requestReturn = request;
+    *reqReturn = request;
     
     return S3StatusOK;
+}
+
+
+static void request_release(Request *request)
+{
+    mutex_lock(poolMutexG);
+
+    // If the pool is full, destroy this one
+    if (poolCountG == POOL_SIZE) {
+        mutex_unlock(poolMutexG);
+        request_destroy(request);
+    }
+    // Else put this one at the front of the pool; we do this because we want
+    // the most-recently-used curl handle to be re-used on the next request,
+    // to maximize our chances of re-using a TCP connection before its HTTP
+    // keep-alive times out
+    else {
+        poolG[poolCountG++] = request;
+        mutex_unlock(poolMutexG);
+    }
 }
 
 
@@ -892,8 +923,9 @@ void request_api_deinitialize()
 }
 
 
-S3Status request_get(RequestParams *params, Request **requestReturn)
+S3Status request_perform(RequestParams *params, S3RequestContext *context)
 {
+    Request *request;
     S3Status status;
 
     // Validate the bucket name
@@ -908,21 +940,21 @@ S3Status request_get(RequestParams *params, Request **requestReturn)
         return status;
     }
 
-    // Compute the canonicalized amz headers
-    canonicalize_amz_headers(params);
-
     // URL encode the key
     if ((status = encode_key(params)) != S3StatusOK) {
         return status;
     }
 
-    // Compute the canonicalized resource
-    canonicalize_resource(params);
-
     // Compose standard headers
     if ((status = compose_standard_headers(params)) != S3StatusOK) {
         return status;
     }
+
+    // Compute the canonicalized amz headers
+    canonicalize_amz_headers(params);
+
+    // Compute the canonicalized resource
+    canonicalize_resource(params);
 
     // Authorization
     if ((status = compose_auth_header(params)) != S3StatusOK) {
@@ -930,60 +962,34 @@ S3Status request_get(RequestParams *params, Request **requestReturn)
     }
     
     // Get an initialized Request structure now
-    return request_get_initialized(params, requestReturn);
-}
-
-
-void request_release(Request *request)
-{
-    mutex_lock(poolMutexG);
-
-    // If the pool is full, destroy this one
-    if (poolCountG == POOL_SIZE) {
-        mutex_unlock(poolMutexG);
-        request_destroy(request);
+    if ((status = request_get(params, &request)) != S3StatusOK) {
+        return status;
     }
-    // Else put this one at the front of the pool; we do this because we want
-    // the most-recently-used curl handle to be re-used on the next request,
-    // to maximize our chances of re-using a TCP connection before its HTTP
-    // keep-alive times out
+
+    if (context) {
+        switch (curl_multi_add_handle(context->curlm, request->curl)) {
+        case CURLM_OK:
+            return S3StatusOK;
+            // xxx todo - more specific errors
+        default:
+            request_release(request);
+            return S3StatusFailure;
+        }
+    }
     else {
-        poolG[poolCountG++] = request;
-        mutex_unlock(poolMutexG);
-    }
-}
-
-
-S3Status request_multi_add(Request *request, S3RequestContext *requestContext)
-{
-    switch (curl_multi_add_handle(requestContext->curlm, request->curl)) {
-    case CURLM_OK:
+        switch (curl_easy_perform(request->curl)) {
+        case CURLE_OK:
+            status = S3StatusOK;
+            // xxx todo - more specific errors
+            break;
+        default:
+            status = S3StatusFailure;
+        }
+        // Finish the request, ensuring that all callbacks have been made, and
+        // also releases the request
+        request_finish(request, status);
         return S3StatusOK;
-        // xxx todo - more specific errors
-    default:
-        request_release(request);
-        return S3StatusFailure;
     }
-}
-
-
-void request_easy_perform(Request *request)
-{
-    CURLcode code = curl_easy_perform(request->curl);
-
-    S3Status status;
-    switch (code) {
-    case CURLE_OK:
-        status = S3StatusOK;
-        // xxx todo - more specific errors
-        break;
-    default:
-        status = S3StatusFailure;
-    }
-
-    // Finish the request, ensuring that all callbacks have been made, and
-    // also releases the request
-    request_finish(request, status);
 }
 
 
