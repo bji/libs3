@@ -121,6 +121,9 @@ typedef struct RequestParams
     // The read callback to be called by curl, if needed; req will be passed
     // in as the Request structure for this request
     size_t (*curlReadCallback)(void *data, size_t s, size_t n, void *req);
+    // This is the number of bytes that will be provided by the read callback,
+    // if the read callback is set
+    int64_t readSize;
     
 
     // The following are computed ---------------------------------------------
@@ -137,6 +140,8 @@ typedef struct RequestParams
     char urlEncodedKey[MAX_URLENCODED_KEY_SIZE + 1];
     // Canonicalized resource
     char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE + 1];
+    // Cache-Control header (or empty)
+    char cacheControlHeader[128];
     // Content-Type header (or empty)
     char contentTypeHeader[128];
     // Content-MD5 header (or empty)
@@ -194,9 +199,6 @@ typedef struct Request
     // The callback to make when the response has been completely handled
     S3ResponseCompleteCallback *completeCallback;
 
-    // This is set to nonzero after the complete callback has been made
-    int completeCallbackMade;
-    
     // This will be 0 if S3 didn't send any XML error
     int receivedS3Error;
 

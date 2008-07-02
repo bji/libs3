@@ -74,9 +74,12 @@ S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
         { handler->listServiceCallback },   // special callbacks
         callbackData,                       // callbackData
         &write_callback,                    // curlWriteCallback
-        0                                   // curlReadCallback
+        0,                                  // curlReadCallback
+        0                                   // readSize
     };
 
     // Perform the request
     return request_perform(&params, requestContext);
 }
+
+

@@ -101,6 +101,8 @@ typedef enum
     S3StatusContentTypeTooLong                              ,
     S3StatusBadMD5                                          ,
     S3StatusMD5TooLong                                      ,
+    S3StatusBadCacheControl                                 ,
+    S3StatusCacheControlTooLong                             ,
     S3StatusBadContentDispositionFilename                   ,
     S3StatusContentDispositionFilenameTooLong               ,
     S3StatusBadContentEncoding                              ,
@@ -238,9 +240,9 @@ typedef enum
  **/
 typedef enum
 {
-    S3CannedAclNone                     = 0, /* private */
-    S3CannedAclRead                     = 1, /* public-read */
-    S3CannedAclReadWrite                = 2, /* public-read-write */
+    S3CannedAclPrivate                  = 0, /* private */
+    S3CannedAclPublicRead               = 1, /* public-read */
+    S3CannedAclPublicReadWrite          = 2, /* public-read-write */
     S3CannedAclAuthenticatedRead        = 3  /* authenticated-read */
 } S3CannedAcl;
 
@@ -477,6 +479,11 @@ typedef struct S3RequestHeaders
      * but not required.
      **/
     const char *md5;
+    /**
+     * If present, this gives a Cache-Control header string to be supplied to
+     * HTTP clients which download this
+     **/
+    const char *cacheControl;
     /**
      * If present, this gives the filename to save the downloaded file to,
      * whenever the object is downloaded via a web browser.  This is only
@@ -889,7 +896,7 @@ S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
 S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
                         const char *secretAccessKey, const char *bucketName, 
                         int locationConstraintReturnSize,
-                        const char *locationConstraintReturn,
+                        char *locationConstraintReturn,
                         S3RequestContext *requestContext,
                         S3ResponseHandler *handler, void *callbackData);
 
@@ -912,6 +919,7 @@ S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
 S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                           const char *secretAccessKey,
                           const char *bucketName, 
+                          S3CannedAcl cannedAcl,
                           const char *locationConstraint,
                           S3RequestContext *requestContext,
                           S3ResponseHandler *handler, void *callbackData);
@@ -1072,4 +1080,6 @@ S3Status S3_clear_acl(S3BucketContext *bucketContext, const char *key,
  * xxx todo
  * functions for generating form stuff for posting to s3
  **/
+
+
 #endif /* LIBS3_H */

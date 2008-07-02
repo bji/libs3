@@ -193,13 +193,13 @@ static S3Status compose_amz_headers(RequestParams *params)
         // Add the x-amz-acl header, if necessary
         const char *cannedAclString;
         switch (params->requestHeaders->cannedAcl) {
-        case S3CannedAclNone:
+        case S3CannedAclPrivate:
             cannedAclString = 0;
             break;
-        case S3CannedAclRead:
+        case S3CannedAclPublicRead:
             cannedAclString = "public-read";
             break;
-        case S3CannedAclReadWrite:
+        case S3CannedAclPublicReadWrite:
             cannedAclString = "public-read-write";
             break;
         default: // S3CannedAclAuthenticatedRead
@@ -310,25 +310,29 @@ static S3Status compose_standard_headers(RequestParams *params)
     } while (0)
 
 
-    // 1. ContentType
+    // 1. Cache-Control
+    do_header("Cache-Control: %s", cacheControl, cacheControlHeader,
+              S3StatusBadCacheControl, S3StatusCacheControlTooLong);
+
+    // 2. ContentType
     do_header("Content-Type: %s", contentType, contentTypeHeader,
               S3StatusBadContentType, S3StatusContentTypeTooLong);
 
-    // 2. MD5
+    // 3. MD5
     do_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
               S3StatusMD5TooLong);
 
-    // 3. Content-Disposition
+    // 4. Content-Disposition
     do_header("Content-Disposition: attachment; filename=\"%s\"",
               contentDispositionFilename, contentDispositionHeader,
               S3StatusBadContentDispositionFilename,
               S3StatusContentDispositionFilenameTooLong);
 
-    // 4. ContentEncoding
+    // 5. ContentEncoding
     do_header("Content-Encoding: %s", contentEncoding, contentEncodingHeader,
               S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
 
-    // 5. Expires
+    // 6. Expires
     if (params->requestHeaders && params->requestHeaders->expires) {
         char date[100];
         strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT",
@@ -480,8 +484,7 @@ static void canonicalize_resource(RequestParams *params)
         append(params->urlEncodedKey);
     }
     else {
-        buffer[len++] = '/';
-        buffer[len++] = 0;
+        append("/");
     }
 
     if (params->subResource && params->subResource[0]) {
@@ -636,18 +639,19 @@ static S3Status setup_curl(CURL *handle, Request *request,
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
     
-    // Set write callback and data if one is provided
+    // Set write callback and data if there is a write callback
     if (params->curlWriteCallback) {
         curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, 
                          params->curlWriteCallback);
         curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
     }
 
-    // Set read callback and data if one is provided
+    // Set read callback, data, and readSize if there is a read callback
     if (params->curlReadCallback) {
         curl_easy_setopt(request->curl, CURLOPT_READFUNCTION,
                          params->curlReadCallback);
         curl_easy_setopt_safe(CURLOPT_READDATA, request);
+        curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->readSize);
     }
 
     // Curl docs suggest that this is necessary for multithreaded code.
@@ -697,6 +701,7 @@ static S3Status setup_curl(CURL *handle, Request *request,
                                           params-> fieldName);          \
     }
 
+    append_standard_header(cacheControlHeader);
     append_standard_header(contentTypeHeader);
     append_standard_header(md5Header);
     append_standard_header(contentDispositionHeader);
@@ -811,8 +816,6 @@ static S3Status request_initialize(Request *request,
     request->headersCallbackMade = 0;
 
     request->completeCallback = handler->completeCallback;
-
-    request->completeCallbackMade = 0;
 
     request->receivedS3Error = 0;
     
@@ -940,13 +943,13 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
         return status;
     }
 
-    // URL encode the key
-    if ((status = encode_key(params)) != S3StatusOK) {
+    // Compose standard headers
+    if ((status = compose_standard_headers(params)) != S3StatusOK) {
         return status;
     }
 
-    // Compose standard headers
-    if ((status = compose_standard_headers(params)) != S3StatusOK) {
+    // URL encode the key
+    if ((status = encode_key(params)) != S3StatusOK) {
         return status;
     }
 
@@ -956,7 +959,7 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
     // Compute the canonicalized resource
     canonicalize_resource(params);
 
-    // Authorization
+    // Compose Authorization header
     if ((status = compose_auth_header(params)) != S3StatusOK) {
         return status;
     }
@@ -966,24 +969,27 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
         return status;
     }
 
+    // If a RequestContext was provided, add the request to the curl multi
     if (context) {
         switch (curl_multi_add_handle(context->curlm, request->curl)) {
         case CURLM_OK:
             return S3StatusOK;
-            // xxx todo - more specific errors
         default:
             request_release(request);
+            // xxx todo - more specific errors
             return S3StatusFailure;
         }
     }
+    // Else, perform the request immediately
     else {
         switch (curl_easy_perform(request->curl)) {
         case CURLE_OK:
             status = S3StatusOK;
-            // xxx todo - more specific errors
             break;
         default:
+            // xxx todo - more specific errors
             status = S3StatusFailure;
+            break;
         }
         // Finish the request, ensuring that all callbacks have been made, and
         // also releases the request
@@ -995,23 +1001,16 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
 
 void request_finish(Request *request, S3Status status)
 {
-    if (!request->headersCallbackMade) {
-        (*(request->headersCallback))(&(request->responseHeaders),
-                                      request->callbackData);
-    }
-
-    if (!request->completeCallbackMade) {
-        // Figure out the HTTP response code
-        int httpResponseCode = 0;
-
-        (void) curl_easy_getinfo
-            (request->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
-
-        (*(request->completeCallback))
+    // Figure out the HTTP response code
+    int httpResponseCode = 0;
+    
+    (void) curl_easy_getinfo
+        (request->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
+    
+    (*(request->completeCallback))
             (status, httpResponseCode, 
              request->receivedS3Error ? &(request->s3Error) : 0,
              request->callbackData);
-    }
 
     request_release(request);
 }
