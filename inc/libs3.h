@@ -272,7 +272,8 @@ typedef struct S3MetaHeader
     // This is the part after x-amz-meta-
     const char *name;
 
-    // This is everything after the colon, not including \r\n
+    // This is the value, not including any line terminators or leading or
+    // trailing whitespace.
     const char *value;
 } S3MetaHeader;
 
@@ -533,6 +534,7 @@ typedef struct S3RequestHeaders
      * x-amz-meta-${METANAME}:${VALUE}, where the ${METANAME} and ${VALUE} are
      * entirely up to the application.
      **/
+    // xxx todo - convert to an array of S3MetaHeader structures
     const char **metaHeaders;
 } S3RequestHeaders;
 

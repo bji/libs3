@@ -142,7 +142,7 @@ S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         { 0 },                              // special callbacks
         callbackData,                       // callbackData
         0,                                  // curlWriteCallback
-        create_bucket_read_callback,        // curlReadCallback
+        &create_bucket_read_callback,       // curlReadCallback
         0                                   // readSize
     };
 

@@ -176,6 +176,17 @@ typedef struct Request
     // The callback data to pass to all of the callbacks
     void *callbackData;
 
+    // responseHeaders.{requestId,requestId2,contentType,server,eTag} get
+    // copied into here.  We allow 128 bytes for each header, plus \0 term.
+    char responseHeaderStrings[5 * 129];
+
+    // The length thus far of responseHeaderStrings
+    int responseHeaderStringsLen;
+
+    // responseHeaders.lastModified will be set to this if there is a
+    // LastModified header
+    struct timeval lastModified;
+
     // responseHeaders.metaHeaders strings get copied into here
     char responseMetaHeaderStrings[COMPACTED_META_HEADER_BUFFER_SIZE];
 
@@ -195,6 +206,14 @@ typedef struct Request
 
     // This is set to nonzero after the haders callback has been made
     int headersCallbackMade;
+
+    // This is the write callback that the user of the request wants to have
+    // called back when data is available.
+    size_t (*curlWriteCallback)(void *data, size_t s, size_t n, void *req);
+
+    // This is the read callback that the user of the request wants to have
+    // called back when data is to be written.
+    size_t (*curlReadCallback)(void *data, size_t s, size_t n, void *req);
 
     // The callback to make when the response has been completely handled
     S3ResponseCompleteCallback *completeCallback;

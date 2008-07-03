@@ -35,7 +35,7 @@
 #define USER_AGENT_SIZE 256
 #define POOL_SIZE 32
 
-//
+
 static char userAgentG[USER_AGENT_SIZE];
 
 static struct S3Mutex *poolMutexG;
@@ -52,6 +52,7 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     size_t len = size * nmemb;
     char *header = (char *) ptr;
+    char *end = &(header[len]);
     Request *request = (Request *) data;
     S3ResponseHeaders *responseHeaders = &(request->responseHeaders);
 
@@ -62,41 +63,187 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
         return len;
     }
 
-    // The header must end in \r\n, so we can set the \r to 0 to terminate it
-    header[len - 2] = 0;
+    // If we've already filled up the response headers, ignore this data.
+    // This sucks, but it shouldn't happen - S3 should not be sending back
+    // really long headers.
+    if (request->responseHeaderStringsLen == 
+        (sizeof(request->responseHeaderStrings) - 1)) {
+        return len;
+    }        
+
+    // It should not be possible to have a header line less than 3 long
+    if (len < 3) {
+        return len;
+    }
+
+    // Skip whitespace at beginning of header; there never should be any,
+    // but just to be safe
+    while (isblank(*header)) {
+        header++;
+    }
+
+    // The header must end in \r\n, so skip back over it, and also over any
+    // trailing whitespace
+    end -= 3;
+    while ((end > header) && isblank(*end)) {
+        end--;
+    }
+    if (!isblank(*end)) {
+        end++;
+    }
+
+    if (end == header) {
+        // totally bogus
+        return len;
+    }
+
+    *end = 0;
     
     // Find the colon to split the header up
-    char *colon = header;
-    while (*colon && (*colon != ':')) {
-        colon++;
+    char *c = header;
+    while (*c && (*c != ':')) {
+        c++;
     }
     
-    int namelen = colon - header;
+    int namelen = c - header;
 
-    if (!strncmp(header, "RequestId", namelen)) {
-        (void) responseHeaders;
+    // Now walk c past the colon
+    c++;
+    // Now skip whitespace to the beginning of the value
+    while (isblank(*c)) {
+        c++;
     }
-    else if (!strncmp(header, "RequestId2", namelen)) {
+
+    // xxx todo come up with a single set of macros for allocating strings
+    // from a char buffer, since this is being done in multiple places
+#define set_value(field)                                                \
+    do {                                                                \
+        responseHeaders-> field =                                       \
+            &(request->responseHeaderStrings                            \
+              [request->responseHeaderStringsLen]);                     \
+        while (*c && (request->responseHeaderStringsLen <               \
+                      (sizeof(request->responseHeaderStrings) - 1))) {  \
+            request->responseHeaderStrings                              \
+                [request->responseHeaderStringsLen++] = *c++;           \
+        }                                                               \
+        request->responseHeaderStrings                                  \
+            [request->responseHeaderStringsLen++] = 0;                  \
+    } while (0)
+
+    if (!strncmp(header, "x-amz-request-id", namelen)) {
+        set_value(requestId);
     }
-    else if (!strncmp(header, "ContentType", namelen)) {
+    else if (!strncmp(header, "x-amz-id-2", namelen)) {
+        set_value(requestId2);
     }
-    else if (!strncmp(header, "ContentLength", namelen)) {
+    else if (!strncmp(header, "Content-Type", namelen)) {
+        set_value(contentType);
+    }
+    else if (!strncmp(header, "Content-Length", namelen)) {
+        request->responseHeaders.contentLength = 0;
+        while (*c) {
+            request->responseHeaders.contentLength *= 10;
+            request->responseHeaders.contentLength += (*c++ - '0');
+        }
     }
     else if (!strncmp(header, "Server", namelen)) {
+        set_value(server);
     }
     else if (!strncmp(header, "ETag", namelen)) {
+        set_value(eTag);
     }
-    else if (!strncmp(header, "LastModified", namelen)) {
+    else if (!strncmp(header, "Last-Modified", namelen)) {
+        // read the time into request->lastModified
+        // xxx todo
+        request->responseHeaders.lastModified = &(request->lastModified);
     }
-    else if (!strncmp(header, "x-amz-meta-", 
-                      (namelen > strlen("x-amz-meta-") ? 
-                       strlen("x-amz-meta-") : namelen))) {
-    }
-    // Else if it is an empty header, then it's the last header
-    else if (!header[0]) {
+    else if (!strncmp(header, "x-amz-meta-", sizeof("x-amz-meta-") - 1)) {
+        // Find the name
+        char *name = &(header[sizeof("x-amz-meta-")]);
+        int metaNameLen = (namelen - (sizeof("x-amz-meta-") - 1));
+        int valueLen = (end - c) + 1;
+        int available = ((sizeof(request->responseMetaHeaderStrings) - 1) -
+                         request->responseMetaHeaderStringsLen);
+        if (((metaNameLen + 1) + (valueLen + 1)) > available) {
+            // Can't fit it, skip it.
+            return len;
+        }
+        // Copy name in
+        S3MetaHeader *metaHeader = 
+            &(request->responseMetaHeaders
+              [request->responseHeaders.metaHeadersCount++]);
+        metaHeader->name = &(request->responseMetaHeaderStrings
+                             [request->responseMetaHeaderStringsLen]);
+        while (metaNameLen--) {
+            request->responseMetaHeaderStrings
+                [request->responseMetaHeaderStringsLen++] = *name++;
+        }
+        request->responseMetaHeaderStrings
+            [request->responseMetaHeaderStringsLen++] = 0;
+        metaHeader->value = &(request->responseMetaHeaderStrings
+                              [request->responseMetaHeaderStringsLen]);
+        while (valueLen--) {
+            request->responseMetaHeaderStrings
+                [request->responseMetaHeaderStringsLen++] = *c++;
+        }
     }
 
     return len;
+}
+
+
+static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
+{
+    Request *request = (Request *) data;
+
+    if (!request->headersCallbackMade) {
+        request->headersCallbackMade = 1;
+        if ((*(request->headersCallback))(&(request->responseHeaders),
+                                          request->callbackData) !=
+            S3StatusOK) {
+            // Return 0 to signal error
+            return 0;
+        }
+    }
+
+    if (request->curlWriteCallback) {
+        return (*(request->curlWriteCallback))(ptr, size, nmemb, data);
+    }
+    else {
+        // For requests that don't expect to get any data, they still might
+        // get error data, and we handle that here
+        // xxx todo - also, maybe do this automatically for every request,
+        // so that errors don't get handled in more than one place?  This
+        // would be accomplished by parsing enough data here to detect if it
+        // is an error or not.  If it is an error, it would then be completely
+        // parsed here and the write callack would never be called, else it
+        // would be passed on to the write callback (this will require some
+        // buffering of data too).
+        return (size * nmemb);
+    }
+}
+
+
+static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
+{
+    Request *request = (Request *) data;
+
+    if (!request->headersCallbackMade) {
+        request->headersCallbackMade = 1;
+        if ((*(request->headersCallback))(&(request->responseHeaders),
+                                          request->callbackData) !=
+            S3StatusOK) {
+            // Return 0 to signal error
+            return 0;
+        }
+    }
+
+    if (request->curlReadCallback) {
+        return (*(request->curlReadCallback))(ptr, size, nmemb, data);
+    }
+    else {
+        return 0;
+    }
 }
 
 
@@ -639,20 +786,16 @@ static S3Status setup_curl(CURL *handle, Request *request,
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
     
-    // Set write callback and data if there is a write callback
-    if (params->curlWriteCallback) {
-        curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, 
-                         params->curlWriteCallback);
-        curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
-    }
+    // Set write callback and data
+    request->curlWriteCallback = params->curlWriteCallback;
+    curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, &curl_write_func);
+    curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
 
-    // Set read callback, data, and readSize if there is a read callback
-    if (params->curlReadCallback) {
-        curl_easy_setopt(request->curl, CURLOPT_READFUNCTION,
-                         params->curlReadCallback);
-        curl_easy_setopt_safe(CURLOPT_READDATA, request);
-        curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->readSize);
-    }
+    // Set read callback, data, and readSize
+    request->curlReadCallback = params->curlReadCallback;
+    curl_easy_setopt(request->curl, CURLOPT_READFUNCTION, &curl_read_func);
+    curl_easy_setopt_safe(CURLOPT_READDATA, request);
+    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->readSize);
 
     // Curl docs suggest that this is necessary for multithreaded code.
     // However, it also points out that DNS timeouts will not be honored
@@ -791,6 +934,8 @@ static S3Status request_initialize(Request *request,
 
     request->callbackData = params->callbackData;
 
+    request->responseHeaderStringsLen = 0;
+
     request->responseMetaHeaderStringsLen = 0;
 
     request->headersCallback = handler->headersCallback;
@@ -801,7 +946,7 @@ static S3Status request_initialize(Request *request,
 
     request->responseHeaders.contentType = 0;
 
-    request->responseHeaders.contentLength = 0;
+    request->responseHeaders.contentLength = -1; // -1 means not supplied
 
     request->responseHeaders.server = 0;
 
@@ -1001,6 +1146,12 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
 
 void request_finish(Request *request, S3Status status)
 {
+    if (!request->headersCallbackMade) {
+        request->headersCallbackMade = 1;
+        (*(request->headersCallback))(&(request->responseHeaders),
+                                      request->callbackData);
+    }
+    
     // Figure out the HTTP response code
     int httpResponseCode = 0;
     

@@ -35,20 +35,28 @@
 #include "libs3.h"
 
 
-// Command-line options, saved as globals -------------------------------------
+// Command-line options, saved as globals ------------------------------------
 
 static int showResponseHeadersG = 0;
+static S3Protocol protocolG = S3ProtocolHTTPS;
+static int usePathStyleUriG = 0;
 // request headers stuff
 // acl stuff
 
 
-// Request results, saved as globals ------------------------------------------
+// Environment variables, saved as globals ----------------------------------
+
+static const char *accessKeyIdG = 0;
+static const char *secretAccessKeyG = 0;
+
+
+// Request results, saved as globals -----------------------------------------
 
 static int statusG = 0, httpResponseCodeG = 0;
 static S3Error *errorG = 0;
 
 
-// Option prefixes ------------------------------------------------------------
+// Option prefixes -----------------------------------------------------------
 
 #define LOCATION_CONSTRAINT_PREFIX "locationConstraint="
 #define LOCATION_CONSTRAINT_PREFIX_LEN (sizeof(LOCATION_CONSTRAINT_PREFIX) - 1)
@@ -56,7 +64,7 @@ static S3Error *errorG = 0;
 #define CANNED_ACL_PREFIX_LEN (sizeof(CANNED_ACL_PREFIX) - 1)
 
 
-// libs3 mutex stuff ----------------------------------------------------------
+// libs3 mutex stuff ---------------------------------------------------------
 
 struct S3Mutex
 {
@@ -99,42 +107,20 @@ static void mutexDestroyCallback(struct S3Mutex *mutex)
 }
 
 
-// response header callback ---------------------------------------------------
+// util ----------------------------------------------------------------------
 
-static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
-                                        void *callbackData)
+static void S3_init()
 {
-    if (showResponseHeadersG) {
+    S3Status status;
+    if ((status = S3_initialize("s3", &threadSelfCallback, 
+                                &mutexCreateCallback,
+                                &mutexLockCallback, &mutexUnlockCallback,
+                                &mutexDestroyCallback)) != S3StatusOK) {
+        fprintf(stderr, "Failed to initialize libs3: %d\n", status);
+        exit(-1);
     }
-
-    return S3StatusOK;
 }
 
-
-// response complete callback -------------------------------------------------
-
-static void responseCompleteCallback(S3Status status, int httpResponseCode,
-                                     S3Error *error, void *callbackData)
-{
-    statusG = status;
-    httpResponseCodeG = httpResponseCode;
-    errorG = error;
-}
-
-
-// list service callback ------------------------------------------------------
-
-static S3Status listServiceCallback(const char *ownerId, 
-                                    const char *ownerDisplayName,
-                                    const char *bucketName,
-                                    const struct timeval *creationDate,
-                                    void *callbackData)
-{
-    return S3StatusOK;
-}
-
-
-// usage exit -----------------------------------------------------------------
 
 static void usageExit()
 {
@@ -186,13 +172,285 @@ static struct option longOptionsG[] =
 };
 
 
-// main -----------------------------------------------------------------------
+// response header callback --------------------------------------------------
+
+// This callback does the same thing for every request type: prints out the
+// headers if the user has requested them to be so
+static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
+                                        void *callbackData)
+{
+    if (!showResponseHeadersG) {
+        return S3StatusOK;
+    }
+
+#define print_nonnull(name, field)                              \
+    do {                                                        \
+        if (headers-> field) {                                  \
+            printf("%s: %s\n", name, headers-> field);          \
+        }                                                       \
+    } while (0)
+    
+    print_nonnull("Request-Id", requestId);
+    print_nonnull("Request-Id-2", requestId2);
+    if (headers->contentLength > 0) {
+        printf("Content-Length: %lld\n", headers->contentLength);
+    }
+    print_nonnull("Server", server);
+    print_nonnull("ETag", eTag);
+    if (headers->lastModified) {
+        char timebuf[1024];
+        // localtime is not thread-safe but we don't care here
+        strftime(timebuf, sizeof(timebuf), "%x %X", 
+                 localtime(&(headers->lastModified->tv_sec)));
+        printf("Last-Modified: %s\n", timebuf);
+    }
+    int i;
+    for (i = 0; i < headers->metaHeadersCount; i++) {
+        printf("x-amz-meta-%s: %s\n", headers->metaHeaders[i].name,
+               headers->metaHeaders[i].value);
+    }
+
+    return S3StatusOK;
+}
+
+
+// response complete callback ------------------------------------------------
+
+// This callback does the same thing for every request type: saves the status
+// and error stuff in global variables
+static void responseCompleteCallback(S3Status status, int httpResponseCode,
+                                     S3Error *error, void *callbackData)
+{
+    statusG = status;
+    httpResponseCodeG = httpResponseCode;
+    errorG = error;
+}
+
+
+// list service --------------------------------------------------------------
+
+static S3Status listServiceCallback(const char *ownerId, 
+                                    const char *ownerDisplayName,
+                                    const char *bucketName,
+                                    const struct timeval *creationDate,
+                                    void *callbackData)
+{
+    return S3StatusOK;
+}
+
+
+static void list_service()
+{
+    S3_init();
+
+    S3ListServiceHandler listServiceHandler =
+    {
+        { &responseHeadersCallback, &responseCompleteCallback },
+        &listServiceCallback
+    };
+
+    S3Status status = S3_list_service(protocolG, accessKeyIdG,
+                                      secretAccessKeyG, 0, 
+                                      &listServiceHandler, 0);
+
+    if (status != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
+    }
+    else if (statusG != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to complete request: %d\n",
+                statusG);
+    }
+    else if (httpResponseCodeG != 200) {
+        fprintf(stderr, "ERROR: S3 returned error: %d\n", 
+                httpResponseCodeG);
+    }
+
+    S3_deinitialize();
+}
+
+
+// test bucket ---------------------------------------------------------------
+
+static void test_bucket(int argc, char **argv, int optind)
+{
+    // test bucket
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        usageExit();
+    }
+
+    const char *bucketName = argv[optind++];
+
+    if (optind != argc) {
+        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        usageExit();
+    }
+
+    S3_init();
+
+    S3ResponseHandler responseHandler =
+    {
+        &responseHeadersCallback, &responseCompleteCallback
+    };
+
+    char locationConstraint[64];
+    S3Status status = S3_test_bucket(protocolG, accessKeyIdG, secretAccessKeyG,
+                                     bucketName, sizeof(locationConstraint),
+                                     locationConstraint, 0, 
+                                     &responseHandler, 0);
+
+    if (status != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
+    }
+    else if (statusG != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to complete request: %d\n",
+                statusG);
+    }
+    else if (httpResponseCodeG == 200) {
+        printf("Bucket '%s' exists", bucketName);
+        // bucket exists
+        if (locationConstraint[0]) {
+            printf(" in location %s\n", locationConstraint);
+        }
+        else {
+            printf(".\n");
+        }
+    }
+    else if (httpResponseCodeG == 404) {
+        // bucket does not exist
+        printf("Bucket '%s' does not exist.\n", bucketName);
+    }
+    else if (httpResponseCodeG == 403) {
+        // bucket exists, but no access
+        printf("Bucket '%s' exists, but is not accessible.\n", bucketName);
+    }
+    else {
+        fprintf(stderr, "ERROR: S3 returned error: %d\n", 
+                httpResponseCodeG);
+    }
+
+    S3_deinitialize();
+}
+
+
+// create bucket -------------------------------------------------------------
+
+
+static void create_bucket(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        usageExit();
+    }
+
+    const char *bucketName = argv[optind++];
+
+    const char *locationConstraint = 0;
+    S3CannedAcl cannedAcl = S3CannedAclPrivate;
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, LOCATION_CONSTRAINT_PREFIX, 
+                     LOCATION_CONSTRAINT_PREFIX_LEN)) {
+            locationConstraint = &(param[LOCATION_CONSTRAINT_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, CANNED_ACL_PREFIX, 
+                          CANNED_ACL_PREFIX_LEN)) {
+            char *val = &(param[CANNED_ACL_PREFIX_LEN]);
+            if (!strcmp(val, "private")) {
+                cannedAcl = S3CannedAclPrivate;
+            }
+            else if (!strcmp(val, "public-read")) {
+                cannedAcl = S3CannedAclPublicRead;
+            }
+            else if (!strcmp(val, "public-read-write")) {
+                cannedAcl = S3CannedAclPublicReadWrite;
+            }
+            else if (!strcmp(val, "authenticated-read")) {
+                cannedAcl = S3CannedAclAuthenticatedRead;
+            }
+            else {
+                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                usageExit();
+            }
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit();
+        }
+    }
+
+    S3_init();
+
+    S3ResponseHandler responseHandler =
+    {
+        &responseHeadersCallback, &responseCompleteCallback
+    };
+
+    S3Status status = S3_create_bucket(protocolG, accessKeyIdG, 
+                                       secretAccessKeyG, bucketName, cannedAcl,
+                                       locationConstraint, 0, 
+                                       &responseHandler, 0);
+
+    if (status != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
+    }
+    else if (statusG != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to complete request: %d\n",
+                statusG);
+    }
+    else if (httpResponseCodeG != 200) {
+        fprintf(stderr, "ERROR: S3 returned error: %d\n", 
+                httpResponseCodeG);
+    }
+    
+    S3_deinitialize();
+}
+
+
+// delete bucket -------------------------------------------------------------
+
+
+static void delete_bucket(int argc, char **argv, int optind)
+{
+    // delete bucket
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        usageExit();
+    }
+
+    const char *bucketName = argv[optind++];
+
+    S3_init();
+
+    S3ResponseHandler responseHandler =
+    {
+        &responseHeadersCallback, &responseCompleteCallback
+    };
+
+    S3Status status = S3_delete_bucket(protocolG, accessKeyIdG, 
+                                       secretAccessKeyG, bucketName, 0,
+                                       &responseHandler, 0);
+
+    if (status != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
+    }
+    else if (statusG != S3StatusOK) {
+        fprintf(stderr, "ERROR: Failed to complete request: %d\n",
+                statusG);
+    }
+    else if (httpResponseCodeG != 204) {
+        fprintf(stderr, "ERROR: S3 returned error: %d\n", 
+                httpResponseCodeG);
+    }
+
+    S3_deinitialize();
+}
+
+
+// main ----------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    S3Protocol protocol = S3ProtocolHTTPS;
-    int usePathStyleUri = 0;
-
     // Parse args
     while (1) {
         int index = 0;
@@ -205,12 +463,12 @@ int main(int argc, char **argv)
 
         switch (c) {
         case 'p':
-            usePathStyleUri = 1;
+            usePathStyleUriG = 1;
             break;
         case 'u':
-            protocol = S3ProtocolHTTP;
+            protocolG = S3ProtocolHTTP;
             break;
-        case 'r':
+        case 's':
             showResponseHeadersG = 1;
             break;
         default:
@@ -220,13 +478,13 @@ int main(int argc, char **argv)
         }
     }
 
-    const char *accessKeyId = getenv("S3_ACCESS_KEY_ID");
-    if (!accessKeyId) {
+    accessKeyIdG = getenv("S3_ACCESS_KEY_ID");
+    if (!accessKeyIdG) {
         fprintf(stderr, "Missing environment variable: S3_ACCESS_KEY_ID\n");
         return -1;
     }
-    const char *secretAccessKey = getenv("S3_SECRET_ACCESS_KEY");
-    if (!secretAccessKey) {
+    secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
+    if (!secretAccessKeyG) {
         fprintf(stderr, "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
         return -1;
     }
@@ -239,180 +497,22 @@ int main(int argc, char **argv)
 
     const char *command = argv[optind++];
 
-    S3Status status;
-
-#define S3_initialize() \
-    if ((status = S3_initialize("s3", &threadSelfCallback, \
-                                &mutexCreateCallback, \
-                                &mutexLockCallback, \
-                                &mutexUnlockCallback, \
-                                &mutexDestroyCallback)) != S3StatusOK) { \
-        fprintf(stderr, "Failed to initialize libs3: %d\n", status); \
-        return -1; \
-    }
-
     if (!strcmp(command, "list")) {
         if (optind == argc) {
-            // list service
-            S3_initialize();
-            S3ListServiceHandler listServiceHandler =
-            {
-                { &responseHeadersCallback, &responseCompleteCallback },
-                &listServiceCallback
-            };
-            status = S3_list_service(protocol, accessKeyId, secretAccessKey,
-                                     0, &listServiceHandler, 0);
-            if (status != S3StatusOK) {
-                fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
-            }
-            else if (statusG != S3StatusOK) {
-                fprintf(stderr, "ERROR: Failed to complete request: %d\n",
-                        statusG);
-            }
-            else if (httpResponseCodeG != 200) {
-                fprintf(stderr, "ERROR: S3 returned error: %d\n", 
-                        httpResponseCodeG);
-                status = S3StatusFailure;
-            }
+            list_service();
         }
         else {
+            // list bucket
         }
     }
     else if (!strcmp(command, "test")) {
-        // test bucket
-        if (optind == argc) {
-            fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-            usageExit();
-        }
-        const char *bucketName = argv[optind++];
-        char locationConstraint[64];
-        S3_initialize();
-        S3ResponseHandler responseHandler =
-        {
-            &responseHeadersCallback, &responseCompleteCallback
-        };
-        status = S3_test_bucket(protocol, accessKeyId, secretAccessKey,
-                                bucketName, sizeof(locationConstraint),
-                                locationConstraint, 0, &responseHandler, 0);
-        if (status != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
-        }
-        else if (statusG != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to complete request: %d\n",
-                    statusG);
-        }
-        else if (httpResponseCodeG == 200) {
-            printf("Bucket '%s' exists", bucketName);
-            // bucket exists
-            if (locationConstraint[0]) {
-                printf(" in location %s\n", locationConstraint);
-            }
-            else {
-                printf(".\n");
-            }
-        }
-        else if (httpResponseCodeG == 404) {
-            // bucket does not exist
-            printf("Bucket '%s' does not exist.\n", bucketName);
-        }
-        else if (httpResponseCodeG == 403) {
-            // bucket exists, but no access
-            printf("Bucket '%s' exists, but is not accessible.\n", bucketName);
-        }
-        else {
-            fprintf(stderr, "ERROR: S3 returned error: %d\n", 
-                    httpResponseCodeG);
-            status = S3StatusFailure;
-        }
+        test_bucket(argc, argv, optind);
     }
     else if (!strcmp(command, "create")) {
-        if (optind == argc) {
-            fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-            usageExit();
-        }
-        const char *bucketName = argv[optind++];
-        const char *locationConstraint = 0;
-        S3CannedAcl cannedAcl = S3CannedAclPrivate;
-        while (optind < argc) {
-            char *param = argv[optind++];
-            if (!strncmp(param, LOCATION_CONSTRAINT_PREFIX, 
-                         LOCATION_CONSTRAINT_PREFIX_LEN)) {
-                locationConstraint = &(param[LOCATION_CONSTRAINT_PREFIX_LEN]);
-            }
-            else if (!strncmp(param, CANNED_ACL_PREFIX, 
-                              CANNED_ACL_PREFIX_LEN)) {
-                char *val = &(param[CANNED_ACL_PREFIX_LEN]);
-                if (!strcmp(val, "private")) {
-                    cannedAcl = S3CannedAclPrivate;
-                }
-                else if (!strcmp(val, "public-read")) {
-                    cannedAcl = S3CannedAclPublicRead;
-                }
-                else if (!strcmp(val, "public-read-write")) {
-                    cannedAcl = S3CannedAclPublicReadWrite;
-                }
-                else if (!strcmp(val, "authenticated-read")) {
-                    cannedAcl = S3CannedAclAuthenticatedRead;
-                }
-                else {
-                    fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
-                    usageExit();
-                }
-            }
-            else {
-                fprintf(stderr, "ERROR: Unknown param: %s\n", param);
-                usageExit();
-            }
-        }
-
-        S3_initialize();
-
-        S3ResponseHandler responseHandler =
-        {
-            &responseHeadersCallback, &responseCompleteCallback
-        };
-        status = S3_create_bucket(protocol, accessKeyId, secretAccessKey,
-                                  bucketName, cannedAcl, locationConstraint,
-                                  0, &responseHandler, 0);
-        if (status != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
-        }
-        else if (statusG != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to complete request: %d\n",
-                    statusG);
-        }
-        else if (httpResponseCodeG != 200) {
-            fprintf(stderr, "ERROR: S3 returned error: %d\n", 
-                    httpResponseCodeG);
-            status = S3StatusFailure;
-        }
+        create_bucket(argc, argv, optind);
     }
     else if (!strcmp(command, "delete")) {
-        // delete bucket
-        if (optind == argc) {
-            fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-            usageExit();
-        }
-        const char *bucketName = argv[optind++];
-        S3_initialize();
-        S3ResponseHandler responseHandler =
-        {
-            &responseHeadersCallback, &responseCompleteCallback
-        };
-        status = S3_delete_bucket(protocol, accessKeyId, secretAccessKey,
-                                  bucketName, 0, &responseHandler, 0);
-        if (status != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to send request: %d\n", status);
-        }
-        else if (statusG != S3StatusOK) {
-            fprintf(stderr, "ERROR: Failed to complete request: %d\n",
-                    statusG);
-        }
-        else if (httpResponseCodeG != 204) {
-            fprintf(stderr, "ERROR: S3 returned error: %d\n", 
-                    httpResponseCodeG);
-            status = S3StatusFailure;
-        }
+        delete_bucket(argc, argv, optind);
     }
     else if (!strcmp(command, "put")) {
     }
@@ -427,7 +527,5 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    S3_deinitialize();
-
-    return (status == S3StatusOK) ? 0 : -1;
+    return 0;
 }
