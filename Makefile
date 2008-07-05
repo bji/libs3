@@ -10,7 +10,15 @@ ifndef CURL_CFLAGS
     CURL_CFLAGS := $(shell curl-config --cflags)
 endif
 
-CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) \
+ifndef LIBXML2_LIBS
+    LIBXML2_LIBS := $(shell xml2-config --libs)
+endif
+
+ifndef LIBXML2_CFLAGS
+    LIBXML2_CFLAGS := $(shell xml2-config --cflags)
+endif
+
+CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=$(LIBS3_VER_MAJOR) \
           -DLIBS3_VER_MINOR=$(LIBS3_VER_MINOR)
 
@@ -21,13 +29,18 @@ all: libs3 s3
 libs3: lib/libs3.a
 
 lib/libs3.a: src/acl.o src/bucket.o src/general.o src/object.o src/request.o \
-             src/request_context.o src/service.o
+             src/request_context.o src/service.o src/simplexml.o
 	$(AR) cr $@ $^
 
 s3: bin/s3
 
 bin/s3: src/s3.o lib/libs3.a
-	$(CC) -o $@ $^ -lpthread -lcurl -lssl
+	$(CC) -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread -lssl
+
+test: bin/testsimplexml
+
+bin/testsimplexml: src/testsimplexml.o lib/libs3.a
+	$(CC) -o $@ $^ $(LIBXML2_LIBS)
 
 .PHONY: clean
 clean:

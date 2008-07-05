@@ -109,7 +109,8 @@ typedef enum
     S3StatusContentEncodingTooLong                          ,
     S3StatusHeadersTooLong                                  ,
     S3StatusKeyTooLong                                      ,
-    S3StatusUriTooLong
+    S3StatusUriTooLong                                      ,
+    S3StatusXmlParseFailure
 } S3Status;
 
 
@@ -322,9 +323,11 @@ typedef struct S3ResponseHeaders
     const char *eTag;
     /**
      * This optional field provides the last modified time, relative to the
-     * Unix epoch, of the contents.  It may or may not be provided.
+     * Unix epoch, of the contents.  If this value is > 0, then the last
+     * modified date of the contents are availableb as a number of seconds
+     * since the UNIX epoch.  Note that this is second precision.
      **/
-    struct timeval *lastModified;
+    long lastModified;
     /**
      * This is the number of user-provided metadata headers associated with
      * the resource.
@@ -438,6 +441,8 @@ typedef struct ListBucketContent
     const char *key;
     /**
      * This is the last modified date of the object identified by the key.
+     * It is relative to UNIX epoch.  Note that this can have sub-second
+     * accuracy.
      **/
     struct timeval lastModified;
     /**
@@ -1013,18 +1018,18 @@ S3Status S3_copy_object(S3BucketContext *bucketContext,
 // The response has to have the exact same set of ranges, or it is an error.
 // In this way, the caller can be sure that they will get exactly what they
 // expect.
+// ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 */
-S3Status S3_get_object(S3BucketContext *bucketContext,
-                       const char *key, const struct timeval *ifModifiedSince,
-                       const struct timeval *ifUnmodifiedSince, 
+S3Status S3_get_object(S3BucketContext *bucketContext, const char *key,
+                       long ifModifiedSince, long ifUnmodifiedSince,
                        const char *ifMatchETag, const char *ifNotMatchETag,
                        const char *byteRange, S3RequestContext *requestContext,
                        S3GetObjectHandler *handler, void *callbackData);
 
 
-S3Status S3_head_object(S3BucketContext *bucketContext,
-                        const char *key, const struct timeval *ifModifiedSince,
-                        const struct timeval *ifUnmodifiedSince, 
+// ifModifiedSince and ifUnmodifiedSince if > 0 will be used
+S3Status S3_head_object(S3BucketContext *bucketContext, const char *key,
+                        long ifModifiedSince, long ifUnmodifiedSince,
                         const char *ifMatchETag, const char *ifNotMatchETag,
                         S3RequestContext *requestContext,
                         S3ResponseHandler *handler, void *callbackData);

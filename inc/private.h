@@ -183,10 +183,6 @@ typedef struct Request
     // The length thus far of responseHeaderStrings
     int responseHeaderStringsLen;
 
-    // responseHeaders.lastModified will be set to this if there is a
-    // LastModified header
-    struct timeval lastModified;
-
     // responseHeaders.metaHeaders strings get copied into here
     char responseMetaHeaderStrings[COMPACTED_META_HEADER_BUFFER_SIZE];
 
@@ -258,7 +254,7 @@ void mutex_destroy(struct S3Mutex *mutex);
 
 
 // Request functions
-// ------------------------------------------------------
+// ----------------------------------------------------------------------------
 
 // Initialize the API
 S3Status request_api_initialize(const char *userAgentInfo);
@@ -275,6 +271,47 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context);
 // Called by the internal request code or internal request context code when a
 // curl has finished the request
 void request_finish(Request *request, S3Status status);
+
+
+// Simple XML parsing
+// ----------------------------------------------------------------------------
+
+// Simple XML callback.
+//
+// elementPath: is the full "path" of the element; i.e.
+// <foo><bar><baz>data</baz><bar><foo> would have 'data' in the element
+// foo/bar/baz.
+// 
+// Return of anything other than S3StatusOK causes the calling
+// simplexml_add() function to immediately stop and return the status.
+//
+// element          data         meaning
+// -------          ----         -------
+// !0               !0           element data for element
+// !0               0            empty element
+typedef S3Status (SimpleXmlCallback)(const char *elementPath, const char *data,
+                                     int dataLen, void *callbackData);
+
+typedef struct SimpleXml
+{
+    void *xmlParser;
+
+    SimpleXmlCallback *callback;
+
+    void *callbackData;
+
+    char elementPath[512];
+
+    int elementPathLen;
+
+    S3Status status;
+} SimpleXml;
+
+
+S3Status simplexml_initialize(SimpleXml *simpleXml, 
+                              SimpleXmlCallback *callback, void *callbackData);
+
+S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen);
 
 
 #endif /* PRIVATE_H */

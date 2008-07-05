@@ -45,9 +45,8 @@ S3Status S3_copy_object(S3BucketContext *bucketContext,
 }
 
 
-S3Status S3_get_object(S3BucketContext *bucketContext,
-                       const char *key, const struct timeval *ifModifiedSince,
-                       const struct timeval *ifUnmodifiedSince, 
+S3Status S3_get_object(S3BucketContext *bucketContext, const char *key,
+                       long ifModifiedSince, long ifUnmodifiedSince,
                        const char *ifMatchETag, const char *ifNotMatchETag,
                        const char *byteRange, S3RequestContext *requestContext,
                        S3GetObjectHandler *handler, void *callbackData)
@@ -56,9 +55,8 @@ S3Status S3_get_object(S3BucketContext *bucketContext,
 }
 
 
-S3Status S3_head_object(S3BucketContext *bucketContext,
-                        const char *key, const struct timeval *ifModifiedSince,
-                        const struct timeval *ifUnmodifiedSince, 
+S3Status S3_head_object(S3BucketContext *bucketContext, const char *key,
+                        long ifModifiedSince, long ifUnmodifiedSince,
                         const char *ifMatchETag, const char *ifNotMatchETag,
                         S3RequestContext *requestContext,
                         S3ResponseHandler *handler, void *callbackData)

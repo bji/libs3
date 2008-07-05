@@ -197,11 +197,13 @@ static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
     }
     print_nonnull("Server", server);
     print_nonnull("ETag", eTag);
-    if (headers->lastModified) {
+    if (headers->lastModified > 0) {
         char timebuf[1024];
-        // localtime is not thread-safe but we don't care here
-        strftime(timebuf, sizeof(timebuf), "%x %X", 
-                 localtime(&(headers->lastModified->tv_sec)));
+        // localtime is not thread-safe but we don't care here.  xxx note -
+        // localtime doesn't seem to actually do anything, 0 locatime of 0
+        // returns EST Unix epoch, it should return the NZST equivalent ...
+        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
+                 localtime(&(headers->lastModified)));
         printf("Last-Modified: %s\n", timebuf);
     }
     int i;

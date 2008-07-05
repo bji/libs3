@@ -48,6 +48,23 @@ static const char *urlSafeG = "-_.!~*'()/";
 static const char *hexG = "0123456789ABCDEF";
 
 
+static S3Status request_headers_done(Request *request)
+{
+    if (request->headersCallbackMade) {
+        return S3StatusOK;
+    }
+
+    // Now get the last modification time from curl, since it's easiest to
+    // let curl parse it
+    (void) curl_easy_getinfo(request->curl, CURLINFO_FILETIME, 
+                             &(request->responseHeaders.lastModified));
+    request->headersCallbackMade = 1;
+
+    return (*(request->headersCallback))
+        (&(request->responseHeaders), request->callbackData);
+}
+
+
 static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     size_t len = size * nmemb;
@@ -152,11 +169,6 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
     else if (!strncmp(header, "ETag", namelen)) {
         set_value(eTag);
     }
-    else if (!strncmp(header, "Last-Modified", namelen)) {
-        // read the time into request->lastModified
-        // xxx todo
-        request->responseHeaders.lastModified = &(request->lastModified);
-    }
     else if (!strncmp(header, "x-amz-meta-", sizeof("x-amz-meta-") - 1)) {
         // Find the name
         char *name = &(header[sizeof("x-amz-meta-")]);
@@ -196,14 +208,8 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     Request *request = (Request *) data;
 
-    if (!request->headersCallbackMade) {
-        request->headersCallbackMade = 1;
-        if ((*(request->headersCallback))(&(request->responseHeaders),
-                                          request->callbackData) !=
-            S3StatusOK) {
-            // Return 0 to signal error
-            return 0;
-        }
+    if (request_headers_done(request) != S3StatusOK) {
+        return 0;
     }
 
     if (request->curlWriteCallback) {
@@ -211,14 +217,7 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
     }
     else {
         // For requests that don't expect to get any data, they still might
-        // get error data, and we handle that here
-        // xxx todo - also, maybe do this automatically for every request,
-        // so that errors don't get handled in more than one place?  This
-        // would be accomplished by parsing enough data here to detect if it
-        // is an error or not.  If it is an error, it would then be completely
-        // parsed here and the write callack would never be called, else it
-        // would be passed on to the write callback (this will require some
-        // buffering of data too).
+        // get error data, and we handle that here.
         return (size * nmemb);
     }
 }
@@ -228,14 +227,8 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     Request *request = (Request *) data;
 
-    if (!request->headersCallbackMade) {
-        request->headersCallbackMade = 1;
-        if ((*(request->headersCallback))(&(request->responseHeaders),
-                                          request->callbackData) !=
-            S3StatusOK) {
-            // Return 0 to signal error
-            return 0;
-        }
+    if (request_headers_done(request) != S3StatusOK) {
+        return 0;
     }
 
     if (request->curlReadCallback) {
@@ -780,7 +773,7 @@ static S3Status setup_curl(CURL *handle, Request *request,
     }
 
     // Debugging only
-    // curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
+    // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
 
     // Always set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
@@ -788,14 +781,17 @@ static S3Status setup_curl(CURL *handle, Request *request,
     
     // Set write callback and data
     request->curlWriteCallback = params->curlWriteCallback;
-    curl_easy_setopt(request->curl, CURLOPT_WRITEFUNCTION, &curl_write_func);
+    curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
     curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
 
     // Set read callback, data, and readSize
     request->curlReadCallback = params->curlReadCallback;
-    curl_easy_setopt(request->curl, CURLOPT_READFUNCTION, &curl_read_func);
+    curl_easy_setopt_safe(CURLOPT_READFUNCTION, &curl_read_func);
     curl_easy_setopt_safe(CURLOPT_READDATA, request);
     curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->readSize);
+    
+    // Ask curl to parse the Last-Modified header
+    curl_easy_setopt_safe(CURLOPT_FILETIME, 1);
 
     // Curl docs suggest that this is necessary for multithreaded code.
     // However, it also points out that DNS timeouts will not be honored
@@ -1146,15 +1142,9 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
 
 void request_finish(Request *request, S3Status status)
 {
-    if (!request->headersCallbackMade) {
-        request->headersCallbackMade = 1;
-        (*(request->headersCallback))(&(request->responseHeaders),
-                                      request->callbackData);
-    }
+    request_headers_done(request);
     
-    // Figure out the HTTP response code
     int httpResponseCode = 0;
-    
     (void) curl_easy_getinfo
         (request->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
     
