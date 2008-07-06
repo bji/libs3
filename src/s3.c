@@ -323,8 +323,27 @@ static void test_bucket(int argc, char **argv, int optind)
         printf("Bucket '%s' does not exist.\n", bucketName);
     }
     else if (httpResponseCodeG == 403) {
-        // bucket exists, but no access
-        printf("Bucket '%s' exists, but is not accessible.\n", bucketName);
+        if (errorG && (errorG->code == S3ErrorCodeAccessDenied)) {
+            // bucket exists, but no access
+            printf("Bucket '%s' exists, but is not accessible.\n", bucketName);
+        }
+        else {
+            fprintf(stderr, "ERROR: S3 returned error:\n");
+            fprintf(stderr, "  HTTP Response Code: %d\n", httpResponseCodeG);
+            if (errorG) {
+                fprintf(stderr, "  S3 Error Code: %d\n", errorG->code);
+                if (errorG->message) {
+                    fprintf(stderr, "  S3 Message: %s\n", errorG->message);
+                }
+                if (errorG->resource) {
+                    fprintf(stderr, "  S3 Resource: %s\n", errorG->resource);
+                }
+                if (errorG->furtherDetails) {
+                    fprintf(stderr, "  S3 Resource: %s\n", 
+                            errorG->furtherDetails);
+                }
+            }
+        }
     }
     else {
         fprintf(stderr, "ERROR: S3 returned error: %d\n", 

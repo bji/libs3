@@ -78,7 +78,9 @@
  ************************************************************************** **/
 
 /**
- * S3Status is a status code as returned by a libs3 function.
+ * S3Status is a status code as returned by a libs3 function.  These status
+ * codes identify the success or failure of the request to be sent to S3
+ * and the response to be read.
  **/
 typedef enum
 {

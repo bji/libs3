@@ -54,6 +54,10 @@ static S3Status request_headers_done(Request *request)
         return S3StatusOK;
     }
 
+    // Get the http response code
+    (void) curl_easy_getinfo
+        (request->curl, CURLINFO_RESPONSE_CODE, &(request->httpResponseCode));
+    
     // Now get the last modification time from curl, since it's easiest to
     // let curl parse it
     (void) curl_easy_getinfo(request->curl, CURLINFO_FILETIME, 
@@ -204,21 +208,103 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 
+static S3Status errorXmlCallback(const char *elementPath, const char *data,
+                                 int dataLen, void *callbackData)
+{
+    Request *request = (Request *) callbackData;
+
+#define APPEND_DATA(requestField)                                       \
+    do {                                                                \
+        request-> requestField##Len +=                                  \
+            snprintf(&(request-> requestField                           \
+                       [request-> requestField##Len]),                  \
+                     sizeof(request-> requestField) -                   \
+                     request-> requestField##Len - 1, "%.*s",           \
+                     dataLen, data);                                    \
+    } while (0)
+
+#define RESET_FIELD(requestField, errorField) \
+    request->s3Error. errorField = request-> requestField;
+
+
+    if (!strcmp(elementPath, "Error")) {
+        // Ignore, this is the Error element itself, we only care about subs
+    }
+    else if (!strcmp(elementPath, "Error/Code")) {
+        APPEND_DATA(s3ErrorCode);
+    }
+    else if (!strcmp(elementPath, "Error/Message")) {
+        APPEND_DATA(s3ErrorMessage);
+        RESET_FIELD(s3ErrorMessage, message);
+    }
+    else if (!strcmp(elementPath, "Error/Resource")) {
+        APPEND_DATA(s3ErrorResource);
+        RESET_FIELD(s3ErrorResource, resource);
+    }
+    else if (!strcmp(elementPath, "Error/FurtherDetails")) {
+        APPEND_DATA(s3ErrorFurtherDetails);
+        RESET_FIELD(s3ErrorFurtherDetails, furtherDetails);
+    }
+    else {
+        if (strncmp(elementPath, "Error/", sizeof("Error/") - 1)) {
+            // If for some weird reason it's not within the Error element,
+            // ignore it
+            return S3StatusOK;
+        }
+        // OK, it's an unknown error element ... pass these back?
+        // xxx todo
+    }
+
+    return S3StatusOK;
+}
+
+
 static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
 {
     Request *request = (Request *) data;
 
+    // Make sure that headers have been handled
     if (request_headers_done(request) != S3StatusOK) {
         return 0;
     }
 
+    // On HTTP error, we expect to parse an HTTP error response
+    if ((request->httpResponseCode < 200) || 
+        (request->httpResponseCode > 299)) {
+        // If we haven't set up for reading an error yet, do so
+        if (!request->errorXmlParserInitialized) {
+            request->errorXmlParserInitialized = 1;
+            // Set up the simplexml parser
+            if (simplexml_initialize
+                (&(request->errorXmlParser),
+                 &errorXmlCallback, request) != S3StatusOK) {
+                return 0;
+            }
+
+            // Set up the S3Error that we will be returning
+            request->s3ErrorCodeLen = 0;
+            request->s3Error.message = 0;
+            request->s3ErrorMessageLen = 0;
+            request->s3Error.resource = 0;
+            request->s3ErrorResourceLen = 0;
+            request->s3Error.furtherDetails = 0;
+            request->s3ErrorFurtherDetailsLen = 0;
+        }
+        
+        // Now put the data into the xml parser
+        size_t len = (size * nmemb);
+        return ((simplexml_add(&(request->errorXmlParser), 
+                               (char *) ptr, len) == S3StatusOK) ? len : 0);
+    }
+
+    // If there was a callback registered, make it
     if (request->curlWriteCallback) {
         return (*(request->curlWriteCallback))(ptr, size, nmemb, data);
     }
+    // Else, consider this an error - S3 has sent back data when it was not
+    // expected
     else {
-        // For requests that don't expect to get any data, they still might
-        // get error data, and we handle that here.
-        return (size * nmemb);
+        return 0;
     }
 }
 
@@ -906,6 +992,11 @@ static S3Status request_initialize(Request *request,
         if (request->headers) {
             curl_slist_free_all(request->headers);
         }
+
+        // Deinitialize the error xml parser
+        if (request->errorXmlParserInitialized) {
+            simplexml_deinitialize(&(request->errorXmlParser));
+        }
     }
     else {
         request->used = 1;
@@ -956,10 +1047,12 @@ static S3Status request_initialize(Request *request,
     
     request->headersCallbackMade = 0;
 
+    request->httpResponseCode = 0;
+
     request->completeCallback = handler->completeCallback;
 
-    request->receivedS3Error = 0;
-    
+    request->errorXmlParserInitialized = 0;
+
     memcpy(&(request->u), &(params->u), sizeof(request->u));
 
     return S3StatusOK;
@@ -1143,15 +1236,92 @@ S3Status request_perform(RequestParams *params, S3RequestContext *context)
 void request_finish(Request *request, S3Status status)
 {
     request_headers_done(request);
-    
-    int httpResponseCode = 0;
-    (void) curl_easy_getinfo
-        (request->curl, CURLINFO_RESPONSE_CODE, &httpResponseCode);
-    
+
+    // Convert the error status string into a code
+    if (request->errorXmlParserInitialized) {
+        if (request->s3ErrorCodeLen) {
+#define HANDLE_CODE(name)                                       \
+            do {                                                \
+                if (!strcmp(request->s3ErrorCode, #name)) {     \
+                    request->s3Error.code = S3ErrorCode##name;  \
+                    goto code_set;                              \
+                }                                               \
+            } while (0)
+
+            HANDLE_CODE(AccessDenied);
+            HANDLE_CODE(AccountProblem);
+            HANDLE_CODE(AmbiguousGrantByEmailAddress);
+            HANDLE_CODE(BadDigest);
+            HANDLE_CODE(BucketAlreadyExists);
+            HANDLE_CODE(BucketAlreadyOwnedByYou);
+            HANDLE_CODE(BucketNotEmpty);
+            HANDLE_CODE(CredentialsNotSupported);
+            HANDLE_CODE(CrossLocationLoggingProhibited);
+            HANDLE_CODE(EntityTooSmall);
+            HANDLE_CODE(EntityTooLarge);
+            HANDLE_CODE(ExpiredToken);
+            HANDLE_CODE(IncompleteBody);
+            HANDLE_CODE(IncorrectNumberOfFilesInPostRequest);
+            HANDLE_CODE(InlineDataTooLarge);
+            HANDLE_CODE(InternalError);
+            HANDLE_CODE(InvalidAccessKeyId);
+            HANDLE_CODE(InvalidAddressingHeader);
+            HANDLE_CODE(InvalidArgument);
+            HANDLE_CODE(InvalidBucketName);
+            HANDLE_CODE(InvalidDigest);
+            HANDLE_CODE(InvalidLocationConstraint);
+            HANDLE_CODE(InvalidPayer);
+            HANDLE_CODE(InvalidPolicyDocument);
+            HANDLE_CODE(InvalidRange);
+            HANDLE_CODE(InvalidSecurity);
+            HANDLE_CODE(InvalidSOAPRequest);
+            HANDLE_CODE(InvalidStorageClass);
+            HANDLE_CODE(InvalidTargetBucketForLogging);
+            HANDLE_CODE(InvalidToken);
+            HANDLE_CODE(InvalidURI);
+            HANDLE_CODE(KeyTooLong);
+            HANDLE_CODE(MalformedACLError);
+            HANDLE_CODE(MalformedXML);
+            HANDLE_CODE(MaxMessageLengthExceeded);
+            HANDLE_CODE(MaxPostPreDataLengthExceededError);
+            HANDLE_CODE(MetadataTooLarge);
+            HANDLE_CODE(MethodNotAllowed);
+            HANDLE_CODE(MissingAttachment);
+            HANDLE_CODE(MissingContentLength);
+            HANDLE_CODE(MissingSecurityElement);
+            HANDLE_CODE(MissingSecurityHeader);
+            HANDLE_CODE(NoLoggingStatusForKey);
+            HANDLE_CODE(NoSuchBucket);
+            HANDLE_CODE(NoSuchKey);
+            HANDLE_CODE(NotImplemented);
+            HANDLE_CODE(NotSignedUp);
+            HANDLE_CODE(OperationAborted);
+            HANDLE_CODE(PermanentRedirect);
+            HANDLE_CODE(PreconditionFailed);
+            HANDLE_CODE(Redirect);
+            HANDLE_CODE(RequestIsNotMultiPartContent);
+            HANDLE_CODE(RequestTimeout);
+            HANDLE_CODE(RequestTimeTooSkewed);
+            HANDLE_CODE(RequestTorrentOfBucketError);
+            HANDLE_CODE(SignatureDoesNotMatch);
+            HANDLE_CODE(SlowDown);
+            HANDLE_CODE(TemporaryRedirect);
+            HANDLE_CODE(TokenRefreshRequired);
+            HANDLE_CODE(TooManyBuckets);
+            HANDLE_CODE(UnexpectedContent);
+            HANDLE_CODE(UnresolvableGrantByEmailAddress);
+            HANDLE_CODE(UserKeyMustBeSpecified);
+        }
+
+        request->s3Error.code = 0;
+    }
+
+ code_set:
+
     (*(request->completeCallback))
-            (status, httpResponseCode, 
-             request->receivedS3Error ? &(request->s3Error) : 0,
-             request->callbackData);
+        (status, request->httpResponseCode,
+         request->errorXmlParserInitialized ? &(request->s3Error) : 0,
+         request->callbackData);
 
     request_release(request);
 }

@@ -77,6 +77,33 @@ typedef enum
 } HttpRequestType;
 
 
+// Simple XML callback.
+//
+// elementPath: is the full "path" of the element; i.e.
+// <foo><bar><baz>data</baz><bar><foo> would have 'data' in the element
+// foo/bar/baz.
+// 
+// Return of anything other than S3StatusOK causes the calling
+// simplexml_add() function to immediately stop and return the status.
+typedef S3Status (SimpleXmlCallback)(const char *elementPath, const char *data,
+                                     int dataLen, void *callbackData);
+
+typedef struct SimpleXml
+{
+    void *xmlParser;
+
+    SimpleXmlCallback *callback;
+
+    void *callbackData;
+
+    char elementPath[512];
+
+    int elementPathLen;
+
+    S3Status status;
+} SimpleXml;
+
+
 // This completely describes a request.  A RequestParams is not required to be
 // allocated from the heap and its lifetime is not assumed to extend beyond
 // the lifetime of the function to which it has been passed.
@@ -192,8 +219,6 @@ typedef struct Request
     // Response meta headers
     S3MetaHeader responseMetaHeaders[MAX_META_HEADER_COUNT];
 
-    // Callback stuff ---------------------------------------------------------
-
     // Callback to make when headers are available
     S3ResponseHeadersCallback *headersCallback;
 
@@ -202,6 +227,9 @@ typedef struct Request
 
     // This is set to nonzero after the haders callback has been made
     int headersCallbackMade;
+
+    // The HTTP response code that S3 sent back for this request
+    int httpResponseCode;
 
     // This is the write callback that the user of the request wants to have
     // called back when data is available.
@@ -214,11 +242,30 @@ typedef struct Request
     // The callback to make when the response has been completely handled
     S3ResponseCompleteCallback *completeCallback;
 
-    // This will be 0 if S3 didn't send any XML error
-    int receivedS3Error;
+    // This is nonzero if the error XML parser has been initialized
+    int errorXmlParserInitialized;
+
+    // This is the error XML parser
+    SimpleXml errorXmlParser;
 
     // If S3 did send an XML error, this is the parsed form of it
     S3Error s3Error;
+
+    // These are the buffers used to store the S3Error values
+    char s3ErrorCode[1024];
+    int s3ErrorCodeLen;
+
+    // These are the buffers used to store the S3Error values
+    char s3ErrorMessage[1024];
+    int s3ErrorMessageLen;
+
+    // These are the buffers used to store the S3Error values
+    char s3ErrorResource[1024];
+    int s3ErrorResourceLen;
+    
+    // These are the buffers used to store the S3Error values
+    char s3ErrorFurtherDetails[1024];
+    int s3ErrorFurtherDetailsLen;
 
     // The callbacks to make for the data payload of the response
     union {
@@ -276,42 +323,13 @@ void request_finish(Request *request, S3Status status);
 // Simple XML parsing
 // ----------------------------------------------------------------------------
 
-// Simple XML callback.
-//
-// elementPath: is the full "path" of the element; i.e.
-// <foo><bar><baz>data</baz><bar><foo> would have 'data' in the element
-// foo/bar/baz.
-// 
-// Return of anything other than S3StatusOK causes the calling
-// simplexml_add() function to immediately stop and return the status.
-//
-// element          data         meaning
-// -------          ----         -------
-// !0               !0           element data for element
-// !0               0            empty element
-typedef S3Status (SimpleXmlCallback)(const char *elementPath, const char *data,
-                                     int dataLen, void *callbackData);
-
-typedef struct SimpleXml
-{
-    void *xmlParser;
-
-    SimpleXmlCallback *callback;
-
-    void *callbackData;
-
-    char elementPath[512];
-
-    int elementPathLen;
-
-    S3Status status;
-} SimpleXml;
-
-
 S3Status simplexml_initialize(SimpleXml *simpleXml, 
                               SimpleXmlCallback *callback, void *callbackData);
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen);
+
+
+void simplexml_deinitialize(SimpleXml *simpleXml);
 
 
 #endif /* PRIVATE_H */

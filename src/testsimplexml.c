@@ -75,11 +75,14 @@ int main(int argc, char **argv)
             status = simplexml_add(&simpleXml, buf, amt);
             if (status != S3StatusOK) {
                 fprintf(stderr, "ERROR: Parse failure: %d\n", status);
+                simplexml_deinitialize(&simpleXml);
                 return -1;
             }
             buf += amt, amt_read -= amt;
         }
     }
+
+    simplexml_deinitialize(&simpleXml);
 
     return 0;
 }
