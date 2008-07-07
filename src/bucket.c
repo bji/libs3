@@ -64,12 +64,12 @@ static size_t create_bucket_read_callback(void *data, size_t s, size_t n,
 }
 
 
-S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
-                        const char *secretAccessKey, const char *bucketName, 
-                        int locationConstraintReturnSize,
-                        char *locationConstraintReturn,
-                        S3RequestContext *requestContext,
-                        S3ResponseHandler *handler, void *callbackData)
+void S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
+                    const char *secretAccessKey, const char *bucketName, 
+                    int locationConstraintReturnSize,
+                    char *locationConstraintReturn,
+                    S3RequestContext *requestContext,
+                    S3ResponseHandler *handler, void *callbackData)
 {
     // Set up the RequestParams
     RequestParams params =
@@ -98,16 +98,15 @@ S3Status S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
     }
 
     // Perform the request
-    return request_perform(&params, requestContext);
+    request_perform(&params, requestContext);
 }
                          
                             
-S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                          const char *secretAccessKey, const char *bucketName,
-                          S3CannedAcl cannedAcl,
-                          const char *locationConstraint,
-                          S3RequestContext *requestContext,
-                          S3ResponseHandler *handler, void *callbackData)
+void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
+                      const char *secretAccessKey, const char *bucketName,
+                      S3CannedAcl cannedAcl, const char *locationConstraint,
+                      S3RequestContext *requestContext,
+                      S3ResponseHandler *handler, void *callbackData)
 {
     // Set up S3RequestHeaders
     S3RequestHeaders headers =
@@ -149,14 +148,14 @@ S3Status S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     // xxx todo support locationConstraint
     
     // Perform the request
-    return request_perform(&params, requestContext);
+    request_perform(&params, requestContext);
 }
 
                            
-S3Status S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
-                          const char *secretAccessKey, const char *bucketName,
-                          S3RequestContext *requestContext,
-                          S3ResponseHandler *handler, void *callbackData)
+void S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
+                      const char *secretAccessKey, const char *bucketName,
+                      S3RequestContext *requestContext,
+                      S3ResponseHandler *handler, void *callbackData)
 {
     // Set up the RequestParams
     RequestParams params =
@@ -182,15 +181,13 @@ S3Status S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
     // xxx todo support locationConstraint
     
     // Perform the request
-    return request_perform(&params, requestContext);
+    request_perform(&params, requestContext);
 }
 
 
-S3Status S3_list_bucket(S3BucketContext *bucketContext,
-                        const char *prefix, const char *marker, 
-                        const char *delimiter, int maxkeys,
-                        S3RequestContext *requestContext,
-                        S3ListBucketHandler *handler, void *callbackData)
+void S3_list_bucket(S3BucketContext *bucketContext, const char *prefix,
+                    const char *marker, const char *delimiter, int maxkeys,
+                    S3RequestContext *requestContext,
+                    S3ListBucketHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }

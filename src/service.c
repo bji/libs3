@@ -52,10 +52,10 @@ static size_t write_callback(void *data, size_t s, size_t n, void *req)
 }
 
 
-S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
-                         const char *secretAccessKey,
-                         S3RequestContext *requestContext,
-                         S3ListServiceHandler *handler, void *callbackData)
+void S3_list_service(S3Protocol protocol, const char *accessKeyId,
+                     const char *secretAccessKey,
+                     S3RequestContext *requestContext,
+                     S3ListServiceHandler *handler, void *callbackData)
 {
     // Set up the RequestParams
     RequestParams params =
@@ -79,7 +79,7 @@ S3Status S3_list_service(S3Protocol protocol, const char *accessKeyId,
     };
 
     // Perform the request
-    return request_perform(&params, requestContext);
+    request_perform(&params, requestContext);
 }
 
 

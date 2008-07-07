@@ -24,51 +24,44 @@
 
 #include "private.h"
 
-S3Status S3_put_object(S3BucketContext *bucketContext,
-                       const char *key, uint64_t contentLength,
-                       const S3RequestHeaders *requestHeaders,
-                       S3RequestContext *requestContext,
-                       S3PutObjectHandler *handler, void *callbackData)
+void S3_put_object(S3BucketContext *bucketContext, const char *key,
+                   uint64_t contentLength,
+                   const S3RequestHeaders *requestHeaders,
+                   S3RequestContext *requestContext,
+                   S3PutObjectHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }
 
 
-S3Status S3_copy_object(S3BucketContext *bucketContext,
-                        const char *key, const char *destinationBucket,
-                        const char *destinationKey,
-                        const S3RequestHeaders *requestHeaders,
-                        S3RequestContext *requestContext,
-                        S3ResponseHandler *handler, void *callbackData)
+void S3_copy_object(S3BucketContext *bucketContext, const char *key,
+                    const char *destinationBucket, const char *destinationKey,
+                    const S3RequestHeaders *requestHeaders,
+                    S3RequestContext *requestContext,
+                    S3ResponseHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }
 
 
-S3Status S3_get_object(S3BucketContext *bucketContext, const char *key,
-                       long ifModifiedSince, long ifUnmodifiedSince,
-                       const char *ifMatchETag, const char *ifNotMatchETag,
-                       const char *byteRange, S3RequestContext *requestContext,
-                       S3GetObjectHandler *handler, void *callbackData)
+void S3_get_object(S3BucketContext *bucketContext, const char *key,
+                   long ifModifiedSince, long ifUnmodifiedSince,
+                   const char *ifMatchETag, const char *ifNotMatchETag,
+                   const char *byteRange, S3RequestContext *requestContext,
+                   S3GetObjectHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }
 
 
-S3Status S3_head_object(S3BucketContext *bucketContext, const char *key,
-                        long ifModifiedSince, long ifUnmodifiedSince,
-                        const char *ifMatchETag, const char *ifNotMatchETag,
-                        S3RequestContext *requestContext,
-                        S3ResponseHandler *handler, void *callbackData)
+void S3_head_object(S3BucketContext *bucketContext, const char *key,
+                    long ifModifiedSince, long ifUnmodifiedSince,
+                    const char *ifMatchETag, const char *ifNotMatchETag,
+                    S3RequestContext *requestContext,
+                    S3ResponseHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }
                          
 
-S3Status S3_delete_object(S3BucketContext *bucketContext,
-                          const char *key,
-                          S3RequestContext *requestContext,
-                          S3ResponseHandler *handler, void *callbackData)
+void S3_delete_object(S3BucketContext *bucketContext, const char *key,
+                      S3RequestContext *requestContext,
+                      S3ResponseHandler *handler, void *callbackData)
 {
-    return S3StatusOK;
 }

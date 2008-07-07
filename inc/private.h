@@ -191,6 +191,10 @@ typedef struct Request
     // True if this request has already been used
     int used;
 
+    // The status of this Request, as will be reported to the user via the
+    // complete callback
+    S3Status status;
+
     // The CURL structure driving the request
     CURL *curl;
 
@@ -217,7 +221,7 @@ typedef struct Request
     int responseMetaHeaderStringsLen;
 
     // Response meta headers
-    S3MetaHeader responseMetaHeaders[MAX_META_HEADER_COUNT];
+    S3NameValue responseMetaHeaders[MAX_META_HEADER_COUNT];
 
     // Callback to make when headers are available
     S3ResponseHeadersCallback *headersCallback;
@@ -249,7 +253,7 @@ typedef struct Request
     SimpleXml errorXmlParser;
 
     // If S3 did send an XML error, this is the parsed form of it
-    S3Error s3Error;
+    S3ErrorDetails s3ErrorDetails;
 
     // These are the buffers used to store the S3Error values
     char s3ErrorCode[1024];
@@ -266,6 +270,20 @@ typedef struct Request
     // These are the buffers used to store the S3Error values
     char s3ErrorFurtherDetails[1024];
     int s3ErrorFurtherDetailsLen;
+    
+    // The extra details; we support up to 8 of them
+    S3NameValue s3ErrorExtraDetails[8];
+    // This is the buffer from which the names used in s3ErrorExtraDetails
+    // are allocated
+    char s3ErrorExtraDetailsNames[512];
+    // And this is the length of each element of s3ErrorExtraDetailsNames
+    int s3ErrorExtraDetailsNamesLen;
+    // These are the buffers of values in the s3ErrorExtraDetails.  They
+    // are kept separate so that they can be individually appended to.
+    char s3ErrorExtraDetailsValues[8][1024];
+    // And these are the individual lengths of each of each element of
+    // s3ErrorExtraDetailsValues
+    int s3ErrorExtraDetailsValuesLens[8];
 
     // The callbacks to make for the data payload of the response
     union {
@@ -310,10 +328,8 @@ S3Status request_api_initialize(const char *userAgentInfo);
 void request_api_deinitialize();
 
 // Perform a request; if context is 0, performs the request immediately;
-// otherwise, sets it up to be performed by context.  If S3StatusOK is
-// returned, the request was successfully completed/added to the context.
-// Otherwise, it was never even started due to an error with the request.
-S3Status request_perform(RequestParams *params, S3RequestContext *context);
+// otherwise, sets it up to be performed by context.
+void request_perform(RequestParams *params, S3RequestContext *context);
 
 // Called by the internal request code or internal request context code when a
 // curl has finished the request

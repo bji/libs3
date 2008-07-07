@@ -162,6 +162,112 @@ void S3_deinitialize()
 }
 
 
+const char *S3_get_status_name(S3Status status)
+{
+    switch (status) {
+#define handlecase(s)                           \
+        case S3Status##s:                       \
+            return #s
+
+        handlecase(OK);
+        handlecase(Failure);
+        handlecase(OutOfMemory);
+        handlecase(FailedToCreateMutex);
+        handlecase(InvalidBucketNameTooLong);
+        handlecase(InvalidBucketNameFirstCharacter);
+        handlecase(InvalidBucketNameCharacter);
+        handlecase(InvalidBucketNameCharacterSequence);
+        handlecase(InvalidBucketNameTooShort);
+        handlecase(InvalidBucketNameDotQuadNotation);
+        handlecase(FailedToCreateRequest);
+        handlecase(FailedToInitializeRequest);
+        handlecase(FailedToCreateRequestContext);
+        handlecase(MetaHeadersTooLong);
+        handlecase(BadMetaHeader);
+        handlecase(BadContentType);
+        handlecase(ContentTypeTooLong);
+        handlecase(BadMD5);
+        handlecase(MD5TooLong);
+        handlecase(BadCacheControl);
+        handlecase(CacheControlTooLong);
+        handlecase(BadContentDispositionFilename);
+        handlecase(ContentDispositionFilenameTooLong);
+        handlecase(BadContentEncoding);
+        handlecase(ContentEncodingTooLong);
+        handlecase(HeadersTooLong);
+        handlecase(KeyTooLong);
+        handlecase(UriTooLong);
+        handlecase(XmlParseFailure);
+        handlecase(ErrorAccessDenied);
+        handlecase(ErrorAccountProblem);
+        handlecase(ErrorAmbiguousGrantByEmailAddress);
+        handlecase(ErrorBadDigest);
+        handlecase(ErrorBucketAlreadyExists);
+        handlecase(ErrorBucketAlreadyOwnedByYou);
+        handlecase(ErrorBucketNotEmpty);
+        handlecase(ErrorCredentialsNotSupported);
+        handlecase(ErrorCrossLocationLoggingProhibited);
+        handlecase(ErrorEntityTooSmall);
+        handlecase(ErrorEntityTooLarge);
+        handlecase(ErrorExpiredToken);
+        handlecase(ErrorIncompleteBody);
+        handlecase(ErrorIncorrectNumberOfFilesInPostRequest);
+        handlecase(ErrorInlineDataTooLarge);
+        handlecase(ErrorInternalError);
+        handlecase(ErrorInvalidAccessKeyId);
+        handlecase(ErrorInvalidAddressingHeader);
+        handlecase(ErrorInvalidArgument);
+        handlecase(ErrorInvalidBucketName);
+        handlecase(ErrorInvalidDigest);
+        handlecase(ErrorInvalidLocationConstraint);
+        handlecase(ErrorInvalidPayer);
+        handlecase(ErrorInvalidPolicyDocument);
+        handlecase(ErrorInvalidRange);
+        handlecase(ErrorInvalidSecurity);
+        handlecase(ErrorInvalidSOAPRequest);
+        handlecase(ErrorInvalidStorageClass);
+        handlecase(ErrorInvalidTargetBucketForLogging);
+        handlecase(ErrorInvalidToken);
+        handlecase(ErrorInvalidURI);
+        handlecase(ErrorKeyTooLong);
+        handlecase(ErrorMalformedACLError);
+        handlecase(ErrorMalformedXML);
+        handlecase(ErrorMaxMessageLengthExceeded);
+        handlecase(ErrorMaxPostPreDataLengthExceededError);
+        handlecase(ErrorMetadataTooLarge);
+        handlecase(ErrorMethodNotAllowed);
+        handlecase(ErrorMissingAttachment);
+        handlecase(ErrorMissingContentLength);
+        handlecase(ErrorMissingSecurityElement);
+        handlecase(ErrorMissingSecurityHeader);
+        handlecase(ErrorNoLoggingStatusForKey);
+        handlecase(ErrorNoSuchBucket);
+        handlecase(ErrorNoSuchKey);
+        handlecase(ErrorNotImplemented);
+        handlecase(ErrorNotSignedUp);
+        handlecase(ErrorOperationAborted);
+        handlecase(ErrorPermanentRedirect);
+        handlecase(ErrorPreconditionFailed);
+        handlecase(ErrorRedirect);
+        handlecase(ErrorRequestIsNotMultiPartContent);
+        handlecase(ErrorRequestTimeout);
+        handlecase(ErrorRequestTimeTooSkewed);
+        handlecase(ErrorRequestTorrentOfBucketError);
+        handlecase(ErrorSignatureDoesNotMatch);
+        handlecase(ErrorSlowDown);
+        handlecase(ErrorTemporaryRedirect);
+        handlecase(ErrorTokenRefreshRequired);
+        handlecase(ErrorTooManyBuckets);
+        handlecase(ErrorUnexpectedContent);
+        handlecase(ErrorUnresolvableGrantByEmailAddress);
+        handlecase(ErrorUserKeyMustBeSpecified);
+        handlecase(ErrorUnknown);    
+    }
+
+    return "Unknown";
+}
+
+
 S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle)
 {
     int virtualHostStyle = (uriStyle == S3UriStyleVirtualHost);
