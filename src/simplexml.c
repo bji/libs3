@@ -87,6 +87,10 @@ static void saxEndElement(void *user_data, const xmlChar *name)
         return;
     }
 
+    // Call back with 0 data
+    simpleXml->status = (*(simpleXml->callback))
+        (simpleXml->elementPath, 0, 0, simpleXml->callbackData);
+
     while ((simpleXml->elementPathLen > 0) &&
            (simpleXml->elementPath[simpleXml->elementPathLen] != '/')) {
         simpleXml->elementPathLen--;

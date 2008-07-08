@@ -211,6 +211,11 @@ static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
 static S3Status errorXmlCallback(const char *elementPath, const char *data,
                                  int dataLen, void *callbackData)
 {
+    // We ignore end of element callbacks because we don't care about them
+    if (!data) {
+        return S3StatusOK;
+    }
+
     Request *request = (Request *) callbackData;
 
 #define APPEND_DATA(requestField)                                       \
@@ -1040,6 +1045,10 @@ static void request_destroy(Request *request)
         simplexml_deinitialize(&(request->errorXmlParser));
     }
 
+    if (request->dataXmlParserInitialized) {
+        simplexml_deinitialize(&(request->dataXmlParser));
+    }
+
     free(request);
 }
 
@@ -1059,6 +1068,11 @@ static S3Status request_initialize(Request *request,
         // Deinitialize the error xml parser
         if (request->errorXmlParserInitialized) {
             simplexml_deinitialize(&(request->errorXmlParser));
+        }
+
+        // Deinitialize the data xml parser
+        if (request->dataXmlParserInitialized) {
+            simplexml_deinitialize(&(request->dataXmlParser));
         }
     }
     else {
@@ -1119,8 +1133,10 @@ static S3Status request_initialize(Request *request,
     request->completeCallback = handler->completeCallback;
 
     request->errorXmlParserInitialized = 0;
+    
+    memcpy(&(request->callback), &(params->u), sizeof(request->callback));
 
-    memcpy(&(request->u), &(params->u), sizeof(request->u));
+    request->dataXmlParserInitialized = 0;
 
     return S3StatusOK;
 }
@@ -1395,7 +1411,8 @@ void request_finish(Request *request, S3Status status)
 
  code_set:
 
-    if (request->s3ErrorDetails.extraDetailsCount) {
+    if (request->errorXmlParserInitialized && 
+        request->s3ErrorDetails.extraDetailsCount) {
         request->s3ErrorDetails.extraDetails =
             request->s3ErrorExtraDetails;
     }

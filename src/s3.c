@@ -267,9 +267,32 @@ static void responseCompleteCallback(S3Status status, int httpResponseCode,
 static S3Status listServiceCallback(const char *ownerId, 
                                     const char *ownerDisplayName,
                                     const char *bucketName,
-                                    const struct timeval *creationDate,
+                                    int creationDateSeconds,
+                                    int creationDateMilliseconds,
                                     void *callbackData)
 {
+    static int ownerPrinted = 0;
+
+    if (!ownerPrinted) {
+        printf("Owner ID: %s\n", ownerId);
+        printf("Owner Display Name: %s\n", ownerDisplayName);
+        ownerPrinted = 1;
+    }
+
+    printf("Bucket Name: %s\n", bucketName);
+    if (creationDateSeconds >= 0) {
+        char fmtbuf[256];
+        snprintf(fmtbuf, sizeof(fmtbuf), "%%Y/%%m/%%d %%H:%%M:%%S.%03d %%Z", 
+                 creationDateMilliseconds);
+        char timebuf[1024];
+        time_t d = (time_t) creationDateSeconds;
+        // localtime is not thread-safe but we don't care here.  xxx note -
+        // localtime doesn't seem to actually do anything, 0 locatime of 0
+        // returns EST Unix epoch, it should return the NZST equivalent ...
+        strftime(timebuf, sizeof(timebuf), fmtbuf, localtime(&d));
+        printf("Creation Date: %s\n", timebuf);
+    }
+
     return S3StatusOK;
 }
 

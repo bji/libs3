@@ -85,8 +85,10 @@ typedef enum
 // 
 // Return of anything other than S3StatusOK causes the calling
 // simplexml_add() function to immediately stop and return the status.
+//
+// data is passed in as 0 on end of element
 typedef S3Status (SimpleXmlCallback)(const char *elementPath, const char *data,
-                                     int dataLen, void *callbackData);
+                                     int dataLen, void *callbackDatao);
 
 typedef struct SimpleXml
 {
@@ -182,6 +184,28 @@ typedef struct RequestParams
     // Authorization header
     char authorizationHeader[128];
 } RequestParams;
+
+
+typedef struct ListServiceXmlCallbackData
+{
+    char ownerId[256];
+    int ownerIdLen;
+
+    char ownerDisplayName[256];
+    int ownerDisplayNameLen;
+
+    char bucketName[256];
+    int bucketNameLen;
+
+    char creationDate[128];
+    int creationDateLen;
+} ListServiceXmlCallbackData;
+
+
+typedef struct ListBucketXmlCallbackData
+{
+
+} ListBucketXmlCallbackData;
 
 
 // This is the stuff associated with a request that needs to be on the heap
@@ -285,13 +309,47 @@ typedef struct Request
     // s3ErrorExtraDetailsValues
     int s3ErrorExtraDetailsValuesLens[8];
 
+    // The following fields are used by the S3 functions themselves, not
+    // the request code.
+
+    // xxx rewrite all of this stuff, it's ugly.  Do the following:
+    // * Define request as a self-contained API similar to what it is now,
+    //   but supporting only get object and put object callbacks
+    // * Make the S3 functions that have to do XML parsing allocate their
+    //   own callback data, that does the XML parsing, and then passes the
+    //   parsed data on
+    //
+    // Alternately, something like:
+    //
+    // - An API for preparing a CURL handle to issue an S3 request
+    // - Separate APIs for handling response data
+    // - The S3 functions tie all of these together, with their own callbacks
+    //   for parsing XML data if necessary
+    //
+    // In either case, break the Request structure up into separate structures
+    // with their own APIs (response header parsing, error parsing, etc),
+    // and compose them here, instead of having everything stuck into this
+    // structure directly, which is ugly.
+
     // The callbacks to make for the data payload of the response
     union {
         S3ListServiceCallback *listServiceCallback;
         S3ListBucketCallback *listBucketCallback;
         S3PutObjectCallback *putObjectCallback;
         S3GetObjectCallback *getObjectCallback;
-    } u;
+    } callback;
+
+    // The data to use during the xml callback
+    union {
+        ListServiceXmlCallbackData listServiceXmlCallbackData;
+        ListBucketXmlCallbackData listBucketXmlCallbackData;
+    } data;
+
+    // The XML parser that the write callback will use if it needs it
+    SimpleXml dataXmlParser;
+    
+    // Whoever initializes dataXmlParser has to set this to 1
+    int dataXmlParserInitialized;
 } Request;
 
 

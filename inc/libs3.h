@@ -441,11 +441,16 @@ typedef struct ListBucketContent
      **/
     const char *key;
     /**
-     * This is the last modified date of the object identified by the key.
-     * It is relative to UNIX epoch.  Note that this can have sub-second
-     * accuracy.
+     * This is the number of seconds since UNIX epoch of the last modified
+     * date of the object identified by the key.  
      **/
-    struct timeval lastModified;
+    int lastModifiedSeconds;
+    /**
+     * This is the number of microseconds within the second specified by
+     * lastModifiedSeconds of the last modified date of the object identified
+     * by the key.
+     **/
+    int lastModifiedMilliseconds;
     /**
      * This gives a tag which gives a signature of the contents of the object.
      **/
@@ -606,13 +611,18 @@ typedef void (S3ResponseCompleteCallback)(S3Status status,
  * @param ownerId is the ID of the owner of the bucket
  * @param ownerDisplayName is the owner display name of the owner of the bucket
  * @param bucketName is the name of the bucket
- * @param creationDate if present is the creation date of the bucket
+ * @param creationDateSeconds if < 0 indicates that no creation date was
+ *        supplied for the bucket; if > 0 indicates the number of seconds
+ *        since UNIX Epoch of the creation date of the bucket
+ * @param creationDateMilliseconds gives an offset from creationDateSeconds
+ *        at which the bucket was created
  * @return S3Status???
  **/
 typedef S3Status (S3ListServiceCallback)(const char *ownerId, 
                                          const char *ownerDisplayName,
                                          const char *bucketName,
-                                         const struct timeval *creationDate,
+                                         int creationDateSeconds,
+                                         int creationDateMilliseconds,
                                          void *callbackData);
 
 
