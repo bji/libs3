@@ -22,7 +22,8 @@
  *
  ************************************************************************** **/
 
-#include "private.h"
+#include "libs3.h"
+
 
 void S3_put_object(S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,

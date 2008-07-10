@@ -28,8 +28,10 @@ all: libs3 s3
 
 libs3: lib/libs3.a
 
-lib/libs3.a: src/acl.o src/bucket.o src/general.o src/object.o src/request.o \
-             src/request_context.o src/service.o src/simplexml.o
+lib/libs3.a: src/acl.o src/bucket.o src/error_parser.o src/general.o \
+             src/object.o src/request.o src/request_context.o \
+             src/response_headers_handler.o src/service.o src/simplexml.o \
+             src/util.o
 	$(AR) cr $@ $^
 
 s3: bin/s3

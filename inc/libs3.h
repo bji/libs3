@@ -598,7 +598,7 @@ typedef S3Status (S3ResponseHeadersCallback)(const S3ResponseHeaders *headers,
 
 typedef void (S3ResponseCompleteCallback)(S3Status status,
                                           int httpResponseCode,
-                                          S3ErrorDetails *errorDetails,
+                                          const S3ErrorDetails *errorDetails,
                                           void *callbackData);
 
                                     
@@ -921,9 +921,9 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  *        be set to the name of the geographic location of S3 bucket, or will
  *        be left as a zero-length string if no location was available.
  **/
-void S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
-                    const char *secretAccessKey, const char *bucketName, 
-                    int locationConstraintReturnSize,
+void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                    const char *accessKeyId, const char *secretAccessKey,
+                    const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData);
@@ -962,9 +962,9 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  * @param bucketName is the name of the bucket to be deleted
  * @return S3Status ???
  **/
-void S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *bucketName,
-                      S3RequestContext *requestContext,
+void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                      const char *accessKeyId, const char *secretAccessKey,
+                      const char *bucketName, S3RequestContext *requestContext,
                       S3ResponseHandler *handler, void *callbackData);
 
 

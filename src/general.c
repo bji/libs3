@@ -30,7 +30,8 @@
 #error "Threading support required in OpenSSL library, but not provided"
 #endif
 #include <pthread.h>
-#include "private.h"
+#include "request.h"
+#include "util.h"
 
 typedef struct S3Mutex CRYPTO_dynlock_value;
 

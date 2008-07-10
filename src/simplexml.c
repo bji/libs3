@@ -24,7 +24,7 @@
 
 #include <libxml/parser.h>
 #include <string.h>
-#include "private.h"
+#include "simplexml.h"
 
 // Use libxml2 for parsing XML.  XML is severely overused in modern
 // computing.  It is useful for only a very small subset of tasks, but
@@ -168,11 +168,7 @@ S3Status simplexml_initialize(SimpleXml *simpleXml,
     simpleXml->callbackData = callbackData;
     simpleXml->elementPathLen = 0;
     simpleXml->status = S3StatusOK;
-
-    if (!(simpleXml->xmlParser = xmlCreatePushParserCtxt
-          (&saxHandlerG, simpleXml, 0, 0, 0))) {
-        return S3StatusFailure;
-    }
+    simpleXml->xmlParser = 0;
 
     return S3StatusOK;
 }
@@ -180,12 +176,20 @@ S3Status simplexml_initialize(SimpleXml *simpleXml,
 
 void simplexml_deinitialize(SimpleXml *simpleXml)
 {
-    xmlFreeParserCtxt(simpleXml->xmlParser);
+    if (simpleXml->xmlParser) {
+        xmlFreeParserCtxt(simpleXml->xmlParser);
+    }
 }
 
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen)
 {
+    if (!simpleXml->xmlParser &&
+        (!(simpleXml->xmlParser = xmlCreatePushParserCtxt
+           (&saxHandlerG, simpleXml, 0, 0, 0)))) {
+        return S3StatusFailure;
+    }
+
     if (xmlParseChunk((xmlParserCtxtPtr) simpleXml->xmlParser, 
                       data, dataLen, 0)) {
         return S3StatusXmlParseFailure;

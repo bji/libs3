@@ -22,92 +22,237 @@
  *
  ************************************************************************** **/
 
-#include "private.h"
+#include <string.h>
+#include <stdlib.h>
+#include "libs3.h"
+#include "request.h"
+#include "simplexml.h"
 
-static size_t test_bucket_write_callback(void *data, size_t s, size_t n,
-                                         void *req)
+// test bucket ----------------------------------------------------------------
+
+typedef struct TestBucketData
 {
-    Request *request = (Request *) req;
-    (void) request;
+    SimpleXml simpleXml;
 
-    int len = s * n;
+    S3ResponseHeadersCallback *responseHeadersCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
 
-    if (len == 0) {
-        return 0;
+    int locationConstraintReturnSize;
+    char *locationConstraintReturn;
+
+    string_buffer(locationConstraint, 256);
+} TestBucketData;
+
+
+static S3Status testBucketXmlCallback(const char *elementPath, const char *data,
+                                      int dataLen, void *callbackData)
+{
+    TestBucketData *tbData = (TestBucketData *) callbackData;
+
+    int fit;
+
+    if (data && !strcmp(elementPath, "LocationConstraint")) {
+        string_buffer_append(tbData->locationConstraint, data, dataLen, fit);
     }
 
-    char *str = (char *) data;
-
-    char c = str[len - 1];
-    str[len - 1] = 0;
-
-#if 0    
-    printf("data: %s", str);
-    if (c) {
-        printf("%c\n", c);
-    }
-#else
-    (void) c;
-#endif
-
-    return len;
+    return S3StatusOK;
 }
 
 
-static size_t create_bucket_read_callback(void *data, size_t s, size_t n,
-                                          void *req)
+static S3Status testBucketHeadersCallback
+    (const S3ResponseHeaders *responseHeaders, void *callbackData)
 {
-    Request *request = (Request *) req;
-    (void) request;
-
-    return 0;
+    TestBucketData *tbData = (TestBucketData *) callbackData;
+    
+    return (*(tbData->responseHeadersCallback))
+        (responseHeaders, tbData->callbackData);
 }
 
 
-void S3_test_bucket(S3Protocol protocol, const char *accessKeyId,
-                    const char *secretAccessKey, const char *bucketName, 
-                    int locationConstraintReturnSize,
+static int testBucketDataCallback(char *buffer, int bufferSize,
+                                  void *callbackData)
+{
+    TestBucketData *tbData = (TestBucketData *) callbackData;
+
+    return ((simplexml_add(&(tbData->simpleXml), buffer, 
+                           bufferSize) == S3StatusOK) ? bufferSize : 0);
+}
+
+
+static void testBucketCompleteCallback(S3Status requestStatus, 
+                                       int httpResponseCode, 
+                                       const S3ErrorDetails *s3ErrorDetails,
+                                       void *callbackData)
+{
+    TestBucketData *tbData = (TestBucketData *) callbackData;
+
+    // Copy the location constraint into the return buffer
+    snprintf(tbData->locationConstraintReturn, 
+             tbData->locationConstraintReturnSize, "%s", 
+             tbData->locationConstraint);
+
+    (*(tbData->responseCompleteCallback))
+        (requestStatus, httpResponseCode, s3ErrorDetails, 
+         tbData->callbackData);
+
+    simplexml_deinitialize(&(tbData->simpleXml));
+
+    free(tbData);
+}
+
+
+void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                    const char *accessKeyId, const char *secretAccessKey,
+                    const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData)
 {
+    // Create the callback data
+    TestBucketData *tbData = (TestBucketData *) malloc(sizeof(TestBucketData));
+    if (!tbData) {
+        (*(handler->completeCallback))
+            (S3StatusOutOfMemory, 0, 0, callbackData);
+        return;
+    }
+
+    S3Status status = simplexml_initialize
+        (&(tbData->simpleXml), &testBucketXmlCallback, tbData);
+    if (status != S3StatusOK) {
+        free(tbData);
+        (*(handler->completeCallback))(status, 0, 0, callbackData);
+        return;
+    }
+
+    tbData->responseHeadersCallback = handler->headersCallback;
+    tbData->responseCompleteCallback = handler->completeCallback;
+    tbData->callbackData = callbackData;
+
+    tbData->locationConstraintReturnSize = locationConstraintReturnSize;
+    tbData->locationConstraintReturn = locationConstraintReturn;
+    string_buffer_initialize(tbData->locationConstraint);
+
     // Set up the RequestParams
     RequestParams params =
     {
         HttpRequestTypeGET,                 // httpRequestType
         protocol,                           // protocol
-        S3UriStylePath,                     // uriStyle
+        uriStyle,                           // uriStyle
         bucketName,                         // bucketName
         0,                                  // key
         0,                                  // queryParams
         "?location",                        // subResource
         accessKeyId,                        // accessKeyId
         secretAccessKey,                    // secretAccessKey
-        0,                                  // requestHeaders 
-        handler,                            // handler
-        { 0 },                              // special callbacks
-        callbackData,                       // callbackData
-        &test_bucket_write_callback,        // curlWriteCallback
-        0,                                  // curlReadCallback
-        0                                   // readSize
+        0,                                  // requestHeaders
+        &testBucketHeadersCallback,         // headersCallback
+        0,                                  // toS3Callback
+        0,                                  // toS3CallbackTotalSize
+        &testBucketDataCallback,            // fromS3Callback
+        &testBucketCompleteCallback,        // completeCallback
+        tbData                              // callbackData
     };
-
-    // Initialize response data
-    if (locationConstraintReturnSize && locationConstraintReturn) {
-        locationConstraintReturn[0] = 0;
-    }
 
     // Perform the request
     request_perform(&params, requestContext);
 }
-                         
+
+
+// create bucket --------------------------------------------------------------
+
+typedef struct CreateBucketData
+{
+    S3ResponseHeadersCallback *responseHeadersCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
+
+    char doc[1024];
+    int docLen, docBytesWritten;
+} CreateBucketData;                         
                             
+
+static S3Status createBucketHeadersCallback
+    (const S3ResponseHeaders *responseHeaders, void *callbackData)
+{
+    CreateBucketData *cbData = (CreateBucketData *) callbackData;
+    
+    return (*(cbData->responseHeadersCallback))
+        (responseHeaders, cbData->callbackData);
+}
+
+
+static int createBucketDataCallback(char *buffer, int bufferSize,
+                                    void *callbackData)
+{
+    CreateBucketData *cbData = (CreateBucketData *) callbackData;
+
+    if (!cbData->docLen) {
+        return 0;
+    }
+
+    int remaining = (cbData->docLen - cbData->docBytesWritten);
+
+    int toCopy = bufferSize > remaining ? remaining : bufferSize;
+
+    if (!toCopy) {
+        return 0;
+    }
+
+    memcpy(buffer, &(cbData->doc[cbData->docBytesWritten]), toCopy);
+
+    cbData->docBytesWritten += toCopy;
+
+    return toCopy;
+}
+
+
+static void createBucketCompleteCallback(S3Status requestStatus, 
+                                         int httpResponseCode, 
+                                         const S3ErrorDetails *s3ErrorDetails,
+                                         void *callbackData)
+{
+    CreateBucketData *cbData = (CreateBucketData *) callbackData;
+
+    (*(cbData->responseCompleteCallback))
+        (requestStatus, httpResponseCode, s3ErrorDetails, 
+         cbData->callbackData);
+
+    free(cbData);
+}
+
+
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *bucketName,
                       S3CannedAcl cannedAcl, const char *locationConstraint,
                       S3RequestContext *requestContext,
                       S3ResponseHandler *handler, void *callbackData)
 {
+    // Create the callback data
+    CreateBucketData *cbData = 
+        (CreateBucketData *) malloc(sizeof(CreateBucketData));
+    if (!cbData) {
+        (*(handler->completeCallback))
+            (S3StatusOutOfMemory, 0, 0, callbackData);
+        return;
+    }
+
+    cbData->responseHeadersCallback = handler->headersCallback;
+    cbData->responseCompleteCallback = handler->completeCallback;
+    cbData->callbackData = callbackData;
+
+    if (locationConstraint) {
+        cbData->docLen =
+            snprintf(cbData->doc, sizeof(cbData->doc),
+                     "<CreateBucketConfiguration><LocationConstraint>"
+                     "%s</LocationConstraint></CreateBucketConfiguration>",
+                     locationConstraint);
+        cbData->docBytesWritten = 0;
+    }
+    else {
+        cbData->docLen = 0;
+    }
+    
     // Set up S3RequestHeaders
     S3RequestHeaders headers =
     {
@@ -137,32 +282,78 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         accessKeyId,                        // accessKeyId
         secretAccessKey,                    // secretAccessKey
         &headers,                           // requestHeaders 
-        handler,                            // handler
-        { 0 },                              // special callbacks
-        callbackData,                       // callbackData
-        0,                                  // curlWriteCallback
-        &create_bucket_read_callback,       // curlReadCallback
-        0                                   // readSize
+        &createBucketHeadersCallback,       // headersCallback
+        &createBucketDataCallback,          // toS3Callback
+        cbData->docLen,                     // toS3CallbackTotalSize
+        0,                                  // fromS3Callback
+        &createBucketCompleteCallback,      // completeCallback
+        cbData                              // callbackData
     };
 
-    // xxx todo support locationConstraint
-    
     // Perform the request
     request_perform(&params, requestContext);
 }
 
                            
-void S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *bucketName,
-                      S3RequestContext *requestContext,
+// delete bucket --------------------------------------------------------------
+
+typedef struct DeleteBucketData
+{
+    S3ResponseHeadersCallback *responseHeadersCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
+} DeleteBucketData;
+
+
+static S3Status deleteBucketHeadersCallback
+    (const S3ResponseHeaders *responseHeaders, void *callbackData)
+{
+    DeleteBucketData *dbData = (DeleteBucketData *) callbackData;
+    
+    return (*(dbData->responseHeadersCallback))
+        (responseHeaders, dbData->callbackData);
+}
+
+
+static void deleteBucketCompleteCallback(S3Status requestStatus, 
+                                         int httpResponseCode, 
+                                         const S3ErrorDetails *s3ErrorDetails,
+                                         void *callbackData)
+{
+    DeleteBucketData *dbData = (DeleteBucketData *) callbackData;
+
+    (*(dbData->responseCompleteCallback))
+        (requestStatus, httpResponseCode, s3ErrorDetails, 
+         dbData->callbackData);
+
+    free(dbData);
+}
+
+
+void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                      const char *accessKeyId, const char *secretAccessKey,
+                      const char *bucketName, S3RequestContext *requestContext,
                       S3ResponseHandler *handler, void *callbackData)
 {
+    // Create the callback data
+    DeleteBucketData *dbData = 
+        (DeleteBucketData *) malloc(sizeof(DeleteBucketData));
+    if (!dbData) {
+        (*(handler->completeCallback))
+            (S3StatusOutOfMemory, 0, 0, callbackData);
+        return;
+    }
+
+    dbData->responseHeadersCallback = handler->headersCallback;
+    dbData->responseCompleteCallback = handler->completeCallback;
+    dbData->callbackData = callbackData;
+
     // Set up the RequestParams
     RequestParams params =
     {
         HttpRequestTypeDELETE,              // httpRequestType
         protocol,                           // protocol
-        S3UriStylePath,                     // uriStyle
+        uriStyle,                           // uriStyle
         bucketName,                         // bucketName
         0,                                  // key
         0,                                  // queryParams
@@ -170,16 +361,14 @@ void S3_delete_bucket(S3Protocol protocol, const char *accessKeyId,
         accessKeyId,                        // accessKeyId
         secretAccessKey,                    // secretAccessKey
         0,                                  // requestHeaders 
-        handler,                            // handler
-        { 0 },                              // special callbacks
-        callbackData,                       // callbackData
-        0,                                  // curlWriteCallback
-        0,                                  // curlReadCallback
-        0                                   // readSize
+        &deleteBucketHeadersCallback,       // headersCallback
+        0,                                  // toS3Callback
+        0,                                  // toS3CallbackTotalSize
+        0,                                  // fromS3Callback
+        &deleteBucketCompleteCallback,      // completeCallback
+        dbData                              // callbackData
     };
 
-    // xxx todo support locationConstraint
-    
     // Perform the request
     request_perform(&params, requestContext);
 }

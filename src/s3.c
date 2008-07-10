@@ -39,7 +39,7 @@
 
 static int showResponseHeadersG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
-static int usePathStyleUriG = 0;
+static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
 // request headers stuff
 // acl stuff
 
@@ -53,7 +53,7 @@ static const char *secretAccessKeyG = 0;
 // Request results, saved as globals -----------------------------------------
 
 static int statusG = 0, httpResponseCodeG = 0;
-static S3ErrorDetails *errorG = 0;
+static const S3ErrorDetails *errorG = 0;
 
 
 // Option prefixes -----------------------------------------------------------
@@ -168,11 +168,9 @@ static void usageExit()
 "\n"
 "  Environment:\n"
 "\n"
-"  S3_ACCESS_KEY_ID : S3 access key ID (required)\n"
-"  S3_SECRET_ACCESS_KEY : S3 secret access key (required)\n"
+"  S3_ACCESS_KEY_ID : S3 access key ID\n"
+"  S3_SECRET_ACCESS_KEY : S3 secret access key\n"
 "\n" 
-"  COMMON: Content-Type (could apply to put and copy)\n"
-"\n"
 "  Commands:\n"
 "\n"
 "  list\n"
@@ -254,7 +252,8 @@ static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
 // This callback does the same thing for every request type: saves the status
 // and error stuff in global variables
 static void responseCompleteCallback(S3Status status, int httpResponseCode,
-                                     S3ErrorDetails *error, void *callbackData)
+                                     const S3ErrorDetails *error, 
+                                     void *callbackData)
 {
     statusG = status;
     httpResponseCodeG = httpResponseCode;
@@ -343,9 +342,9 @@ static void test_bucket(int argc, char **argv, int optind)
     };
 
     char locationConstraint[64];
-    S3_test_bucket(protocolG, accessKeyIdG, secretAccessKeyG, bucketName,
-                   sizeof(locationConstraint), locationConstraint, 0,
-                   &responseHandler, 0);
+    S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
+                   bucketName, sizeof(locationConstraint), locationConstraint,
+                   0, &responseHandler, 0);
 
     switch (statusG) {
     case S3StatusOK:
@@ -459,8 +458,8 @@ static void delete_bucket(int argc, char **argv, int optind)
         &responseHeadersCallback, &responseCompleteCallback
     };
 
-    S3_delete_bucket(protocolG, accessKeyIdG, secretAccessKeyG, bucketName, 0,
-                     &responseHandler, 0);
+    S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
+                     bucketName, 0, &responseHandler, 0);
 
     if (statusG != S3StatusOK) {
         printError();
@@ -486,7 +485,7 @@ int main(int argc, char **argv)
 
         switch (c) {
         case 'p':
-            usePathStyleUriG = 1;
+            uriStyleG = S3UriStylePath;
             break;
         case 'u':
             protocolG = S3ProtocolHTTP;

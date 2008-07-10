@@ -23,7 +23,8 @@
  ************************************************************************** **/
 
 #include <curl/curl.h>
-#include "private.h"
+#include "request.h"
+#include "request_context.h"
 
 
 S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
@@ -79,19 +80,18 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                 return S3StatusFailure;
             }
             // Make response complete callback
-            S3Status status;
             switch (msg->data.result) {
             case CURLE_OK:
-                status = S3StatusOK;
+                request->status = S3StatusOK;
                 break;
                 // xxx todo fill the rest in
             default:
-                status = S3StatusFailure;
+                request->status = S3StatusFailure;
                 break;
             }
             // Finish the request, ensuring that all callbacks have been made,
             // and also releases the request
-            request_finish(request, status);
+            request_finish(request);
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 

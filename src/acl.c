@@ -22,7 +22,8 @@
  *
  ************************************************************************** **/
 
-#include "private.h"
+#include "libs3.h"
+
 
 void S3_set_acl(S3BucketContext *bucketContext, const char *key,
                 int aclGrantCount, S3AclGrant *aclGrants,
