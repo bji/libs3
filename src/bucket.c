@@ -374,9 +374,341 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
 }
 
 
+// list bucket ----------------------------------------------------------------
+
+typedef struct ListBucketContents
+{
+    string_buffer(key, 1024);
+    string_buffer(lastModified, 256);
+    string_buffer(eTag, 256);
+    string_buffer(size, 24);
+    string_buffer(ownerId, 256);
+    string_buffer(ownerDisplayName, 256);
+} ListBucketContents;
+
+
+static void initialize_list_bucket_contents(ListBucketContents *contents)
+{
+    string_buffer_initialize(contents->key);
+    string_buffer_initialize(contents->lastModified);
+    string_buffer_initialize(contents->eTag);
+    string_buffer_initialize(contents->size);
+    string_buffer_initialize(contents->ownerId);
+    string_buffer_initialize(contents->ownerDisplayName);
+}
+
+#define MAX_CONTENTS 32
+#define MAX_COMMON_PREFIXES 8
+
+typedef struct ListBucketData
+{
+    SimpleXml simpleXml;
+
+    S3ResponseHeadersCallback *responseHeadersCallback;
+    S3ListBucketCallback *listBucketCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
+
+    string_buffer(isTruncated, 64);
+    string_buffer(nextMarker, 1024);
+
+    // We read up to 32 Contents at a time
+    int contentsCount;
+    ListBucketContents contents[MAX_CONTENTS];
+
+    // We read up to 8 CommonPrefixes at a time
+    int commonPrefixesCount;
+    char commonPrefixes[MAX_COMMON_PREFIXES][1024];
+    int commonPrefixLens[MAX_COMMON_PREFIXES];
+} ListBucketData;
+
+
+static void initialize_list_bucket_data(ListBucketData *lbData)
+{
+    lbData->contentsCount = 0;
+    initialize_list_bucket_contents(lbData->contents);
+    lbData->commonPrefixesCount = 0;
+    lbData->commonPrefixes[0][0] = 0;
+    lbData->commonPrefixLens[0] = 0;
+}
+
+
+static S3Status make_list_bucket_callback(ListBucketData *lbData)
+{
+    int i;
+
+    // Convert IsTruncated
+    int isTruncated = (!strcmp(lbData->isTruncated, "true") ||
+                       !strcmp(lbData->isTruncated, "1")) ? 1 : 0;
+
+    // Convert the contents
+    S3ListBucketContent contents[lbData->contentsCount];
+
+    int contentsCount = lbData->contentsCount;
+    for (i = 0; i < contentsCount; i++) {
+        S3ListBucketContent *contentDest = &(contents[i]);
+        ListBucketContents *contentSrc = &(lbData->contents[i]);
+        contentDest->key = contentSrc->key;
+        contentDest->lastModified = parseIso8601Time(contentSrc->lastModified);
+        contentDest->eTag = contentSrc->eTag;
+        contentDest->size = parseUnsignedInt(contentSrc->size);
+        contentDest->ownerId = contentSrc->ownerId[0] ?contentSrc->ownerId : 0;
+        contentDest->ownerDisplayName = (contentSrc->ownerDisplayName[0] ?
+                                         contentSrc->ownerDisplayName : 0);
+    }
+
+    // Make the common prefixes array
+    int commonPrefixesCount = lbData->commonPrefixesCount;
+    char *commonPrefixes[commonPrefixesCount];
+    for (i = 0; i < commonPrefixesCount; i++) {
+        commonPrefixes[i] = lbData->commonPrefixes[i];
+    }
+
+    return (*(lbData->listBucketCallback))
+        (isTruncated, lbData->nextMarker,
+         contentsCount, contents, commonPrefixesCount, 
+         (const char **) commonPrefixes, lbData->callbackData);
+}
+
+
+static S3Status listBucketXmlCallback(const char *elementPath, const char *data,
+                                      int dataLen, void *callbackData)
+{
+    ListBucketData *lbData = (ListBucketData *) callbackData;
+
+    int fit;
+
+    if (data) {
+        if (!strcmp(elementPath, "ListBucketResult/IsTruncated")) {
+            string_buffer_append(lbData->isTruncated, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/NextMarker")) {
+            string_buffer_append(lbData->nextMarker, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Key")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->key, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, 
+                         "ListBucketResult/Contents/LastModified")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->lastModified, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/ETag")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->eTag, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Size")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->size, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Owner/ID")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->ownerId, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, 
+                         "ListBucketResult/Contents/Owner/DisplayName")) {
+            ListBucketContents *contents = 
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append
+                (contents->ownerDisplayName, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/CommonPrefix/Prefix")) {
+            int which = lbData->commonPrefixesCount;
+            lbData->commonPrefixLens[which] +=
+                snprintf(lbData->commonPrefixes[which],
+                         sizeof(lbData->commonPrefixes[which]) -
+                         lbData->commonPrefixLens[which] - 1,
+                         "%.*s", dataLen, data);
+        }
+    }
+    else {
+        if (!strcmp(elementPath, "ListBucketResult/Contents")) {
+            // Finished a Contents
+            lbData->contentsCount++;
+            if (lbData->contentsCount == MAX_CONTENTS) {
+                // Make the callback
+                S3Status status = make_list_bucket_callback(lbData);
+                if (status != S3StatusOK) {
+                    return status;
+                }
+                initialize_list_bucket_data(lbData);
+            }
+            else {
+                // Initialize the next one
+                initialize_list_bucket_contents
+                    (&(lbData->contents[lbData->contentsCount]));
+            }
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/CommonPrefix/Prefix")) {
+            // Finished a Prefix
+            lbData->commonPrefixesCount++;
+            if (lbData->commonPrefixesCount == MAX_COMMON_PREFIXES) {
+                // Make the callback
+                S3Status status = make_list_bucket_callback(lbData);
+                if (status != S3StatusOK) {
+                    return status;
+                }
+                initialize_list_bucket_data(lbData);
+            }
+            else {
+                // Initialize the next one
+                lbData->commonPrefixes[lbData->commonPrefixesCount][0] = 0;
+                lbData->commonPrefixLens[lbData->commonPrefixesCount] = 0;
+            }
+        }
+    }
+
+    return S3StatusOK;
+}
+
+
+static S3Status listBucketHeadersCallback
+    (const S3ResponseHeaders *responseHeaders, void *callbackData)
+{
+    ListBucketData *lbData = (ListBucketData *) callbackData;
+    
+    return (*(lbData->responseHeadersCallback))
+        (responseHeaders, lbData->callbackData);
+}
+
+
+static int listBucketDataCallback(char *buffer, int bufferSize,
+                                  void *callbackData)
+{
+    ListBucketData *lbData = (ListBucketData *) callbackData;
+
+    return ((simplexml_add(&(lbData->simpleXml), buffer, 
+                           bufferSize) == S3StatusOK) ? bufferSize : 0);
+}
+
+
+static void listBucketCompleteCallback(S3Status requestStatus, 
+                                       int httpResponseCode, 
+                                       const S3ErrorDetails *s3ErrorDetails,
+                                       void *callbackData)
+{
+    ListBucketData *lbData = (ListBucketData *) callbackData;
+
+    // Make the callback if there is anything
+    if (lbData->contentsCount || lbData->commonPrefixesCount) {
+        make_list_bucket_callback(lbData);
+    }
+
+    free(lbData);
+}
+
+
 void S3_list_bucket(S3BucketContext *bucketContext, const char *prefix,
                     const char *marker, const char *delimiter, int maxkeys,
                     S3RequestContext *requestContext,
                     S3ListBucketHandler *handler, void *callbackData)
 {
+    // Compose the query params
+    string_buffer(queryParams, 4096);
+    string_buffer_initialize(queryParams);
+    
+#define safe_append(name, value)                                        \
+    do {                                                                \
+        int fit;                                                        \
+        string_buffer_append(queryParams, &sep, 1, fit);                \
+        if (!fit) {                                                     \
+            (*(handler->responseHandler.completeCallback))              \
+                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+            return;                                                     \
+        }                                                               \
+        string_buffer_append(queryParams, name "=",                     \
+                             sizeof(name "=") - 1, fit);                \
+        if (!fit) {                                                     \
+            (*(handler->responseHandler.completeCallback))              \
+                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+            return;                                                     \
+        }                                                               \
+        sep = '&';                                                      \
+        char encoded[3 * 1024];                                         \
+        if (!urlEncode(encoded, value, 1024)) {                         \
+            (*(handler->responseHandler.completeCallback))              \
+                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+        }                                                               \
+        string_buffer_append(queryParams, encoded, strlen(encoded),     \
+                             fit);                                      \
+        if (!fit) {                                                     \
+            (*(handler->responseHandler.completeCallback))              \
+                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+            return;                                                     \
+        }                                                               \
+    } while (0)
+
+
+    char sep = '?';
+    if (prefix) {
+        safe_append("prefix", prefix);
+    }
+    if (marker) {
+        safe_append("marker", marker);
+    }
+    if (delimiter) {
+        safe_append("delimiter", delimiter);
+    }
+    if (maxkeys) {
+        char maxKeysString[64];
+        snprintf(maxKeysString, sizeof(maxKeysString), "%d", maxkeys);
+        safe_append("max-keys", maxKeysString);
+    }
+
+    ListBucketData *lbData = (ListBucketData *) malloc(sizeof(ListBucketData));
+
+    if (!lbData) {
+        (*(handler->responseHandler.completeCallback))
+            (S3StatusOutOfMemory, 0, 0, callbackData);
+        return;
+    }
+
+    S3Status status = simplexml_initialize
+        (&(lbData->simpleXml), &listBucketXmlCallback, lbData);
+    if (status != S3StatusOK) {
+        free(lbData);
+        (*(handler->responseHandler.completeCallback))
+            (status, 0, 0, callbackData);
+        return;
+    }
+    
+    lbData->responseHeadersCallback = handler->responseHandler.headersCallback;
+    lbData->listBucketCallback = handler->listBucketCallback;
+    lbData->responseCompleteCallback = 
+        handler->responseHandler.completeCallback;
+    lbData->callbackData = callbackData;
+
+    string_buffer_initialize(lbData->isTruncated);
+    string_buffer_initialize(lbData->nextMarker);
+    initialize_list_bucket_data(lbData);
+
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypeGET,                 // httpRequestType
+        bucketContext->protocol,            // protocol
+        bucketContext->uriStyle,            // uriStyle
+        bucketContext->bucketName,          // bucketName
+        0,                                  // key
+        queryParams[0] ? queryParams : 0,   // queryParams
+        0,                                  // subResource
+        bucketContext->accessKeyId,         // accessKeyId
+        bucketContext->secretAccessKey,     // secretAccessKey
+        0,                                  // requestHeaders
+        &listBucketHeadersCallback,         // headersCallback
+        0,                                  // toS3Callback
+        0,                                  // toS3CallbackTotalSize
+        &listBucketDataCallback,            // fromS3Callback
+        &listBucketCompleteCallback,        // completeCallback
+        lbData                              // callbackData
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
 }

@@ -47,9 +47,6 @@ static Request *requestStackG[REQUEST_STACK_SIZE];
 
 static int requestStackCountG;
 
-static const char *urlSafeG = "-_.!~*'()/";
-static const char *hexG = "0123456789ABCDEF";
-
 
 typedef struct RequestComputedValues
 {
@@ -405,41 +402,8 @@ static S3Status compose_standard_headers(const RequestParams *params,
 static S3Status encode_key(const RequestParams *params,
                            RequestComputedValues *values)
 {
-    const char *key = params->key;
-    char *buffer = values->urlEncodedKey;
-    int len = 0;
-
-    if (key) while (*key) {
-        if (++len > S3_MAX_KEY_SIZE) {
-            return S3StatusKeyTooLong;
-        }
-        const char *urlsafe = urlSafeG;
-        int isurlsafe = 0;
-        while (*urlsafe) {
-            if (*urlsafe == *key) {
-                isurlsafe = 1;
-                break;
-            }
-            urlsafe++;
-        }
-        if (isurlsafe || isalnum(*key)) {
-            *buffer++ = *key++;
-        }
-        else if (*key == ' ') {
-            *buffer++ = '+';
-            key++;
-        }
-        else {
-            *buffer++ = '%';
-            *buffer++ = hexG[*key / 16];
-            *buffer++ = hexG[*key % 16];
-            key++;
-        }
-    }
-
-    *buffer = 0;
-
-    return S3StatusOK;
+    return (urlEncode(values->urlEncodedKey, params->key, S3_MAX_KEY_SIZE) ?
+            S3StatusOK : S3StatusUriTooLong);
 }
 
 
@@ -699,19 +663,20 @@ static S3Status compose_uri(const RequestParams *params, Request *request)
 
     if (params->key && params->key[0]) {
         uri_append("%s", params->key);
-        
-        if (params->queryParams) {
-            uri_append("%s", params->queryParams);
-        }
-        else if (params->subResource && params->subResource[0]) {
-            uri_append("%s", params->subResource);
-        }
     }
     else {
         uri_append("%s", "/");
-        if (params->subResource) {
-            uri_append("%s", params->subResource);
-        }
+    }
+
+    if (params->subResource) {
+        uri_append("%s", params->subResource);
+    }
+    
+    if (params->queryParams) {
+        uri_append("%s", params->queryParams);
+    }
+    else if (params->subResource && params->subResource[0]) {
+        uri_append("%s", params->subResource);
     }
 
     return S3StatusOK;
@@ -734,7 +699,7 @@ static S3Status setup_curl(Request *request,
     // Debugging only
     // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
 
-    // Always set header callback and data
+    // Set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
     
@@ -748,7 +713,8 @@ static S3Status setup_curl(Request *request,
     curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
     curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
 
-    // Ask curl to parse the Last-Modified header
+    // Ask curl to parse the Last-Modified header.  This is easier than
+    // parsing it ourselves.
     curl_easy_setopt_safe(CURLOPT_FILETIME, 1);
 
     // Curl docs suggest that this is necessary for multithreaded code.

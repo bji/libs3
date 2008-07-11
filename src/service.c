@@ -72,18 +72,13 @@ static S3Status xmlCallback(const char *elementPath, const char *data,
     }
     else {
         if (!strcmp(elementPath, "ListAllMyBucketsResult/Buckets/Bucket")) {
-            // Convert the date
-            time_t creationDate;
-            int millis;
             // Parse date.  Assume ISO-8601 date format.
-            int hasCreationDate = parseIso8601Time(cbData->creationDate, 
-                                                   &creationDate, &millis);
+            time_t creationDate = parseIso8601Time(cbData->creationDate);
 
             // Make the callback - a bucket just finished
             S3Status status = (*(cbData->listServiceCallback))
                 (cbData->ownerId, cbData->ownerDisplayName,
-                 cbData->bucketName, hasCreationDate ? creationDate : -1,
-                 hasCreationDate ? millis : 0, cbData->callbackData);
+                 cbData->bucketName, creationDate, cbData->callbackData);
 
             string_buffer_initialize(cbData->ownerId);
             string_buffer_initialize(cbData->ownerDisplayName);

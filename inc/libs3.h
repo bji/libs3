@@ -95,6 +95,7 @@ typedef enum
     S3StatusInvalidBucketNameCharacterSequence              ,
     S3StatusInvalidBucketNameTooShort                       ,
     S3StatusInvalidBucketNameDotQuadNotation                ,
+    S3StatusQueryParamsTooLong                              ,
     S3StatusFailedToCreateRequest                           ,
     S3StatusFailedToInitializeRequest                       ,
     S3StatusFailedToCreateRequestContext                    ,
@@ -326,9 +327,10 @@ typedef struct S3ResponseHeaders
      * This optional field provides the last modified time, relative to the
      * Unix epoch, of the contents.  If this value is > 0, then the last
      * modified date of the contents are availableb as a number of seconds
-     * since the UNIX epoch.  Note that this is second precision.
+     * since the UNIX epoch.  Note that this is second precision; HTTP
+     * 
      **/
-    long lastModified;
+    time_t lastModified;
     /**
      * This is the number of user-provided metadata headers associated with
      * the resource.
@@ -431,10 +433,9 @@ typedef struct S3BucketContext
 /**
  * This is a single entry supplied to the list bucket callback by a call to
  * S3_list_bucket.  It identifies a single matching key from the list
- * operation.  All fields of this structure are non-optional and will be
- * present.
+ * operation.
  **/
-typedef struct ListBucketContent
+typedef struct S3ListBucketContent
 {
     /**
      * This is the next key in the list bucket results.
@@ -442,15 +443,9 @@ typedef struct ListBucketContent
     const char *key;
     /**
      * This is the number of seconds since UNIX epoch of the last modified
-     * date of the object identified by the key.  
+     * date of the object identified by the key. 
      **/
-    int lastModifiedSeconds;
-    /**
-     * This is the number of microseconds within the second specified by
-     * lastModifiedSeconds of the last modified date of the object identified
-     * by the key.
-     **/
-    int lastModifiedMilliseconds;
+    time_t lastModified;
     /**
      * This gives a tag which gives a signature of the contents of the object.
      **/
@@ -459,7 +454,17 @@ typedef struct ListBucketContent
      * This is the size of the object
      **/
     uint64_t size;
-} ListBucketContent;
+    /**
+     * This is the ID of the owner of the key; it is present only if
+     * access permissions allow it to be viewed.
+     **/
+    const char *ownerId;
+    /**
+     * This is the display name of the owner of the key; it is present only if
+     * access permissions allow it to be viewed.
+     **/
+    const char *ownerDisplayName;
+} S3ListBucketContent;
 
 
 /**
@@ -614,15 +619,12 @@ typedef void (S3ResponseCompleteCallback)(S3Status status,
  * @param creationDateSeconds if < 0 indicates that no creation date was
  *        supplied for the bucket; if > 0 indicates the number of seconds
  *        since UNIX Epoch of the creation date of the bucket
- * @param creationDateMilliseconds gives an offset from creationDateSeconds
- *        at which the bucket was created
  * @return S3Status???
  **/
 typedef S3Status (S3ListServiceCallback)(const char *ownerId, 
                                          const char *ownerDisplayName,
                                          const char *bucketName,
-                                         int creationDateSeconds,
-                                         int creationDateMilliseconds,
+                                         time_t creationDateSeconds,
                                          void *callbackData);
 
 
@@ -648,8 +650,10 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
  **/
 typedef S3Status (S3ListBucketCallback)(int isTruncated,
                                         const char *nextMarker,
-                                        int contentsLength, 
-                                        const ListBucketContent *contents,
+                                        int contentsCount, 
+                                        const S3ListBucketContent *contents,
+                                        int commonPrefixesCount,
+                                        const char **commonPrefixes,
                                         void *callbackData);
                                        
 

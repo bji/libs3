@@ -83,8 +83,16 @@ void mutex_destroy(struct S3Mutex *mutex);
 
 // Utilities -----------------------------------------------------------------
 
-// Returns 0 on success, nonzero on failure
-int parseIso8601Time(const char *str, time_t *secondsReturn, int *millisReturn);
+// URL-encodes a string from [src] into [dest].  [dest] must have at least
+// 3x the number of characters that [source] has.   At most [maxSrcSize] bytes
+// from [src] are encoded; if more are present in [src], 0 is returned from
+// urlEncode, else nonzero is returned.
+int urlEncode(char *dest, const char *src, int maxSrcSize);
+
+// Returns < 0 on failure >= 0 on success
+time_t parseIso8601Time(const char *str);
+
+uint64_t parseUnsignedInt(const char *str);
 
 
 #endif /* UTIL_H */

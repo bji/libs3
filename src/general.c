@@ -180,6 +180,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(InvalidBucketNameCharacterSequence);
         handlecase(InvalidBucketNameTooShort);
         handlecase(InvalidBucketNameDotQuadNotation);
+        handlecase(QueryParamsTooLong);
         handlecase(FailedToCreateRequest);
         handlecase(FailedToInitializeRequest);
         handlecase(FailedToCreateRequestContext);

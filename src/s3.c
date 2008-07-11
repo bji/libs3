@@ -62,6 +62,14 @@ static const S3ErrorDetails *errorG = 0;
 #define LOCATION_CONSTRAINT_PREFIX_LEN (sizeof(LOCATION_CONSTRAINT_PREFIX) - 1)
 #define CANNED_ACL_PREFIX "cannedAcl="
 #define CANNED_ACL_PREFIX_LEN (sizeof(CANNED_ACL_PREFIX) - 1)
+#define PREFIX_PREFIX "prefix="
+#define PREFIX_PREFIX_LEN (sizeof(PREFIX_PREFIX) - 1)
+#define MARKER_PREFIX "marker="
+#define MARKER_PREFIX_LEN (sizeof(MARKER_PREFIX) - 1)
+#define DELIMITER_PREFIX "delimiter="
+#define DELIMITER_PREFIX_LEN (sizeof(DELIMITER_PREFIX) - 1)
+#define MAXKEYS_PREFIX "maxkeys="
+#define MAXKEYS_PREFIX_LEN (sizeof(MAXKEYS_PREFIX) - 1)
 
 
 // libs3 mutex stuff ---------------------------------------------------------
@@ -229,7 +237,7 @@ static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
     print_nonnull("Server", server);
     print_nonnull("ETag", eTag);
     if (headers->lastModified > 0) {
-        char timebuf[1024];
+        char timebuf[256];
         // localtime is not thread-safe but we don't care here.  xxx note -
         // localtime doesn't seem to actually do anything, 0 locatime of 0
         // returns EST Unix epoch, it should return the NZST equivalent ...
@@ -266,9 +274,7 @@ static void responseCompleteCallback(S3Status status, int httpResponseCode,
 static S3Status listServiceCallback(const char *ownerId, 
                                     const char *ownerDisplayName,
                                     const char *bucketName,
-                                    int creationDateSeconds,
-                                    int creationDateMilliseconds,
-                                    void *callbackData)
+                                    time_t creationDate, void *callbackData)
 {
     static int ownerPrinted = 0;
 
@@ -279,16 +285,13 @@ static S3Status listServiceCallback(const char *ownerId,
     }
 
     printf("Bucket Name: %s\n", bucketName);
-    if (creationDateSeconds >= 0) {
-        char fmtbuf[256];
-        snprintf(fmtbuf, sizeof(fmtbuf), "%%Y/%%m/%%d %%H:%%M:%%S.%03d %%Z", 
-                 creationDateMilliseconds);
-        char timebuf[1024];
-        time_t d = (time_t) creationDateSeconds;
+    if (creationDate >= 0) {
+        char timebuf[256];
         // localtime is not thread-safe but we don't care here.  xxx note -
         // localtime doesn't seem to actually do anything, 0 locatime of 0
         // returns EST Unix epoch, it should return the NZST equivalent ...
-        strftime(timebuf, sizeof(timebuf), fmtbuf, localtime(&d));
+        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
+                 localtime(&creationDate));
         printf("Creation Date: %s\n", timebuf);
     }
 
@@ -376,7 +379,6 @@ static void test_bucket(int argc, char **argv, int optind)
 
 // create bucket -------------------------------------------------------------
 
-
 static void create_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
@@ -440,10 +442,8 @@ static void create_bucket(int argc, char **argv, int optind)
 
 // delete bucket -------------------------------------------------------------
 
-
 static void delete_bucket(int argc, char **argv, int optind)
 {
-    // delete bucket
     if (optind == argc) {
         fprintf(stderr, "ERROR: Missing parameter: bucket\n");
         usageExit();
@@ -464,6 +464,142 @@ static void delete_bucket(int argc, char **argv, int optind)
     if (statusG != S3StatusOK) {
         printError();
     }
+
+    S3_deinitialize();
+}
+
+
+// list bucket ---------------------------------------------------------------
+
+typedef struct list_bucket_callback_data
+{
+    int isTruncated;
+    char nextMarker[1024];
+} list_bucket_callback_data;
+
+static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
+                                   int contentsCount, 
+                                   const S3ListBucketContent *contents,
+                                   int commonPrefixesCount,
+                                   const char **commonPrefixes,
+                                   void *callbackData)
+{
+    list_bucket_callback_data *data = 
+        (list_bucket_callback_data *) callbackData;
+
+    data->isTruncated = isTruncated;
+    // This is tricky.  S3 doesn't return the NextMarker if there is no
+    // delimiter.  Why, I don't know, since it's still useful for paging
+    // through results.  We want NextMarker to be the last content in the
+    // list, so set it to that if necessary.
+    if (!nextMarker && contentsCount) {
+        nextMarker = contents[contentsCount - 1].key;
+    }
+    if (nextMarker) {
+        snprintf(data->nextMarker, sizeof(data->nextMarker), "%s", nextMarker);
+    }
+    else {
+        data->nextMarker[0] = 0;
+    }
+
+    int i;
+    for (i = 0; i < contentsCount; i++) {
+        const S3ListBucketContent *content = &(contents[i]);
+        printf("\nKey: %s\n", content->key);
+        char timebuf[256];
+        // localtime is not thread-safe but we don't care here.  xxx note -
+        // localtime doesn't seem to actually do anything, 0 locatime of 0
+        // returns EST Unix epoch, it should return the NZST equivalent ...
+        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
+                 localtime(&(content->lastModified)));
+        printf("Last Modified: %s\n", timebuf);
+        printf("ETag: %s\n", content->eTag);
+        printf("Size: %llu\n", content->size);
+        if (content->ownerId) {
+            printf("Owner ID: %s\n", content->ownerId);
+        }
+        if (content->ownerDisplayName) {
+            printf("Owner Display Name: %s\n", content->ownerDisplayName);
+        }
+    }
+
+    for (i = 0; i < commonPrefixesCount; i++) {
+        printf("\nCommon Prefix: %s\n", commonPrefixes[i]);
+    }
+
+    return S3StatusOK;
+}
+
+
+static void list_bucket(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        usageExit();
+    }
+
+    const char *bucketName = argv[optind++];
+
+    const char *prefix = 0, *marker = 0, *delimiter = 0;
+    int maxkeys = 0;
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
+            prefix = &(param[PREFIX_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, MARKER_PREFIX, MARKER_PREFIX_LEN)) {
+            marker = &(param[MARKER_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, DELIMITER_PREFIX, DELIMITER_PREFIX_LEN)) {
+            delimiter = &(param[DELIMITER_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, MAXKEYS_PREFIX, MAXKEYS_PREFIX_LEN)) {
+            char *mk = &(param[MAXKEYS_PREFIX_LEN]);
+            while (*mk) {
+                if (!isdigit(*mk)) {
+                    fprintf(stderr, "ERROR: Nondigit in maxkeys "
+                            "parameter: %c\n", *mk);
+                    usageExit();
+                }
+                maxkeys *= 10;
+                maxkeys += (*mk - '0');
+            }
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit();
+        }
+    }
+    
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3ListBucketHandler listBucketHandler =
+    {
+        { &responseHeadersCallback, &responseCompleteCallback },
+        &listBucketCallback
+    };
+
+    list_bucket_callback_data data;
+
+    do {
+        data.isTruncated = 0;
+        S3_list_bucket(&bucketContext, prefix, marker, delimiter, maxkeys,
+                       0, &listBucketHandler, &data);
+        if (statusG != S3StatusOK) {
+            printError();
+            break;
+        }
+        marker = data.nextMarker;
+    } while (data.isTruncated);
 
     S3_deinitialize();
 }
@@ -524,7 +660,7 @@ int main(int argc, char **argv)
             list_service();
         }
         else {
-            // list bucket
+            list_bucket(argc, argv, optind);
         }
     }
     else if (!strcmp(command, "test")) {

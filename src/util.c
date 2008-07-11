@@ -26,6 +26,10 @@
 #include <string.h>
 #include "util.h"
 
+static const char *urlSafeG = "-_.!~*'()/";
+static const char *hexG = "0123456789ABCDEF";
+
+
 // Convenience utility for making the code look nicer.  Tests a string
 // against a format; only the characters specified in the format are
 // checked (i.e. if the string is longer than the format, the string still
@@ -33,7 +37,7 @@
 // d - is a digit
 // anything else - is that character
 // Returns 0 if the string checks out, nonzero if it does not.
-int checkString(const char *str, const char *format)
+static int checkString(const char *str, const char *format)
 {
     while (*format) {
         if (*format == 'd') {
@@ -51,11 +55,49 @@ int checkString(const char *str, const char *format)
 }
 
 
-int parseIso8601Time(const char *str, time_t *secondsReturn, int *millisReturn)
+int urlEncode(char *dest, const char *src, int maxSrcSize)
+{
+    int len = 0;
+
+    if (src) while (*src) {
+        if (++len > maxSrcSize) {
+            return 0;
+        }
+        const char *urlsafe = urlSafeG;
+        int isurlsafe = 0;
+        while (*urlsafe) {
+            if (*urlsafe == *src) {
+                isurlsafe = 1;
+                break;
+            }
+            urlsafe++;
+        }
+        if (isurlsafe || isalnum(*src)) {
+            *dest++ = *src++;
+        }
+        else if (*src == ' ') {
+            *dest++ = '+';
+            src++;
+        }
+        else {
+            *dest++ = '%';
+            *dest++ = hexG[*src / 16];
+            *dest++ = hexG[*src % 16];
+            src++;
+        }
+    }
+
+    *dest = 0;
+
+    return 1;
+}
+
+
+time_t parseIso8601Time(const char *str)
 {
     // Check to make sure that it has a valid format
     if (checkString(str, "dddd-dd-ddTdd:dd:dd")) {
-        return 0;
+        return -1;
     }
 
 #define nextnum() (((*str - '0') * 10) + (*(str + 1) - '0'))
@@ -86,26 +128,44 @@ int parseIso8601Time(const char *str, time_t *secondsReturn, int *millisReturn)
 
     stm.tm_isdst = -1;
     
-    *secondsReturn = mktime(&stm);
+    time_t ret = mktime(&stm);
 
-    *millisReturn = 0;
+    // Skip the millis
 
     if (*str == '.') {
         str++;
         while (isdigit(*str)) {
-            *millisReturn *= 10;
-            *millisReturn += *str++ - '0';
+            str++;
         }
     }
-    else if (checkString(str, "-dd:dd") || checkString(str, "+dd:dd")) {
+    
+    if (checkString(str, "-dd:dd") || checkString(str, "+dd:dd")) {
         int sign = (*str++ == '-') ? -1 : 1;
         int hours = nextnum();
         str += 3;
         int minutes = nextnum();
-        *secondsReturn += (-sign * (((hours * 60) + minutes) * 60));
+        ret += (-sign * (((hours * 60) + minutes) * 60));
     }
     // Else it should be Z to be a conformant time string, but we just assume
     // that it is rather than enforcing that
 
-    return 1;
+    return ret;
+}
+
+
+uint64_t parseUnsignedInt(const char *str)
+{
+    // Skip whitespace
+    while (isblank(*str)) {
+        str++;
+    }
+
+    uint64_t ret = 0;
+
+    while (isdigit(*str)) {
+        ret *= 10;
+        ret += (*str++ - '0');
+    }
+
+    return ret;
 }
