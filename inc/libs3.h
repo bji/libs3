@@ -55,15 +55,42 @@
  ************************************************************************** **/
 
 /**
+ * This is the hostname that all S3 requests will go through; virtual-host
+ * style requests will prepend the bucket name to this host name, and
+ * path-style requests will use this hostname directly
+ **/
+#define S3_HOSTNAME "s3.amazonaws.com"
+
+
+/**
  * S3_MAX_KEY_SIZE is the maximum size of keys that Amazon S3 supports.
  **/
 #define S3_MAX_KEY_SIZE                 1024
+
 
 /**
  * S3_MAX_META_HEADERS_SIZE is the maximum number of bytes allowed for
  * x-amz-meta header names and values in any request passed to Amazon S3
  **/
 #define S3_MAX_META_HEADER_SIZE         2048
+
+
+/**
+ * S3_META_HEADER_NAME_PREFIX is the prefix of an S3 "meta header"
+ **/
+#define S3_META_HEADER_NAME_PREFIX "x-amz-meta-"
+
+
+/**
+ * S3_MAX_META_HEADER_COUNT is the maximum number of x-amz-meta- headers that
+ * could be included in a request to S3.  The smallest meta header is
+ * "x-amz-meta-n: v".  Since S3 doesn't count the ": " against the total, the
+ * smallest amount of data to count for a header would be the length of
+ * "x-amz-meta-nv".
+ **/
+#define S3_MAX_META_HEADER_COUNT \
+    (S3_MAX_META_HEADER_SIZE / (sizeof(S3_META_HEADER_NAME_PREFIX "nv") - 1))
+
 
 /**
  * S3_ACL_GRANT_MAXCOUNT is the maximum number of ACL grants that may be
@@ -516,11 +543,11 @@ typedef struct S3RequestHeaders
      **/
     const char *contentEncoding;
     /**
-     * If present, this gives an expiration date for the content.  This
+     * If >= 0, this gives an expiration date for the content.  This
      * information is typically only delivered to users who download the
      * content via a web browser.
      **/
-    const time_t *expires;
+    time_t expires;
     /**
      * This identifies the "canned ACL" that should be used for this object.
      * The default (0) gives only the owner of the object access to it.
@@ -545,13 +572,9 @@ typedef struct S3RequestHeaders
      **/
     int metaHeadersCount;
     /**
-     * Each zero-terminated string here is a single metadata header to be
-     * applied to the object.  Each of these must be of the form
-     * x-amz-meta-${METANAME}:${VALUE}, where the ${METANAME} and ${VALUE} are
-     * entirely up to the application.
+     * These are the meta headers to pass to S3.
      **/
-    // xxx todo - convert to an array of S3MetaHeader structures
-    const char **metaHeaders;
+    const S3NameValue *metaHeaders;
 } S3RequestHeaders;
 
 
@@ -673,9 +696,8 @@ typedef S3Status (S3ListBucketCallback)(int isTruncated,
  *        service as the contents of the object being put
  * @return S3Status???
  **/
-typedef S3Status (S3PutObjectCallback)(int *bufferSizeReturn,
-                                       const char **bufferReturn,
-                                       void *callbackData);
+typedef int (S3PutObjectDataCallback)(int bufferSize, char *buffer,
+                                      void *callbackData);
 
 
 /**
@@ -691,8 +713,8 @@ typedef S3Status (S3PutObjectCallback)(int *bufferSizeReturn,
  * @param bufferSize gives the number of bytes in buffer
  * @param buffer is the data being passed into the callback
  **/
-typedef S3Status (S3GetObjectCallback)(int bufferSize, const char *buffer,
-                                       void *callbackData);
+typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
+                                           void *callbackData);
                                        
 
 /** **************************************************************************
@@ -861,7 +883,7 @@ typedef struct S3PutObjectHandler
 {
     S3ResponseHandler responseHandler;
 
-    S3PutObjectCallback *putObjectCallback;
+    S3PutObjectDataCallback *putObjectDataCallback;
 } S3PutObjectHandler;
 
 
@@ -869,7 +891,7 @@ typedef struct S3GetObjectHandler
 {
     S3ResponseHandler responseHandler;
 
-    S3GetObjectCallback *getObjectCallback;
+    S3GetObjectDataCallback *getObjectDataCallback;
 } S3GetObjectHandler;
 
 

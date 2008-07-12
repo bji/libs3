@@ -30,24 +30,12 @@
 #include "libs3.h"
 
 
-// As specified in S3 documntation
-#define META_HEADER_NAME_PREFIX "x-amz-meta-"
-#define HOSTNAME "s3.amazonaws.com"
-
-
 // Derived from S3 documentation
-
-// This is the maximum number of x-amz-meta- headers that could be included in
-// a request to S3.  The smallest meta header is" x-amz-meta-n: v".  Since S3
-// doesn't count the ": " against the total, the smallest amount of data to
-// count for a header would be the length of "x-amz-meta-nv".
-#define MAX_META_HEADER_COUNT \
-    (S3_MAX_META_HEADER_SIZE / (sizeof(META_HEADER_NAME_PREFIX "nv") - 1))
 
 // This is the maximum number of bytes needed in a "compacted meta header"
 // buffer, which is a buffer storing all of the compacted meta headers.
 #define COMPACTED_META_HEADER_BUFFER_SIZE \
-    (MAX_META_HEADER_COUNT * sizeof(META_HEADER_NAME_PREFIX "n: v"))
+    (S3_MAX_META_HEADER_COUNT * sizeof(S3_META_HEADER_NAME_PREFIX "n: v"))
 
 // Maximum url encoded key size; since every single character could require
 // URL encoding, it's 3 times the size of a key (since each url encoded
@@ -58,7 +46,7 @@
 // https://s3.amazonaws.com/${BUCKET}/${KEY}?acl
 // 255 is the maximum bucket length
 #define MAX_URI_SIZE \
-    ((sizeof("https://" HOSTNAME "/") - 1) + 255 + 1 + \
+    ((sizeof("https://" S3_HOSTNAME "/") - 1) + 255 + 1 +       \
      MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent" - 1)) + 1)
 
 // Maximum size of a canonicalized resource

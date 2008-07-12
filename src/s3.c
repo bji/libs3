@@ -32,6 +32,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "libs3.h"
 
 
@@ -70,6 +73,25 @@ static const S3ErrorDetails *errorG = 0;
 #define DELIMITER_PREFIX_LEN (sizeof(DELIMITER_PREFIX) - 1)
 #define MAXKEYS_PREFIX "maxkeys="
 #define MAXKEYS_PREFIX_LEN (sizeof(MAXKEYS_PREFIX) - 1)
+#define FILENAME_PREFIX "filename="
+#define FILENAME_PREFIX_LEN (sizeof(FILENAME_PREFIX) - 1)
+#define CONTENT_LENGTH_PREFIX "contentLength="
+#define CONTENT_LENGTH_PREFIX_LEN (sizeof(CONTENT_LENGTH_PREFIX) - 1)
+#define CACHE_CONTROL_PREFIX "cacheControl="
+#define CACHE_CONTROL_PREFIX_LEN (sizeof(CACHE_CONTROL_PREFIX) - 1)
+#define CONTENT_TYPE_PREFIX "contentType="
+#define CONTENT_TYPE_PREFIX_LEN (sizeof(CONTENT_TYPE_PREFIX) - 1)
+#define MD5_PREFIX "md5="
+#define MD5_PREFIX_LEN (sizeof(MD5_PREFIX) - 1)
+#define CONTENT_DISPOSITION_FILENAME_PREFIX "contentDispositionFilename="
+#define CONTENT_DISPOSITION_FILENAME_PREFIX_LEN \
+    (sizeof(CONTENT_DISPOSITION_FILENAME_PREFIX) - 1)
+#define CONTENT_ENCODING_PREFIX "contentEncoding="
+#define CONTENT_ENCODING_PREFIX_LEN (sizeof(CONTENT_ENCODING_PREFIX) - 1)
+#define VALID_DURATION_PREFIX "validDuration="
+#define VALID_DURATION_PREFIX_LEN (sizeof(VALID_DURATION_PREFIX) - 1)
+#define X_AMZ_META_PREFIX "x-amz-meta-"
+#define X_AMZ_META_PREFIX_LEN (sizeof(X_AMZ_META_PREFIX) - 1)
 
 
 // libs3 mutex stuff ---------------------------------------------------------
@@ -163,42 +185,152 @@ static void printError()
 }
 
 
-static void usageExit()
+static void usageExit(FILE *out)
 {
-    fprintf(stderr,
+    fprintf(out,
 " Options:\n"
 "\n"
-"  Command Line:\n"
+"   Command Line:\n"
 "\n"   
-"  -p : use path-style URIs (--path-style)\n"
-"  -u : unencrypted (use HTTP instead of HTTPS) (--https)\n"
-"  -s : show response headers (--show-headers)\n"
+"   -p : use path-style URIs (--path-style)\n"
+"   -u : unencrypted (use HTTP instead of HTTPS) (--https)\n"
+"   -s : show response headers (--show-headers)\n"
 "\n"
-"  Environment:\n"
+"   Environment:\n"
 "\n"
-"  S3_ACCESS_KEY_ID : S3 access key ID\n"
-"  S3_SECRET_ACCESS_KEY : S3 secret access key\n"
+"   S3_ACCESS_KEY_ID : S3 access key ID\n"
+"   S3_SECRET_ACCESS_KEY : S3 secret access key\n"
 "\n" 
-"  Commands:\n"
+" Commands:\n"
 "\n"
-"  list\n"
-"  test <bucket>\n"
-"  create <bucket> [cannedAcl, locationConstraint]\n"
-"  delete <bucket>\n"
-"  list <bucket> [prefix, marker, delimiter, maxkeys]\n"
-"  put <bucket>/<key> [filename, cacheControl, contentType, md5,\n"
-"                      contentDispositionFilename, contentEncoding,\n"
-"                      expires, [x-amz-meta-...]]\n"
-"  copy <sourcebucket>/<sourcekey> <destbucket>/<destkey> [headers]\n"
-"  get <buckey>/<key> [filename (required if -r is used), if-modified-since,\n"
-"                      if-unmodified-since, if-match, if-not-match,\n"
-"                      range-start, range-end]\n"
-"  head <bucket>/<key>\n"
-"  delete <bucket>/<key>\n"
-"  todo : acl stuff\n"
+"   help\n"            
+"   list\n"
+"   test <bucket>\n"
+"   create <bucket> [cannedAcl, locationConstraint]\n"
+"   delete <bucket>\n"
+"   list <bucket> [prefix, marker, delimiter, maxkeys]\n"
+"   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
+"                       md5, contentDispositionFilename, contentEncoding,\n"
+"                       validDuration, cannedAcl, [x-amz-meta-...]]\n"
+"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey> [headers]\n"
+"   get <buckey>/<key> [filename (required if -r is used), if-modified-since,\n"
+"                       if-unmodified-since, if-match, if-not-match,\n"
+"                       range-start, range-end]\n"
+"   head <bucket>/<key>\n"
+"   delete <bucket>/<key>\n"
+"   todo : acl stuff\n"
 "\n");
 
     exit(-1);
+}
+
+
+static uint64_t convertInt(const char *str, const char *paramName)
+{
+    uint64_t ret = 0;
+
+    while (*str) {
+        if (!isdigit(*str)) {
+            fprintf(stderr, "ERROR: Nondigit in %s parameter: %c\n", 
+                    paramName, *str);
+            usageExit(stderr);
+        }
+        ret *= 10;
+        ret += (*str++ - '0');
+    }
+
+    return ret;
+}
+
+
+typedef struct growbuffer
+{
+    // The total number of bytes, and the start byte
+    int size;
+    // The start byte
+    int start;
+    // The blocks
+    char data[64 * 1024];
+    struct growbuffer *prev, *next;
+} growbuffer;
+
+
+// returns nonzero on success, zero on out of memory
+static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
+{
+    while (dataLen) {
+        growbuffer *buf = *gb ? (*gb)->prev : 0;
+        if (!buf || (buf->size == sizeof(buf->data))) {
+            buf = (growbuffer *) malloc(sizeof(growbuffer));
+            if (!buf) {
+                return 0;
+            }
+            buf->size = 0;
+            buf->start = 0;
+            if (*gb) {
+                buf->prev = (*gb)->prev;
+                buf->next = *gb;
+                (*gb)->prev->next = buf;
+                (*gb)->prev = buf;
+            }
+            else {
+                buf->prev = buf->next = buf;
+                *gb = buf;
+            }
+        }
+
+        int toCopy = (sizeof(buf->data) - buf->size);
+        if (toCopy > dataLen) {
+            toCopy = dataLen;
+        }
+
+        memcpy(&(buf->data[buf->size]), data, toCopy);
+        
+        buf->size += toCopy, data += toCopy, dataLen -= toCopy;
+    }
+
+    return 1;
+}
+
+
+static void growbuffer_read(growbuffer **gb, int amt, int *amtReturn, 
+                            char *buffer)
+{
+    *amtReturn = 0;
+
+    growbuffer *buf = *gb;
+
+    if (!buf) {
+        return;
+    }
+
+    *amtReturn = (buf->size > amt) ? amt : buf->size;
+
+    memcpy(buffer, &(buf->data[buf->start]), *amtReturn);
+    
+    buf->start += *amtReturn, buf->size -= *amtReturn;
+
+    if (buf->size == 0) {
+        if (buf->next == buf) {
+            *gb = 0;
+        }
+        else {
+            *gb = buf->next;
+        }
+        free(buf);
+    }
+}
+
+
+static void growbuffer_destroy(growbuffer *gb)
+{
+    growbuffer *start = gb;
+
+    while (gb) {
+        growbuffer *next = gb->next;
+        free(gb);
+        gb = (next == start) ? 0 : next;
+    }
 }
 
 
@@ -327,14 +459,14 @@ static void test_bucket(int argc, char **argv, int optind)
     // test bucket
     if (optind == argc) {
         fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-        usageExit();
+        usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
 
     if (optind != argc) {
         fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
-        usageExit();
+        usageExit(stderr);
     }
 
     S3_init();
@@ -383,7 +515,7 @@ static void create_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
         fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-        usageExit();
+        usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
@@ -396,8 +528,7 @@ static void create_bucket(int argc, char **argv, int optind)
                      LOCATION_CONSTRAINT_PREFIX_LEN)) {
             locationConstraint = &(param[LOCATION_CONSTRAINT_PREFIX_LEN]);
         }
-        else if (!strncmp(param, CANNED_ACL_PREFIX, 
-                          CANNED_ACL_PREFIX_LEN)) {
+        else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
             char *val = &(param[CANNED_ACL_PREFIX_LEN]);
             if (!strcmp(val, "private")) {
                 cannedAcl = S3CannedAclPrivate;
@@ -413,12 +544,12 @@ static void create_bucket(int argc, char **argv, int optind)
             }
             else {
                 fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
-                usageExit();
+                usageExit(stderr);
             }
         }
         else {
             fprintf(stderr, "ERROR: Unknown param: %s\n", param);
-            usageExit();
+            usageExit(stderr);
         }
     }
 
@@ -446,7 +577,7 @@ static void delete_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
         fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-        usageExit();
+        usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
@@ -476,6 +607,7 @@ typedef struct list_bucket_callback_data
     int isTruncated;
     char nextMarker[1024];
 } list_bucket_callback_data;
+
 
 static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                                    int contentsCount, 
@@ -535,7 +667,7 @@ static void list_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
         fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-        usageExit();
+        usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
@@ -554,20 +686,11 @@ static void list_bucket(int argc, char **argv, int optind)
             delimiter = &(param[DELIMITER_PREFIX_LEN]);
         }
         else if (!strncmp(param, MAXKEYS_PREFIX, MAXKEYS_PREFIX_LEN)) {
-            char *mk = &(param[MAXKEYS_PREFIX_LEN]);
-            while (*mk) {
-                if (!isdigit(*mk)) {
-                    fprintf(stderr, "ERROR: Nondigit in maxkeys "
-                            "parameter: %c\n", *mk);
-                    usageExit();
-                }
-                maxkeys *= 10;
-                maxkeys += (*mk - '0');
-            }
+            maxkeys = convertInt(&(param[MAXKEYS_PREFIX_LEN]), "maxkeys");
         }
         else {
             fprintf(stderr, "ERROR: Unknown param: %s\n", param);
-            usageExit();
+            usageExit(stderr);
         }
     }
     
@@ -605,7 +728,263 @@ static void list_bucket(int argc, char **argv, int optind)
 }
 
 
-// main ----------------------------------------------------------------------
+// put object -----------------------------------------------------------------
+
+typedef struct put_object_callback_data
+{
+    FILE *infile;
+    growbuffer *gb;
+    uint64_t contentLength;
+    char readBuffer[64 * 1024];
+} put_object_callback_data;
+
+
+static int putObjectCallback(int bufferSize, char *buffer, void *callbackData)
+{
+    put_object_callback_data *data = (put_object_callback_data *) callbackData;
+    
+    int ret = 0;
+
+    if (data->contentLength) {
+        int toRead = ((data->contentLength > bufferSize) ?
+                      bufferSize : data->contentLength);
+        if (data->infile) {
+            ret = fread(data->readBuffer, 1, toRead, data->infile);
+        }
+        else if (data->gb) {
+            growbuffer_read(&(data->gb), data->contentLength, &ret,
+                            data->readBuffer);
+        }
+    }
+
+    data->contentLength -= ret;
+
+    return ret;
+}
+
+
+static void put_object(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        usageExit(stderr);
+    }
+
+    // Split bucket/key
+    char *slash = argv[optind];
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    if (!*slash || !*(slash + 1)) {
+        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        usageExit(stderr);
+    }
+    *slash++ = 0;
+
+    const char *bucketName = argv[optind++];
+    const char *key = slash;
+
+    const char *filename = 0;
+    uint64_t contentLength = 0;
+    const char *cacheControl = 0, *contentType = 0, *md5 = 0;
+    const char *contentDispositionFilename = 0, *contentEncoding = 0;
+    time_t expires = -1;
+    S3CannedAcl cannedAcl = S3CannedAclPrivate;
+    int metaHeadersCount = 0;
+    S3NameValue metaHeaders[S3_MAX_META_HEADER_COUNT];
+
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, CONTENT_LENGTH_PREFIX, 
+                          CONTENT_LENGTH_PREFIX_LEN)) {
+            contentLength = convertInt(&(param[CONTENT_LENGTH_PREFIX_LEN]),
+                                       "contentLength");
+            if (contentLength > (5LL * 1024 * 1024 * 1024)) {
+                fprintf(stderr, "ERROR: contentLength must be no greater "
+                        "than 5 GB\n");
+                usageExit(stderr);
+            }
+        }
+        else if (!strncmp(param, CACHE_CONTROL_PREFIX, 
+                          CACHE_CONTROL_PREFIX_LEN)) {
+            cacheControl = &(param[CACHE_CONTROL_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, CONTENT_TYPE_PREFIX, 
+                          CONTENT_TYPE_PREFIX_LEN)) {
+            contentType = &(param[CONTENT_TYPE_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, MD5_PREFIX, MD5_PREFIX_LEN)) {
+            md5 = &(param[MD5_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX, 
+                          CONTENT_DISPOSITION_FILENAME_PREFIX_LEN)) {
+            contentDispositionFilename = 
+                &(param[CONTENT_DISPOSITION_FILENAME_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, CONTENT_ENCODING_PREFIX, 
+                          CONTENT_ENCODING_PREFIX_LEN)) {
+            contentEncoding = &(param[CONTENT_ENCODING_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, VALID_DURATION_PREFIX, 
+                          VALID_DURATION_PREFIX_LEN)) {
+            expires = (time(NULL) + 
+                       convertInt(&(param[VALID_DURATION_PREFIX_LEN]), 
+                                  "validDuration"));
+        }
+        else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
+            if (metaHeadersCount == S3_MAX_META_HEADER_COUNT) {
+                fprintf(stderr, "ERROR: Too many x-amz-meta- headers, "
+                        "limit %d: %s\n", S3_MAX_META_HEADER_COUNT, param);
+                usageExit(stderr);
+            }
+            char *name = &(param[X_AMZ_META_PREFIX_LEN]);
+            char *value = name;
+            while (*value && (*value != '=')) {
+                value++;
+            }
+            if (!*value || !*(value + 1)) {
+                fprintf(stderr, "ERROR: Invalid parameter: %s\n", param);
+                usageExit(stderr);
+            }
+            *value++ = 0;
+            metaHeaders[metaHeadersCount].name = name;
+            metaHeaders[metaHeadersCount++].value = value;
+        }
+        else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
+            char *val = &(param[CANNED_ACL_PREFIX_LEN]);
+            if (!strcmp(val, "private")) {
+                cannedAcl = S3CannedAclPrivate;
+            }
+            else if (!strcmp(val, "public-read")) {
+                cannedAcl = S3CannedAclPublicRead;
+            }
+            else if (!strcmp(val, "public-read-write")) {
+                cannedAcl = S3CannedAclPublicReadWrite;
+            }
+            else if (!strcmp(val, "authenticated-read")) {
+                cannedAcl = S3CannedAclAuthenticatedRead;
+            }
+            else {
+                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                usageExit(stderr);
+            }
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3RequestHeaders requestHeaders =
+    {
+        contentType,
+        md5,
+        cacheControl,
+        contentDispositionFilename,
+        contentEncoding,
+        expires,
+        cannedAcl,
+        0,
+        0,
+        metaHeadersCount,
+        metaHeaders
+    };
+
+    S3PutObjectHandler listBucketHandler =
+    {
+        { &responseHeadersCallback, &responseCompleteCallback },
+        &putObjectCallback
+    };
+
+    put_object_callback_data data;
+
+    data.infile = 0;
+    data.gb = 0;
+
+    if (filename) {
+        if (!contentLength) {
+            struct stat statbuf;
+            // Stat the file to get its length
+            if (stat(filename, &statbuf) == -1) {
+                fprintf(stderr, "ERROR: Failed to stat file %s: ", filename);
+                perror(0);
+                exit(-1);
+            }
+            contentLength = statbuf.st_size;
+        }
+        // Open the file
+        if (!(data.infile = fopen(filename, "r"))) {
+            fprintf(stderr, "ERROR: Failed to open input file %s: ", filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else {
+        // Read from stdin.  If contentLength is not provided, we have
+        // to read it all in to get contentLength.
+        if (!contentLength) {
+            // Read all if stdin to get the data
+            char buffer[64 * 1024];
+            while (1) {
+                int amtRead = fread(buffer, 1, sizeof(buffer), stdin);
+                if (amtRead == 0) {
+                    break;
+                }
+                if (!growbuffer_append(&(data.gb), buffer, amtRead)) {
+                    fprintf(stderr, "ERROR: Out of memory while reading "
+                            "stdin\n");
+                    exit(-1);
+                }
+                contentLength += amtRead;
+                if (amtRead < sizeof(buffer)) {
+                    break;
+                }
+            }
+        }
+        else {
+            data.infile = stdin;
+        }
+    }
+
+    data.contentLength = contentLength;
+
+    S3_put_object(&bucketContext, key, contentLength, &requestHeaders, 0,
+                  &listBucketHandler, &data);
+
+    if (data.infile) {
+        fclose(data.infile);
+    }
+    else if (data.gb) {
+        growbuffer_destroy(data.gb);
+    }
+
+    if (statusG != S3StatusOK) {
+        printError();
+    }
+    else if (data.contentLength) {
+        fprintf(stderr, "ERROR: Failed to read remaining %llu bytes from "
+                "input\n", data.contentLength);
+    }
+
+    S3_deinitialize();
+}
+
+
+// main -----------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
@@ -632,7 +1011,7 @@ int main(int argc, char **argv)
         default:
             fprintf(stderr, "ERROR: Unknown options: -%c\n", c);
             // Usage exit
-            usageExit();
+            usageExit(stderr);
         }
     }
 
@@ -650,12 +1029,15 @@ int main(int argc, char **argv)
     // The first non-option argument gives the operation to perform
     if (optind == argc) {
         fprintf(stderr, "\nERROR: Missing argument: command\n\n");
-        usageExit();
+        usageExit(stderr);
     }
 
     const char *command = argv[optind++];
-
-    if (!strcmp(command, "list")) {
+    
+    if (!strcmp(command, "help")) {
+        usageExit(stdout);
+    }
+    else if (!strcmp(command, "list")) {
         if (optind == argc) {
             list_service();
         }
@@ -673,6 +1055,7 @@ int main(int argc, char **argv)
         delete_bucket(argc, argv, optind);
     }
     else if (!strcmp(command, "put")) {
+        put_object(argc, argv, optind);
     }
     else if (!strcmp(command, "copy")) {
     }

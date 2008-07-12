@@ -47,7 +47,7 @@ typedef struct ResponseHeadersHandler
                        COMPACTED_META_HEADER_BUFFER_SIZE);
 
     // Response meta headers
-    S3NameValue responseMetaHeaders[MAX_META_HEADER_COUNT];
+    S3NameValue responseMetaHeaders[S3_MAX_META_HEADER_COUNT];
 } ResponseHeadersHandler;
 
 

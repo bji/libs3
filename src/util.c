@@ -36,7 +36,7 @@ static const char *hexG = "0123456789ABCDEF";
 // checks out ok).  Format characters are:
 // d - is a digit
 // anything else - is that character
-// Returns 0 if the string checks out, nonzero if it does not.
+// Returns nonzero the string checks out, zero if it does not.
 static int checkString(const char *str, const char *format)
 {
     while (*format) {
@@ -96,7 +96,7 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
 time_t parseIso8601Time(const char *str)
 {
     // Check to make sure that it has a valid format
-    if (checkString(str, "dddd-dd-ddTdd:dd:dd")) {
+    if (!checkString(str, "dddd-dd-ddTdd:dd:dd")) {
         return -1;
     }
 

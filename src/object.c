@@ -23,7 +23,10 @@
  ************************************************************************** **/
 
 #include "libs3.h"
+#include "request.h"
 
+
+// put object -----------------------------------------------------------------
 
 void S3_put_object(S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
@@ -31,6 +34,29 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
                    S3RequestContext *requestContext,
                    S3PutObjectHandler *handler, void *callbackData)
 {
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypePUT,                         // httpRequestType
+        bucketContext->protocol,                    // protocol
+        bucketContext->uriStyle,                    // uriStyle
+        bucketContext->bucketName,                  // bucketName
+        key,                                        // key
+        0,                                          // queryParams
+        0,                                          // subResource
+        bucketContext->accessKeyId,                 // accessKeyId
+        bucketContext->secretAccessKey,             // secretAccessKey
+        requestHeaders,                             // requestHeaders
+        handler->responseHandler.headersCallback,   // headersCallback
+        handler->putObjectDataCallback,             // toS3Callback
+        contentLength,                              // toS3CallbackTotalSize
+        0,                                          // fromS3Callback
+        handler->responseHandler.completeCallback,  // completeCallback
+        callbackData                                // callbackData
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
 }
 
 

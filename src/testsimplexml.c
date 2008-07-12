@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-#include "private.h"
+#include "simplexml.h"
 
 static S3Status simpleXmlCallback(const char *elementPath, const char *data,
                                   int dataLen, void *callbackData)

@@ -103,12 +103,12 @@ static S3Status headersCallback(const S3ResponseHeaders *responseHeaders,
 }
 
 
-static int dataCallback(char *buffer, int bufferSize, void *callbackData)
+static S3Status dataCallback(int bufferSize, const char *buffer,
+                             void *callbackData)
 {
     XmlCallbackData *cbData = (XmlCallbackData *) callbackData;
 
-    return ((simplexml_add(&(cbData->simpleXml), buffer, 
-                           bufferSize) == S3StatusOK) ? bufferSize : 0);
+    return simplexml_add(&(cbData->simpleXml), buffer, bufferSize);
 }
 
 

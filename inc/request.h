@@ -30,32 +30,6 @@
 #include "response_headers_handler.h"
 #include "util.h"
 
-/**
- * Any return value other than S3StatusOK will stop the request processing
- * immediately
- **/
-typedef S3Status (RequestHeadersCallback)
-    (const S3ResponseHeaders *responseHeaders, void *callbackData);
-
-/**
- * As a 'read' function:
- *   - Fill [buffer] with up to [bufferSize] bytes, return the number of
- *     bytes actually filled; returning 0 means EOF.
- *
- * As a 'write' function:
- *   - [bufferSize] bytes are supplied in [buffer].  Return anything other
- *     than [bufferSize] to stop the request processing immediately
- **/
-typedef int (RequestDataCallback)
-    (char *buffer, int bufferSize, void *callbackData);
-
-/**
- **/
-typedef void (RequestCompleteCallback)
-    (S3Status requestStatus, int httpResponseCode, 
-     const S3ErrorDetails *s3ErrorDetails, void *callbackData);
-                                          
-
 // Describes a type of HTTP request (these are our supported HTTP "verbs")
 typedef enum
 {
@@ -102,21 +76,22 @@ typedef struct RequestParams
     // Request headers
     const S3RequestHeaders *requestHeaders;
 
-    // Callback to be made when headers are available.  May not be called.
-    RequestHeadersCallback *headersCallback;
+    // Callback to be made when headers are available.  Might not be called.
+    S3ResponseHeadersCallback *headersCallback;
 
-    // Callback to be made to supply data to send to S3.  May not be called.
-    RequestDataCallback *toS3Callback;
+    // Callback to be made to supply data to send to S3.  Might not be called.
+    S3PutObjectDataCallback *toS3Callback;
 
     // Number of bytes total that readCallback will supply
     int64_t toS3CallbackTotalSize;
 
-    // Callback to be made that supplies data read from S3.  May not be called.
-    RequestDataCallback *fromS3Callback;
+    // Callback to be made that supplies data read from S3.
+    // Might not be called.
+    S3GetObjectDataCallback *fromS3Callback;
 
     // Callback to be made when request is complete.  This will *always* be
     // called.
-    RequestCompleteCallback *completeCallback;
+    S3ResponseCompleteCallback *completeCallback;
 
     // Data passed to the callbacks
     void *callbackData;
@@ -143,18 +118,22 @@ typedef struct Request
     // The HTTP response code that S3 sent back for this request
     int httpResponseCode;
 
-    // Callback to be made when headers are available.  May not be called.
-    RequestHeadersCallback *headersCallback;
+    // Callback to be made when headers are available.  Might not be called.
+    S3ResponseHeadersCallback *headersCallback;
 
-    // Callback to be made to supply data to send to S3.  May not be called.
-    RequestDataCallback *toS3Callback;
+    // Callback to be made to supply data to send to S3.  Might not be called.
+    S3PutObjectDataCallback *toS3Callback;
 
-    // Callback to be made that supplies data read from S3.  May not be called.
-    RequestDataCallback *fromS3Callback;
+    // Number of bytes total that readCallback will supply
+    int64_t toS3CallbackTotalSize;
+
+    // Callback to be made that supplies data read from S3.
+    // Might not be called.
+    S3GetObjectDataCallback *fromS3Callback;
 
     // Callback to be made when request is complete.  This will *always* be
     // called.
-    RequestCompleteCallback *completeCallback;
+    S3ResponseCompleteCallback *completeCallback;
 
     // Data passed to the callbacks
     void *callbackData;

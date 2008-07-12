@@ -70,13 +70,12 @@ static S3Status testBucketHeadersCallback
 }
 
 
-static int testBucketDataCallback(char *buffer, int bufferSize,
-                                  void *callbackData)
+static S3Status testBucketDataCallback(int bufferSize, const char *buffer,
+                                       void *callbackData)
 {
     TestBucketData *tbData = (TestBucketData *) callbackData;
 
-    return ((simplexml_add(&(tbData->simpleXml), buffer, 
-                           bufferSize) == S3StatusOK) ? bufferSize : 0);
+    return simplexml_add(&(tbData->simpleXml), buffer, bufferSize);
 }
 
 
@@ -182,7 +181,7 @@ static S3Status createBucketHeadersCallback
 }
 
 
-static int createBucketDataCallback(char *buffer, int bufferSize,
+static int createBucketDataCallback(int bufferSize, char *buffer, 
                                     void *callbackData)
 {
     CreateBucketData *cbData = (CreateBucketData *) callbackData;
@@ -194,7 +193,7 @@ static int createBucketDataCallback(char *buffer, int bufferSize,
     int remaining = (cbData->docLen - cbData->docBytesWritten);
 
     int toCopy = bufferSize > remaining ? remaining : bufferSize;
-
+    
     if (!toCopy) {
         return 0;
     }
@@ -397,7 +396,9 @@ static void initialize_list_bucket_contents(ListBucketContents *contents)
     string_buffer_initialize(contents->ownerDisplayName);
 }
 
+// We read up to 32 Contents at a time
 #define MAX_CONTENTS 32
+// We read up to 8 CommonPrefixes at a time
 #define MAX_COMMON_PREFIXES 8
 
 typedef struct ListBucketData
@@ -412,11 +413,9 @@ typedef struct ListBucketData
     string_buffer(isTruncated, 64);
     string_buffer(nextMarker, 1024);
 
-    // We read up to 32 Contents at a time
     int contentsCount;
     ListBucketContents contents[MAX_CONTENTS];
 
-    // We read up to 8 CommonPrefixes at a time
     int commonPrefixesCount;
     char commonPrefixes[MAX_COMMON_PREFIXES][1024];
     int commonPrefixLens[MAX_COMMON_PREFIXES];
@@ -578,13 +577,12 @@ static S3Status listBucketHeadersCallback
 }
 
 
-static int listBucketDataCallback(char *buffer, int bufferSize,
-                                  void *callbackData)
+static S3Status listBucketDataCallback(int bufferSize, const char *buffer, 
+                                       void *callbackData)
 {
     ListBucketData *lbData = (ListBucketData *) callbackData;
-
-    return ((simplexml_add(&(lbData->simpleXml), buffer, 
-                           bufferSize) == S3StatusOK) ? bufferSize : 0);
+    
+    return simplexml_add(&(lbData->simpleXml), buffer, bufferSize);
 }
 
 
