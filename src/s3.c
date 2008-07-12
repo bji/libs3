@@ -735,7 +735,6 @@ typedef struct put_object_callback_data
     FILE *infile;
     growbuffer *gb;
     uint64_t contentLength;
-    char readBuffer[64 * 1024];
 } put_object_callback_data;
 
 
@@ -749,11 +748,10 @@ static int putObjectCallback(int bufferSize, char *buffer, void *callbackData)
         int toRead = ((data->contentLength > bufferSize) ?
                       bufferSize : data->contentLength);
         if (data->infile) {
-            ret = fread(data->readBuffer, 1, toRead, data->infile);
+            ret = fread(buffer, 1, toRead, data->infile);
         }
         else if (data->gb) {
-            growbuffer_read(&(data->gb), data->contentLength, &ret,
-                            data->readBuffer);
+            growbuffer_read(&(data->gb), data->contentLength, &ret, buffer);
         }
     }
 
