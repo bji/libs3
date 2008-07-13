@@ -765,7 +765,7 @@ static S3Status setup_curl(Request *request,
     }
 
     // Debugging only
-    curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
+    // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
     
     // Set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
