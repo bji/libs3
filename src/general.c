@@ -196,6 +196,10 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ContentDispositionFilenameTooLong);
         handlecase(BadContentEncoding);
         handlecase(ContentEncodingTooLong);
+        handlecase(BadIfMatchETag);
+        handlecase(IfMatchETagTooLong);
+        handlecase(BadIfNotMatchETag);
+        handlecase(IfNotMatchETagTooLong);
         handlecase(HeadersTooLong);
         handlecase(KeyTooLong);
         handlecase(UriTooLong);

@@ -165,22 +165,25 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeGET,                 // httpRequestType
-        protocol,                           // protocol
-        S3UriStylePath,                     // uriStyle
-        0,                                  // bucketName
-        0,                                  // key
-        0,                                  // queryParams
-        0,                                  // subResource
-        accessKeyId,                        // accessKeyId
-        secretAccessKey,                    // secretAccessKey
-        0,                                  // requestProperties
-        &propertiesCallback,                // propertiesCallback
-        0,                                  // toS3Callback
-        0,                                  // toS3CallbackTotalSize
-        &dataCallback,                      // fromS3Callback
-        &completeCallback,                  // completeCallback
-        data                                // callbackData
+        HttpRequestTypeGET,                           // httpRequestType
+        protocol,                                     // protocol
+        S3UriStylePath,                               // uriStyle
+        0,                                            // bucketName
+        0,                                            // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        accessKeyId,                                  // accessKeyId
+        secretAccessKey,                              // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // requestProperties
+        &propertiesCallback,                          // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        &dataCallback,                                // fromS3Callback
+        &completeCallback,                            // completeCallback
+        data                                          // callbackData
     };
 
     // Perform the request

@@ -137,22 +137,25 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeGET,                 // httpRequestType
-        protocol,                           // protocol
-        uriStyle,                           // uriStyle
-        bucketName,                         // bucketName
-        0,                                  // key
-        0,                                  // queryParams
-        "?location",                        // subResource
-        accessKeyId,                        // accessKeyId
-        secretAccessKey,                    // secretAccessKey
-        0,                                  // requestProperties
-        &testBucketPropertiesCallback,      // propertiesCallback
-        0,                                  // toS3Callback
-        0,                                  // toS3CallbackTotalSize
-        &testBucketDataCallback,            // fromS3Callback
-        &testBucketCompleteCallback,        // completeCallback
-        tbData                              // callbackData
+        HttpRequestTypeGET,                           // httpRequestType
+        protocol,                                     // protocol
+        uriStyle,                                     // uriStyle
+        bucketName,                                   // bucketName
+        0,                                            // key
+        0,                                            // queryParams
+        "?location",                                  // subResource
+        accessKeyId,                                  // accessKeyId
+        secretAccessKey,                              // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // requestProperties
+        &testBucketPropertiesCallback,                // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        &testBucketDataCallback,                      // fromS3Callback
+        &testBucketCompleteCallback,                  // completeCallback
+        tbData                                        // callbackData
     };
 
     // Perform the request
@@ -257,38 +260,41 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     // Set up S3PutProperties
     S3PutProperties properties =
     {
-        0,                                  // contentType
-        0,                                  // md5
-        0,                                  // cacheControl
-        0,                                  // contentDispositionFilename
-        0,                                  // contentEncoding
-        0,                                  // expires
-        cannedAcl,                          // cannedAcl
-        0,                                  // sourceObject
-        0,                                  // metaDataDirective
-        0,                                  // metaDataCount
-        0                                   // metaData
+        0,                                       // contentType
+        0,                                       // md5
+        0,                                       // cacheControl
+        0,                                       // contentDispositionFilename
+        0,                                       // contentEncoding
+        0,                                       // expires
+        cannedAcl,                               // cannedAcl
+        0,                                       // sourceObject
+        0,                                       // metaDataDirective
+        0,                                       // metaDataCount
+        0                                        // metaData
     };
     
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypePUT,                 // httpRequestType
-        protocol,                           // protocol
-        S3UriStylePath,                     // uriStyle
-        bucketName,                         // bucketName
-        0,                                  // key
-        0,                                  // queryParams
-        0,                                  // subResource
-        accessKeyId,                        // accessKeyId
-        secretAccessKey,                    // secretAccessKey
-        &properties,                        // requestProperties
-        &createBucketPropertiesCallback,    // propertiesCallback
-        &createBucketDataCallback,          // toS3Callback
-        cbData->docLen,                     // toS3CallbackTotalSize
-        0,                                  // fromS3Callback
-        &createBucketCompleteCallback,      // completeCallback
-        cbData                              // callbackData
+        HttpRequestTypePUT,                           // httpRequestType
+        protocol,                                     // protocol
+        S3UriStylePath,                               // uriStyle
+        bucketName,                                   // bucketName
+        0,                                            // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        accessKeyId,                                  // accessKeyId
+        secretAccessKey,                              // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        &properties,                                  // requestProperties
+        &createBucketPropertiesCallback,              // propertiesCallback
+        &createBucketDataCallback,                    // toS3Callback
+        cbData->docLen,                               // toS3CallbackTotalSize
+        0,                                            // fromS3Callback
+        &createBucketCompleteCallback,                // completeCallback
+        cbData                                        // callbackData
     };
 
     // Perform the request
@@ -353,22 +359,25 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeDELETE,              // httpRequestType
-        protocol,                           // protocol
-        uriStyle,                           // uriStyle
-        bucketName,                         // bucketName
-        0,                                  // key
-        0,                                  // queryParams
-        0,                                  // subResource
-        accessKeyId,                        // accessKeyId
-        secretAccessKey,                    // secretAccessKey
-        0,                                  // requestProperties
-        &deleteBucketPropertiesCallback,    // propertiesCallback
-        0,                                  // toS3Callback
-        0,                                  // toS3CallbackTotalSize
-        0,                                  // fromS3Callback
-        &deleteBucketCompleteCallback,      // completeCallback
-        dbData                              // callbackData
+        HttpRequestTypeDELETE,                        // httpRequestType
+        protocol,                                     // protocol
+        uriStyle,                                     // uriStyle
+        bucketName,                                   // bucketName
+        0,                                            // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        accessKeyId,                                  // accessKeyId
+        secretAccessKey,                              // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // requestProperties
+        &deleteBucketPropertiesCallback,              // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        0,                                            // fromS3Callback
+        &deleteBucketCompleteCallback,                // completeCallback
+        dbData                                        // callbackData
     };
 
     // Perform the request
@@ -699,22 +708,25 @@ void S3_list_bucket(S3BucketContext *bucketContext, const char *prefix,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeGET,                 // httpRequestType
-        bucketContext->protocol,            // protocol
-        bucketContext->uriStyle,            // uriStyle
-        bucketContext->bucketName,          // bucketName
-        0,                                  // key
-        queryParams[0] ? queryParams : 0,   // queryParams
-        0,                                  // subResource
-        bucketContext->accessKeyId,         // accessKeyId
-        bucketContext->secretAccessKey,     // secretAccessKey
-        0,                                  // requestProperties
-        &listBucketPropertiesCallback,      // propertiesCallback
-        0,                                  // toS3Callback
-        0,                                  // toS3CallbackTotalSize
-        &listBucketDataCallback,            // fromS3Callback
-        &listBucketCompleteCallback,        // completeCallback
-        lbData                              // callbackData
+        HttpRequestTypeGET,                           // httpRequestType
+        bucketContext->protocol,                      // protocol
+        bucketContext->uriStyle,                      // uriStyle
+        bucketContext->bucketName,                    // bucketName
+        0,                                            // key
+        queryParams[0] ? queryParams : 0,             // queryParams
+        0,                                            // subResource
+        bucketContext->accessKeyId,                   // accessKeyId
+        bucketContext->secretAccessKey,               // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // requestProperties
+        &listBucketPropertiesCallback,                // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        &listBucketDataCallback,                      // fromS3Callback
+        &listBucketCompleteCallback,                  // completeCallback
+        lbData                                        // callbackData
     };
 
     // Perform the request

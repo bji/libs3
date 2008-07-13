@@ -38,10 +38,12 @@
 #include "libs3.h"
 
 
-// Something is weird with glibc ... setenv/unsetenv are not defined in
-// stdlib.h as they should be
+// Something is weird with glibc ... setenv/unsetenv/ftruncate are not defined
+// in stdlib.h as they should be.  And fileno is not in stdio.h
 extern int setenv(const char *, const char *, int);
 extern int unsetenv(const char *);
+extern int ftruncate(int, off_t);
+extern int fileno(FILE *);
 
 
 // Command-line options, saved as globals ------------------------------------
@@ -1191,7 +1193,9 @@ static void get_object(int argc, char **argv, int optind)
     FILE *outfile;
 
     if (filename) {
-        if ((outfile = fopen(filename, "w")) == NULL) {
+        // Open in r+ so that we don't truncate the file, just in case there
+        // is an error and we write no bytes, we leave the file unmodified
+        if ((outfile = fopen(filename, "r+")) == NULL) {
             fprintf(stderr, "ERROR: Failed to open output file %s: ",
                     filename);
             perror(0);
@@ -1217,7 +1221,7 @@ static void get_object(int argc, char **argv, int optind)
         secretAccessKeyG
     };
 
-    S3GetProperties getProperties =
+    S3GetConditions getConditions =
     {
         ifModifiedSince,
         ifNotModifiedSince,
@@ -1231,14 +1235,19 @@ static void get_object(int argc, char **argv, int optind)
         &getObjectDataCallback
     };
 
-    S3_get_object(&bucketContext, key, &getProperties, startByte, byteCount,
+    S3_get_object(&bucketContext, key, &getConditions, startByte, byteCount,
                   0, &getObjectHandler, outfile);
 
-    fclose(outfile);
-
-    if (statusG != S3StatusOK) {
+    if (statusG == S3StatusOK) {
+        if (outfile != stdout) {
+            ftruncate(fileno(outfile), ftell(outfile));
+        }
+    }
+    else if (statusG != S3StatusErrorPreconditionFailed) {
         printError();
     }
+
+    fclose(outfile);
 
     S3_deinitialize();
 }
@@ -1275,17 +1284,6 @@ int main(int argc, char **argv)
         }
     }
 
-    accessKeyIdG = getenv("S3_ACCESS_KEY_ID");
-    if (!accessKeyIdG) {
-        fprintf(stderr, "Missing environment variable: S3_ACCESS_KEY_ID\n");
-        return -1;
-    }
-    secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
-    if (!secretAccessKeyG) {
-        fprintf(stderr, "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
-        return -1;
-    }
-
     // The first non-option argument gives the operation to perform
     if (optind == argc) {
         fprintf(stderr, "\nERROR: Missing argument: command\n\n");
@@ -1297,7 +1295,19 @@ int main(int argc, char **argv)
     if (!strcmp(command, "help")) {
         usageExit(stdout);
     }
-    else if (!strcmp(command, "list")) {
+
+    accessKeyIdG = getenv("S3_ACCESS_KEY_ID");
+    if (!accessKeyIdG) {
+        fprintf(stderr, "Missing environment variable: S3_ACCESS_KEY_ID\n");
+        return -1;
+    }
+    secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
+    if (!secretAccessKeyG) {
+        fprintf(stderr, "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
+        return -1;
+    }
+
+    if (!strcmp(command, "list")) {
         if (optind == argc) {
             list_service();
         }

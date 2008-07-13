@@ -37,22 +37,25 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypePUT,                         // httpRequestType
-        bucketContext->protocol,                    // protocol
-        bucketContext->uriStyle,                    // uriStyle
-        bucketContext->bucketName,                  // bucketName
-        key,                                        // key
-        0,                                          // queryParams
-        0,                                          // subResource
-        bucketContext->accessKeyId,                 // accessKeyId
-        bucketContext->secretAccessKey,             // secretAccessKey
-        putProperties,                                 // putProperties
-        handler->responseHandler.propertiesCallback,   // propertiesCallback
-        handler->putObjectDataCallback,             // toS3Callback
-        contentLength,                              // toS3CallbackTotalSize
-        0,                                          // fromS3Callback
-        handler->responseHandler.completeCallback,  // completeCallback
-        callbackData                                // callbackData
+        HttpRequestTypePUT,                           // httpRequestType
+        bucketContext->protocol,                      // protocol
+        bucketContext->uriStyle,                      // uriStyle
+        bucketContext->bucketName,                    // bucketName
+        key,                                          // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        bucketContext->accessKeyId,                   // accessKeyId
+        bucketContext->secretAccessKey,               // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        putProperties,                                // putProperties
+        handler->responseHandler.propertiesCallback,  // propertiesCallback
+        handler->putObjectDataCallback,               // toS3Callback
+        contentLength,                                // toS3CallbackTotalSize
+        0,                                            // fromS3Callback
+        handler->responseHandler.completeCallback,    // completeCallback
+        callbackData                                  // callbackData
     };
 
     // Perform the request
@@ -70,32 +73,33 @@ void S3_copy_object(S3BucketContext *bucketContext, const char *key,
 
 
 void S3_get_object(S3BucketContext *bucketContext, const char *key,
-                   const S3GetProperties *getProperties,
+                   const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
                    S3RequestContext *requestContext,
                    S3GetObjectHandler *handler, void *callbackData)
 {
-    // xxx todo - do something with getProperties, startByte, and byteCount
-
     // Set up the RequestParams
     RequestParams params =
     {
-        HttpRequestTypeGET,                            // httpRequestType
-        bucketContext->protocol,                       // protocol
-        bucketContext->uriStyle,                       // uriStyle
-        bucketContext->bucketName,                     // bucketName
-        key,                                           // key
-        0,                                             // queryParams
-        0,                                             // subResource
-        bucketContext->accessKeyId,                    // accessKeyId
-        bucketContext->secretAccessKey,                // secretAccessKey
-        0,                                             // putProperties
-        handler->responseHandler.propertiesCallback,   // propertiesCallback
-        0,                                             // toS3Callback
-        0,                                             // toS3CallbackTotalSize
-        handler->getObjectDataCallback,                // fromS3Callback
-        handler->responseHandler.completeCallback,     // completeCallback
-        callbackData                                   // callbackData
+        HttpRequestTypeGET,                           // httpRequestType
+        bucketContext->protocol,                      // protocol
+        bucketContext->uriStyle,                      // uriStyle
+        bucketContext->bucketName,                    // bucketName
+        key,                                          // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        bucketContext->accessKeyId,                   // accessKeyId
+        bucketContext->secretAccessKey,               // secretAccessKey
+        getConditions,                                // getConditions
+        startByte,                                    // startByte
+        byteCount,                                    // byteCount
+        0,                                            // putProperties
+        handler->responseHandler.propertiesCallback,  // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        handler->getObjectDataCallback,               // fromS3Callback
+        handler->responseHandler.completeCallback,    // completeCallback
+        callbackData                                  // callbackData
     };
 
     // Perform the request
@@ -104,7 +108,7 @@ void S3_get_object(S3BucketContext *bucketContext, const char *key,
 
 
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    const S3GetProperties *getProperties,
+                    const S3GetConditions *getConditions,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData)
 {

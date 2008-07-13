@@ -138,6 +138,10 @@ typedef enum
     S3StatusContentDispositionFilenameTooLong               ,
     S3StatusBadContentEncoding                              ,
     S3StatusContentEncodingTooLong                          ,
+    S3StatusBadIfMatchETag                                  ,
+    S3StatusIfMatchETagTooLong                              ,
+    S3StatusBadIfNotMatchETag                               ,
+    S3StatusIfNotMatchETagTooLong                           ,
     S3StatusHeadersTooLong                                  ,
     S3StatusKeyTooLong                                      ,
     S3StatusUriTooLong                                      ,
@@ -577,9 +581,9 @@ typedef struct S3PutProperties
 } S3PutProperties;
 
 
-// Used for get object or head object, specify properties for controlling
+// Used for get object or head object, specify conditions for controlling
 // the get/head
-typedef struct S3GetProperties
+typedef struct S3GetConditions
 {
     /**
      * If >= 0, ...
@@ -597,7 +601,7 @@ typedef struct S3GetProperties
      * If present ...
      **/
     const char *ifNotMatchETag;
-} S3GetProperties;
+} S3GetConditions;
 
 
 typedef struct S3ErrorDetails
@@ -1086,7 +1090,7 @@ void S3_copy_object(S3BucketContext *bucketContext,
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 */
 void S3_get_object(S3BucketContext *bucketContext, const char *key,
-                   const S3GetProperties *getProperties,
+                   const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
                    S3RequestContext *requestContext,
                    S3GetObjectHandler *handler, void *callbackData);
@@ -1094,7 +1098,7 @@ void S3_get_object(S3BucketContext *bucketContext, const char *key,
 
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    const S3GetProperties *getProperties,
+                    const S3GetConditions *getConditions,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData);
                          

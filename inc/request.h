@@ -73,6 +73,15 @@ typedef struct RequestParams
     // AWS Secret Access Key
     const char *secretAccessKey;
 
+    // Get conditions
+    const S3GetConditions *getConditions;
+
+    // Start byte
+    uint64_t startByte;
+
+    // Byte count
+    uint64_t byteCount;
+
     // Put properties
     const S3PutProperties *putProperties;
 

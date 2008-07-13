@@ -87,6 +87,21 @@ typedef struct RequestComputedValues
     // Expires header (or empty)
     char expiresHeader[128];
 
+    // If-Modified-Since header
+    char ifModifiedSinceHeader[128];
+
+    // If-Unmodified-Since header
+    char ifUnmodifiedSinceHeader[128];
+
+    // If-Match header
+    char ifMatchHeader[128];
+
+    // If-None-Match header
+    char ifNoneMatchHeader[128];
+
+    // Range header
+    char rangeHeader[128];
+
     // Authorization header
     char authorizationHeader[128];
 } RequestComputedValues;
@@ -305,69 +320,146 @@ static S3Status compose_standard_headers(const RequestParams *params,
                                          RequestComputedValues *values)
 {
 
-#define do_header(fmt, sourceField, destField, badError, tooLongError)  \
-    do {                                                                \
-        if (params->putProperties &&                                    \
-            params->putProperties-> sourceField &&                      \
-            params->putProperties-> sourceField[0]) {                   \
-            /* Skip whitespace at beginning of val */                   \
-            const char *val = params->putProperties-> sourceField;      \
-            while (*val && isblank(*val)) {                             \
-                val++;                                                  \
-            }                                                           \
-            if (!*val) {                                                \
-                return badError;                                        \
-            }                                                           \
-            /* Compose header, make sure it all fit */                  \
-            int len = snprintf(values-> destField,                      \
-                               sizeof(values-> destField), fmt, val);   \
-            if (len >= sizeof(values-> destField)) {                    \
-                return tooLongError;                                    \
-            }                                                           \
-            /* Now remove the whitespace at the end */                  \
-            while (isblank(values-> destField[len])) {                  \
-                len--;                                                  \
-            }                                                           \
-            values-> destField[len] = 0;                                \
-        }                                                               \
-        else {                                                          \
-            values-> destField[0] = 0;                                  \
-        }                                                               \
+#define do_put_header(fmt, sourceField, destField, badError, tooLongError)  \
+    do {                                                                    \
+        if (params->putProperties &&                                        \
+            params->putProperties-> sourceField &&                          \
+            params->putProperties-> sourceField[0]) {                       \
+            /* Skip whitespace at beginning of val */                       \
+            const char *val = params->putProperties-> sourceField;          \
+            while (*val && isblank(*val)) {                                 \
+                val++;                                                      \
+            }                                                               \
+            if (!*val) {                                                    \
+                return badError;                                            \
+            }                                                               \
+            /* Compose header, make sure it all fit */                      \
+            int len = snprintf(values-> destField,                          \
+                               sizeof(values-> destField), fmt, val);       \
+            if (len >= sizeof(values-> destField)) {                        \
+                return tooLongError;                                        \
+            }                                                               \
+            /* Now remove the whitespace at the end */                      \
+            while (isblank(values-> destField[len])) {                      \
+                len--;                                                      \
+            }                                                               \
+            values-> destField[len] = 0;                                    \
+        }                                                                   \
+        else {                                                              \
+            values-> destField[0] = 0;                                      \
+        }                                                                   \
     } while (0)
 
+#define do_get_header(fmt, sourceField, destField, badError, tooLongError)  \
+    do {                                                                    \
+        if (params->getConditions &&                                        \
+            params->getConditions-> sourceField &&                          \
+            params->getConditions-> sourceField[0]) {                       \
+            /* Skip whitespace at beginning of val */                       \
+            const char *val = params->getConditions-> sourceField;          \
+            while (*val && isblank(*val)) {                                 \
+                val++;                                                      \
+            }                                                               \
+            if (!*val) {                                                    \
+                return badError;                                            \
+            }                                                               \
+            /* Compose header, make sure it all fit */                      \
+            int len = snprintf(values-> destField,                          \
+                               sizeof(values-> destField), fmt, val);       \
+            if (len >= sizeof(values-> destField)) {                        \
+                return tooLongError;                                        \
+            }                                                               \
+            /* Now remove the whitespace at the end */                      \
+            while (isblank(values-> destField[len])) {                      \
+                len--;                                                      \
+            }                                                               \
+            values-> destField[len] = 0;                                    \
+        }                                                                   \
+        else {                                                              \
+            values-> destField[0] = 0;                                      \
+        }                                                                   \
+    } while (0)
 
-    // 1. Cache-Control
-    do_header("Cache-Control: %s", cacheControl, cacheControlHeader,
-              S3StatusBadCacheControl, S3StatusCacheControlTooLong);
+    // Cache-Control
+    do_put_header("Cache-Control: %s", cacheControl, cacheControlHeader,
+                  S3StatusBadCacheControl, S3StatusCacheControlTooLong);
+    
+    // ContentType
+    do_put_header("Content-Type: %s", contentType, contentTypeHeader,
+                  S3StatusBadContentType, S3StatusContentTypeTooLong);
 
-    // 2. ContentType
-    do_header("Content-Type: %s", contentType, contentTypeHeader,
-              S3StatusBadContentType, S3StatusContentTypeTooLong);
+    // MD5
+    do_put_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
+                  S3StatusMD5TooLong);
 
-    // 3. MD5
-    do_header("Content-MD5: %s", md5, md5Header, S3StatusBadMD5,
-              S3StatusMD5TooLong);
-
-    // 4. Content-Disposition
-    do_header("Content-Disposition: attachment; filename=\"%s\"",
-              contentDispositionFilename, contentDispositionHeader,
-              S3StatusBadContentDispositionFilename,
-              S3StatusContentDispositionFilenameTooLong);
-
-    // 5. ContentEncoding
-    do_header("Content-Encoding: %s", contentEncoding, contentEncodingHeader,
-              S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
-
-    // 6. Expires
+    // Content-Disposition
+    do_put_header("Content-Disposition: attachment; filename=\"%s\"",
+                  contentDispositionFilename, contentDispositionHeader,
+                  S3StatusBadContentDispositionFilename,
+                  S3StatusContentDispositionFilenameTooLong);
+    
+    // ContentEncoding
+    do_put_header("Content-Encoding: %s", contentEncoding, 
+                  contentEncodingHeader, S3StatusBadContentEncoding,
+                  S3StatusContentEncodingTooLong);
+    
+    // Expires
     if (params->putProperties && (params->putProperties->expires >= 0)) {
-        char date[100];
-        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S UTC",
+        strftime(values->expiresHeader, sizeof(values->expiresHeader),
+                 "Expires: %a, %d %b %Y %H:%M:%S UTC", 
                  gmtime(&(params->putProperties->expires)));
-        snprintf(values->expiresHeader, sizeof(values->expiresHeader),
-                 "Expires: %s", date);
     }
     else {
         values->expiresHeader[0] = 0;
+    }
+
+    if (params->getConditions) {
+        // If-Modified-Since
+        if (params->getConditions->ifModifiedSince >= 0) {
+            strftime(values->ifModifiedSinceHeader,
+                     sizeof(values->ifModifiedSinceHeader),
+                     "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", 
+                     gmtime(&(params->getConditions->ifModifiedSince)));
+        }
+        else {
+            values->ifModifiedSinceHeader[0] = 0;
+        }
+
+        // If-Unmodified-Since header
+        if (params->getConditions->ifNotModifiedSince >= 0) {
+            strftime(values->ifUnmodifiedSinceHeader,
+                     sizeof(values->ifUnmodifiedSinceHeader),
+                     "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", 
+                     gmtime(&(params->getConditions->ifNotModifiedSince)));
+        }
+        else {
+            values->ifUnmodifiedSinceHeader[0] = 0;
+        }
+
+        // If-Match header
+        do_get_header("If-Match: %s", ifMatchETag, ifMatchHeader,
+                      S3StatusBadIfMatchETag, S3StatusIfMatchETagTooLong);
+
+        // If-None-Match header
+        do_get_header("If-None-Match: %s", ifNotMatchETag, ifNoneMatchHeader,
+                      S3StatusBadIfNotMatchETag, 
+                      S3StatusIfNotMatchETagTooLong);
+
+        // Range header
+        if (params->startByte || params->byteCount) {
+            if (params->byteCount) {
+                snprintf(values->rangeHeader, sizeof(values->rangeHeader),
+                         "Range: bytes=%llu-%llu", params->startByte,
+                         (params->startByte + params->byteCount - 1));
+            }
+            else {
+                snprintf(values->rangeHeader, sizeof(values->rangeHeader),
+                         "Range: bytes=%llu-", params->startByte);
+            }
+        }
+        else {
+            values->rangeHeader[0] = 0;
+        }
     }
 
     return S3StatusOK;
@@ -673,7 +765,7 @@ static S3Status setup_curl(Request *request,
     }
 
     // Debugging only
-    // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
+    curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
     
     // Set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
@@ -743,6 +835,11 @@ static S3Status setup_curl(Request *request,
     append_standard_header(contentDispositionHeader);
     append_standard_header(contentEncodingHeader);
     append_standard_header(expiresHeader);
+    append_standard_header(ifModifiedSinceHeader);
+    append_standard_header(ifUnmodifiedSinceHeader);
+    append_standard_header(ifMatchHeader);
+    append_standard_header(ifNoneMatchHeader);
+    append_standard_header(rangeHeader);
     append_standard_header(authorizationHeader);
 
     // Append x-amz- headers
