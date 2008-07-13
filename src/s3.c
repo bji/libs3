@@ -38,12 +38,18 @@
 #include "libs3.h"
 
 
+// Something is weird with glibc ... setenv/unsetenv are not defined in
+// stdlib.h as they should be
+extern int setenv(const char *, const char *, int);
+extern int unsetenv(const char *);
+
+
 // Command-line options, saved as globals ------------------------------------
 
-static int showResponseHeadersG = 0;
+static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
-// request headers stuff
+// request properties stuff
 // acl stuff
 
 
@@ -88,10 +94,23 @@ static const S3ErrorDetails *errorG = 0;
     (sizeof(CONTENT_DISPOSITION_FILENAME_PREFIX) - 1)
 #define CONTENT_ENCODING_PREFIX "contentEncoding="
 #define CONTENT_ENCODING_PREFIX_LEN (sizeof(CONTENT_ENCODING_PREFIX) - 1)
-#define VALID_DURATION_PREFIX "validDuration="
-#define VALID_DURATION_PREFIX_LEN (sizeof(VALID_DURATION_PREFIX) - 1)
+#define EXPIRES_PREFIX "expires="
+#define EXPIRES_PREFIX_LEN (sizeof(EXPIRES_PREFIX) - 1)
 #define X_AMZ_META_PREFIX "x-amz-meta-"
 #define X_AMZ_META_PREFIX_LEN (sizeof(X_AMZ_META_PREFIX) - 1)
+#define IF_MODIFIED_SINCE_PREFIX "ifModifiedSince="
+#define IF_MODIFIED_SINCE_PREFIX_LEN (sizeof(IF_MODIFIED_SINCE_PREFIX) - 1)
+#define IF_NOT_MODIFIED_SINCE_PREFIX "ifNotmodifiedSince="
+#define IF_NOT_MODIFIED_SINCE_PREFIX_LEN \
+    (sizeof(IF_NOT_MODIFIED_SINCE_PREFIX) - 1)
+#define IF_MATCH_PREFIX "ifMatch="
+#define IF_MATCH_PREFIX_LEN (sizeof(IF_MATCH_PREFIX) - 1)
+#define IF_NOT_MATCH_PREFIX "ifNotMatch="
+#define IF_NOT_MATCH_PREFIX_LEN (sizeof(IF_NOT_MATCH_PREFIX) - 1)
+#define START_BYTE_PREFIX "startByte="
+#define START_BYTE_PREFIX_LEN (sizeof(START_BYTE_PREFIX) - 1)
+#define BYTE_COUNT_PREFIX "byteCount="
+#define BYTE_COUNT_PREFIX_LEN (sizeof(BYTE_COUNT_PREFIX) - 1)
 
 
 // libs3 mutex stuff ---------------------------------------------------------
@@ -194,7 +213,7 @@ static void usageExit(FILE *out)
 "\n"   
 "   -p : use path-style URIs (--path-style)\n"
 "   -u : unencrypted (use HTTP instead of HTTPS) (--https)\n"
-"   -s : show response headers (--show-headers)\n"
+"   -s : show response properties (--show-properties)\n"
 "\n"
 "   Environment:\n"
 "\n"
@@ -212,11 +231,12 @@ static void usageExit(FILE *out)
 "   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
 "                       md5, contentDispositionFilename, contentEncoding,\n"
 "                       validDuration, cannedAcl, [x-amz-meta-...]]\n"
-"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey> [headers]\n"
-"   get <buckey>/<key> [filename (required if -r is used), if-modified-since,\n"
-"                       if-unmodified-since, if-match, if-not-match,\n"
-"                       range-start, range-end]\n"
-"   head <bucket>/<key>\n"
+"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey> [properties]\n"
+"   get <buckey>/<key> [filename (required if -s is used), ifModifiedSince,\n"
+"                       ifNotmodifiedSince, ifMatch, ifNotMatch,\n"
+"                       startByte, byteCount]\n"
+"   head <bucket>/<key> [ifModifiedSince, ifNotmodifiedSince, ifMatch,\n"
+"                       ifNotMatch] (implies -s)\n"
 "   delete <bucket>/<key>\n"
 "   todo : acl stuff\n"
 "\n");
@@ -334,53 +354,149 @@ static void growbuffer_destroy(growbuffer *gb)
 }
 
 
+// Convenience utility for making the code look nicer.  Tests a string
+// against a format; only the characters specified in the format are
+// checked (i.e. if the string is longer than the format, the string still
+// checks out ok).  Format characters are:
+// d - is a digit
+// anything else - is that character
+// Returns nonzero the string checks out, zero if it does not.
+static int checkString(const char *str, const char *format)
+{
+    while (*format) {
+        if (*format == 'd') {
+            if (!isdigit(*str)) {
+                return 0;
+            }
+        }
+        else if (*str != *format) {
+            return 0;
+        }
+        str++, format++;
+    }
+
+    return 1;
+}
+
+
+static time_t parseIso8601Time(const char *str)
+{
+    // Check to make sure that it has a valid format
+    if (!checkString(str, "dddd-dd-ddTdd:dd:dd")) {
+        return -1;
+    }
+
+#define nextnum() (((*str - '0') * 10) + (*(str + 1) - '0'))
+
+    // Convert it
+    struct tm stm;
+    memset(&stm, 0, sizeof(stm));
+
+    stm.tm_year = (nextnum() - 19) * 100;
+    str += 2;
+    stm.tm_year += nextnum();
+    str += 3;
+
+    stm.tm_mon = nextnum() - 1;
+    str += 3;
+
+    stm.tm_mday = nextnum();
+    str += 3;
+
+    stm.tm_hour = nextnum();
+    str += 3;
+
+    stm.tm_min = nextnum();
+    str += 3;
+
+    stm.tm_sec = nextnum();
+    str += 2;
+
+    stm.tm_isdst = -1;
+
+    // This is hokey but it's the recommended way ...
+    char *tz = getenv("TZ");
+    setenv("TZ", "UTC", 1);
+
+    time_t ret = mktime(&stm);
+
+    if (tz) {
+        setenv("TZ", tz, 1);
+    }
+    else {
+        unsetenv("TZ");
+    }
+
+    // Skip the millis
+
+    if (*str == '.') {
+        str++;
+        while (isdigit(*str)) {
+            str++;
+        }
+    }
+    
+    if (checkString(str, "-dd:dd") || checkString(str, "+dd:dd")) {
+        int sign = (*str++ == '-') ? -1 : 1;
+        int hours = nextnum();
+        str += 3;
+        int minutes = nextnum();
+        ret += (-sign * (((hours * 60) + minutes) * 60));
+    }
+    // Else it should be Z to be a conformant time string, but we just assume
+    // that it is rather than enforcing that
+
+    return ret;
+}
+
+
 static struct option longOptionsG[] =
 {
-    { "path-style",           no_argument      ,  0,  'p' },
-    { "unencrypted",          no_argument      ,  0,  'u' },
+    { "path-style",           no_argument,        0,  'p' },
+    { "unencrypted",          no_argument,        0,  'u' },
     { "show-headers",         no_argument,        0,  's' },
     { 0,                      0,                  0,   0  }
 };
 
 
-// response header callback --------------------------------------------------
+// response properties callback ----------------------------------------------
 
 // This callback does the same thing for every request type: prints out the
-// headers if the user has requested them to be so
-static S3Status responseHeadersCallback(const S3ResponseHeaders *headers,
-                                        void *callbackData)
+// properties if the user has requested them to be so
+static S3Status responsePropertiesCallback
+    (const S3ResponseProperties *properties, void *callbackData)
 {
-    if (!showResponseHeadersG) {
+    if (!showResponsePropertiesG) {
         return S3StatusOK;
     }
 
 #define print_nonnull(name, field)                              \
     do {                                                        \
-        if (headers-> field) {                                  \
-            printf("%s: %s\n", name, headers-> field);          \
+        if (properties-> field) {                                  \
+            printf("%s: %s\n", name, properties-> field);          \
         }                                                       \
     } while (0)
     
     print_nonnull("Request-Id", requestId);
     print_nonnull("Request-Id-2", requestId2);
-    if (headers->contentLength > 0) {
-        printf("Content-Length: %lld\n", headers->contentLength);
+    if (properties->contentLength > 0) {
+        printf("Content-Length: %lld\n", properties->contentLength);
     }
     print_nonnull("Server", server);
     print_nonnull("ETag", eTag);
-    if (headers->lastModified > 0) {
+    if (properties->lastModified > 0) {
         char timebuf[256];
         // localtime is not thread-safe but we don't care here.  xxx note -
         // localtime doesn't seem to actually do anything, 0 locatime of 0
         // returns EST Unix epoch, it should return the NZST equivalent ...
         strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                 localtime(&(headers->lastModified)));
+                 localtime(&(properties->lastModified)));
         printf("Last-Modified: %s\n", timebuf);
     }
     int i;
-    for (i = 0; i < headers->metaHeadersCount; i++) {
-        printf("x-amz-meta-%s: %s\n", headers->metaHeaders[i].name,
-               headers->metaHeaders[i].value);
+    for (i = 0; i < properties->metaDataCount; i++) {
+        printf("x-amz-meta-%s: %s\n", properties->metaData[i].name,
+               properties->metaData[i].value);
     }
 
     return S3StatusOK;
@@ -437,7 +553,7 @@ static void list_service()
 
     S3ListServiceHandler listServiceHandler =
     {
-        { &responseHeadersCallback, &responseCompleteCallback },
+        { &responsePropertiesCallback, &responseCompleteCallback },
         &listServiceCallback
     };
 
@@ -473,7 +589,7 @@ static void test_bucket(int argc, char **argv, int optind)
 
     S3ResponseHandler responseHandler =
     {
-        &responseHeadersCallback, &responseCompleteCallback
+        &responsePropertiesCallback, &responseCompleteCallback
     };
 
     char locationConstraint[64];
@@ -557,7 +673,7 @@ static void create_bucket(int argc, char **argv, int optind)
 
     S3ResponseHandler responseHandler =
     {
-        &responseHeadersCallback, &responseCompleteCallback
+        &responsePropertiesCallback, &responseCompleteCallback
     };
 
     S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, bucketName,
@@ -586,7 +702,7 @@ static void delete_bucket(int argc, char **argv, int optind)
 
     S3ResponseHandler responseHandler =
     {
-        &responseHeadersCallback, &responseCompleteCallback
+        &responsePropertiesCallback, &responseCompleteCallback
     };
 
     S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
@@ -707,7 +823,7 @@ static void list_bucket(int argc, char **argv, int optind)
 
     S3ListBucketHandler listBucketHandler =
     {
-        { &responseHeadersCallback, &responseCompleteCallback },
+        { &responsePropertiesCallback, &responseCompleteCallback },
         &listBucketCallback
     };
 
@@ -728,7 +844,7 @@ static void list_bucket(int argc, char **argv, int optind)
 }
 
 
-// put object -----------------------------------------------------------------
+// put object ----------------------------------------------------------------
 
 typedef struct put_object_callback_data
 {
@@ -738,7 +854,8 @@ typedef struct put_object_callback_data
 } put_object_callback_data;
 
 
-static int putObjectCallback(int bufferSize, char *buffer, void *callbackData)
+static int putObjectDataCallback(int bufferSize, char *buffer,
+                                 void *callbackData)
 {
     put_object_callback_data *data = (put_object_callback_data *) callbackData;
     
@@ -788,8 +905,8 @@ static void put_object(int argc, char **argv, int optind)
     const char *contentDispositionFilename = 0, *contentEncoding = 0;
     time_t expires = -1;
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
-    int metaHeadersCount = 0;
-    S3NameValue metaHeaders[S3_MAX_META_HEADER_COUNT];
+    int metaPropertiesCount = 0;
+    S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
 
     while (optind < argc) {
         char *param = argv[optind++];
@@ -826,16 +943,18 @@ static void put_object(int argc, char **argv, int optind)
                           CONTENT_ENCODING_PREFIX_LEN)) {
             contentEncoding = &(param[CONTENT_ENCODING_PREFIX_LEN]);
         }
-        else if (!strncmp(param, VALID_DURATION_PREFIX, 
-                          VALID_DURATION_PREFIX_LEN)) {
-            expires = (time(NULL) + 
-                       convertInt(&(param[VALID_DURATION_PREFIX_LEN]), 
-                                  "validDuration"));
+        else if (!strncmp(param, EXPIRES_PREFIX, EXPIRES_PREFIX_LEN)) {
+            expires = parseIso8601Time(&(param[EXPIRES_PREFIX_LEN]));
+            if (expires < 0) {
+                fprintf(stderr, "ERROR: Invalid expires time "
+                        "value; ISO 8601 time format required\n");
+                usageExit(stderr);
+            }
         }
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
-            if (metaHeadersCount == S3_MAX_META_HEADER_COUNT) {
-                fprintf(stderr, "ERROR: Too many x-amz-meta- headers, "
-                        "limit %d: %s\n", S3_MAX_META_HEADER_COUNT, param);
+            if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
+                fprintf(stderr, "ERROR: Too many x-amz-meta- properties, "
+                        "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
             char *name = &(param[X_AMZ_META_PREFIX_LEN]);
@@ -848,8 +967,8 @@ static void put_object(int argc, char **argv, int optind)
                 usageExit(stderr);
             }
             *value++ = 0;
-            metaHeaders[metaHeadersCount].name = name;
-            metaHeaders[metaHeadersCount++].value = value;
+            metaProperties[metaPropertiesCount].name = name;
+            metaProperties[metaPropertiesCount++].value = value;
         }
         else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
             char *val = &(param[CANNED_ACL_PREFIX_LEN]);
@@ -875,38 +994,6 @@ static void put_object(int argc, char **argv, int optind)
             usageExit(stderr);
         }
     }
-
-    S3_init();
-    
-    S3BucketContext bucketContext =
-    {
-        bucketName,
-        protocolG,
-        uriStyleG,
-        accessKeyIdG,
-        secretAccessKeyG
-    };
-
-    S3RequestHeaders requestHeaders =
-    {
-        contentType,
-        md5,
-        cacheControl,
-        contentDispositionFilename,
-        contentEncoding,
-        expires,
-        cannedAcl,
-        0,
-        0,
-        metaHeadersCount,
-        metaHeaders
-    };
-
-    S3PutObjectHandler listBucketHandler =
-    {
-        { &responseHeadersCallback, &responseCompleteCallback },
-        &putObjectCallback
-    };
 
     put_object_callback_data data;
 
@@ -960,8 +1047,40 @@ static void put_object(int argc, char **argv, int optind)
 
     data.contentLength = contentLength;
 
-    S3_put_object(&bucketContext, key, contentLength, &requestHeaders, 0,
-                  &listBucketHandler, &data);
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3PutProperties putProperties =
+    {
+        contentType,
+        md5,
+        cacheControl,
+        contentDispositionFilename,
+        contentEncoding,
+        expires,
+        cannedAcl,
+        0,
+        0,
+        metaPropertiesCount,
+        metaProperties
+    };
+
+    S3PutObjectHandler putObjectHandler =
+    {
+        { &responsePropertiesCallback, &responseCompleteCallback },
+        &putObjectDataCallback
+    };
+
+    S3_put_object(&bucketContext, key, contentLength, &putProperties, 0,
+                  &putObjectHandler, &data);
 
     if (data.infile) {
         fclose(data.infile);
@@ -982,7 +1101,150 @@ static void put_object(int argc, char **argv, int optind)
 }
 
 
-// main -----------------------------------------------------------------------
+// get object ----------------------------------------------------------------
+
+static S3Status getObjectDataCallback(int bufferSize, const char *buffer,
+                                      void *callbackData)
+{
+    FILE *outfile = (FILE *) callbackData;
+
+    size_t wrote = fwrite(buffer, 1, bufferSize, outfile);
+    
+    return (wrote < bufferSize) ? S3StatusFailure : S3StatusOK;
+}
+
+
+static void get_object(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        usageExit(stderr);
+    }
+
+    // Split bucket/key
+    char *slash = argv[optind];
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    if (!*slash || !*(slash + 1)) {
+        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        usageExit(stderr);
+    }
+    *slash++ = 0;
+
+    const char *bucketName = argv[optind++];
+    const char *key = slash;
+
+    const char *filename = 0;
+    time_t ifModifiedSince = -1, ifNotModifiedSince = -1;
+    const char *ifMatch = 0, *ifNotMatch = 0;
+    uint64_t startByte = 0, byteCount = 0;
+
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, IF_MODIFIED_SINCE_PREFIX, 
+                     IF_MODIFIED_SINCE_PREFIX_LEN)) {
+            // Parse ifModifiedSince
+            ifModifiedSince = parseIso8601Time
+                (&(param[IF_MODIFIED_SINCE_PREFIX_LEN]));
+            if (ifModifiedSince < 0) {
+                fprintf(stderr, "ERROR: Invalid ifModifiedSince time "
+                        "value; ISO 8601 time format required\n");
+                usageExit(stderr);
+            }
+        }
+        else if (!strncmp(param, IF_NOT_MODIFIED_SINCE_PREFIX, 
+                          IF_NOT_MODIFIED_SINCE_PREFIX_LEN)) {
+            // Parse ifModifiedSince
+            ifNotModifiedSince = parseIso8601Time
+                (&(param[IF_NOT_MODIFIED_SINCE_PREFIX_LEN]));
+            if (ifNotModifiedSince < 0) {
+                fprintf(stderr, "ERROR: Invalid ifNotModifiedSince time "
+                        "value; ISO 8601 time format required\n");
+                usageExit(stderr);
+            }
+        }
+        else if (!strncmp(param, IF_MATCH_PREFIX, IF_MATCH_PREFIX_LEN)) {
+            ifMatch = &(param[IF_MATCH_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, IF_NOT_MATCH_PREFIX,
+                          IF_NOT_MATCH_PREFIX_LEN)) {
+            ifNotMatch = &(param[IF_NOT_MATCH_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, START_BYTE_PREFIX, START_BYTE_PREFIX_LEN)) {
+            startByte = convertInt
+                (&(param[START_BYTE_PREFIX_LEN]), "startByte");
+        }
+        else if (!strncmp(param, BYTE_COUNT_PREFIX, BYTE_COUNT_PREFIX_LEN)) {
+            byteCount = convertInt
+                (&(param[BYTE_COUNT_PREFIX_LEN]), "byteCount");
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    FILE *outfile;
+
+    if (filename) {
+        if ((outfile = fopen(filename, "w")) == NULL) {
+            fprintf(stderr, "ERROR: Failed to open output file %s: ",
+                    filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else if (showResponsePropertiesG) {
+        fprintf(stderr, "ERROR: get -s requires a filename parameter\n");
+        usageExit(stderr);
+    }
+    else {
+        outfile = stdout;
+    }
+
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3GetProperties getProperties =
+    {
+        ifModifiedSince,
+        ifNotModifiedSince,
+        ifMatch,
+        ifNotMatch
+    };
+
+    S3GetObjectHandler getObjectHandler =
+    {
+        { &responsePropertiesCallback, &responseCompleteCallback },
+        &getObjectDataCallback
+    };
+
+    S3_get_object(&bucketContext, key, &getProperties, startByte, byteCount,
+                  0, &getObjectHandler, outfile);
+
+    fclose(outfile);
+
+    if (statusG != S3StatusOK) {
+        printError();
+    }
+
+    S3_deinitialize();
+}
+
+
+// main ----------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
@@ -1004,7 +1266,7 @@ int main(int argc, char **argv)
             protocolG = S3ProtocolHTTP;
             break;
         case 's':
-            showResponseHeadersG = 1;
+            showResponsePropertiesG = 1;
             break;
         default:
             fprintf(stderr, "ERROR: Unknown options: -%c\n", c);
@@ -1058,6 +1320,7 @@ int main(int argc, char **argv)
     else if (!strcmp(command, "copy")) {
     }
     else if (!strcmp(command, "get")) {
+        get_object(argc, argv, optind);
     }
     else if (!strcmp(command, "head")) {
     }

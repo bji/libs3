@@ -42,16 +42,16 @@ static int checkString(const char *str, const char *format)
     while (*format) {
         if (*format == 'd') {
             if (!isdigit(*str)) {
-                return 1;
+                return 0;
             }
         }
         else if (*str != *format) {
-            return 1;
+            return 0;
         }
         str++, format++;
     }
 
-    return 0;
+    return 1;
 }
 
 

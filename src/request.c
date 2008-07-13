@@ -51,17 +51,17 @@ static int requestStackCountG;
 typedef struct RequestComputedValues
 {
     // All x-amz- headers, in normalized form (i.e. NAME: VALUE, no other ws)
-    char *amzHeaders[S3_MAX_META_HEADER_COUNT + 2]; // + 2 for acl and date
+    char *amzHeaders[S3_MAX_METADATA_COUNT + 2]; // + 2 for acl and date
 
     // The number of x-amz- headers
     int amzHeadersCount;
 
     // Storage for amzHeaders (the +256 is for x-amz-acl and x-amz-date)
-    char amzHeadersRaw[COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1];
+    char amzHeadersRaw[COMPACTED_METADATA_BUFFER_SIZE + 256 + 1];
 
     // Canonicalized x-amz- headers
     string_multibuffer(canonicalizedAmzHeaders,
-                       COMPACTED_META_HEADER_BUFFER_SIZE + 256 + 1);
+                       COMPACTED_METADATA_BUFFER_SIZE + 256 + 1);
 
     // URL-Encoded key
     char urlEncodedKey[MAX_URLENCODED_KEY_SIZE + 1];
@@ -97,11 +97,11 @@ typedef struct RequestComputedValues
 // or the request is finished being procesed
 static S3Status request_headers_done(Request *request)
 {
-    if (request->headersCallbackMade) {
+    if (request->propertiesCallbackMade) {
         return S3StatusOK;
     }
 
-    request->headersCallbackMade = 1;
+    request->propertiesCallbackMade = 1;
 
     // Get the http response code
     if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
@@ -112,13 +112,14 @@ static S3Status request_headers_done(Request *request)
     response_headers_handler_done(&(request->responseHeadersHandler), 
                                   request->curl);
         
-    return (*(request->headersCallback))
-        (&(request->responseHeadersHandler.responseHeaders), 
+    return (*(request->propertiesCallback))
+        (&(request->responseHeadersHandler.responseProperties), 
          request->callbackData);
 }
 
 
-static size_t curl_header_func(void *ptr, size_t size, size_t nmemb, void *data)
+static size_t curl_header_func(void *ptr, size_t size, size_t nmemb,
+                               void *data)
 {
     Request *request = (Request *) data;
 
@@ -151,7 +152,8 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 
-static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
+static size_t curl_write_func(void *ptr, size_t size, size_t nmemb,
+                              void *data)
 {
     Request *request = (Request *) data;
 
@@ -194,7 +196,7 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb, void *data)
 static S3Status compose_amz_headers(const RequestParams *params,
                                     RequestComputedValues *values)
 {
-    const S3RequestHeaders *headers = params->requestHeaders;
+    const S3PutProperties *properties = params->putProperties;
 
     values->amzHeadersCount = 0;
     values->amzHeadersRaw[0] = 0;
@@ -212,7 +214,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
                         sizeof(values->amzHeadersRaw) - len,            \
                         format, __VA_ARGS__);                           \
         if (len >= sizeof(values->amzHeadersRaw)) {                     \
-            return S3StatusMetaHeadersTooLong;                          \
+            return S3StatusMetaDataHeadersTooLong;                      \
         }                                                               \
         while ((len > 0) && (values->amzHeadersRaw[len - 1] == ' ')) {  \
             len--;                                                      \
@@ -225,7 +227,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
         values->amzHeaders[values->amzHeadersCount++] =                 \
             &(values->amzHeadersRaw[len]);                              \
         if ((len + l) >= sizeof(values->amzHeadersRaw)) {               \
-            return S3StatusMetaHeadersTooLong;                          \
+            return S3StatusMetaDataHeadersTooLong;                      \
         }                                                               \
         int todo = l;                                                   \
         while (todo--) {                                                \
@@ -240,22 +242,22 @@ static S3Status compose_amz_headers(const RequestParams *params,
     } while (0)
 
     // Check and copy in the x-amz-meta headers
-    if (headers) {
+    if (properties) {
         int i;
-        for (i = 0; i < headers->metaHeadersCount; i++) {
-            const S3NameValue *header = &(headers->metaHeaders[i]);
-            char headerName[S3_MAX_META_HEADER_SIZE - sizeof(": v")];
-            int len = snprintf(headerName, sizeof(headerName),
-                               "x-amz-meta-%s", header->name);
+        for (i = 0; i < properties->metaDataCount; i++) {
+            const S3NameValue *property = &(properties->metaData[i]);
+            char headerName[S3_MAX_METADATA_SIZE - sizeof(": v")];
+            int l = snprintf(headerName, sizeof(headerName),
+                             "x-amz-meta-%s", property->name);
             char *hn = headerName;
-            header_name_tolower_copy(hn, len);
-            // Copy in a space and then the value
-            headers_append(0, " %s", header->value);
+            header_name_tolower_copy(hn, l);
+            // Copy in the value
+            headers_append(0, ": %s", property->value);
         }
 
         // Add the x-amz-acl header, if necessary
         const char *cannedAclString;
-        switch (params->requestHeaders->cannedAcl) {
+        switch (params->putProperties->cannedAcl) {
         case S3CannedAclPrivate:
             cannedAclString = 0;
             break;
@@ -282,13 +284,13 @@ static S3Status compose_amz_headers(const RequestParams *params,
 
     if (params->httpRequestType == HttpRequestTypeCOPY) {
         // Add the x-amz-copy-source header
-        if (params->requestHeaders->sourceObject &&
-            params->requestHeaders->sourceObject[0]) {
+        if (params->putProperties->sourceObject &&
+            params->putProperties->sourceObject[0]) {
             headers_append(1, "x-amz-copy-source: %s", 
-                           params->requestHeaders->sourceObject);
+                           params->putProperties->sourceObject);
         }
         // And the x-amz-metadata-directive header
-        if (params->requestHeaders->metaDataDirective != 
+        if (params->putProperties->metaDataDirective != 
             S3MetaDataDirectiveCopy) {
             headers_append(1, "%s", "x-amz-metadata-directive: REPLACE");
         }
@@ -305,11 +307,11 @@ static S3Status compose_standard_headers(const RequestParams *params,
 
 #define do_header(fmt, sourceField, destField, badError, tooLongError)  \
     do {                                                                \
-        if (params->requestHeaders &&                                   \
-            params->requestHeaders-> sourceField &&                     \
-            params->requestHeaders-> sourceField[0]) {                  \
+        if (params->putProperties &&                                    \
+            params->putProperties-> sourceField &&                      \
+            params->putProperties-> sourceField[0]) {                   \
             /* Skip whitespace at beginning of val */                   \
-            const char *val = params->requestHeaders-> sourceField;     \
+            const char *val = params->putProperties-> sourceField;      \
             while (*val && isblank(*val)) {                             \
                 val++;                                                  \
             }                                                           \
@@ -357,10 +359,10 @@ static S3Status compose_standard_headers(const RequestParams *params,
               S3StatusBadContentEncoding, S3StatusContentEncodingTooLong);
 
     // 6. Expires
-    if (params->requestHeaders && (params->requestHeaders->expires >= 0)) {
+    if (params->putProperties && (params->putProperties->expires >= 0)) {
         char date[100];
-        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT",
-                 gmtime(&(params->requestHeaders->expires)));
+        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S UTC",
+                 gmtime(&(params->putProperties->expires)));
         snprintf(values->expiresHeader, sizeof(values->expiresHeader),
                  "Expires: %s", date);
     }
@@ -433,7 +435,7 @@ static void header_gnome_sort(const char **headers, int size)
 static void canonicalize_amz_headers(RequestComputedValues *values)
 {
     // Make a copy of the headers that will be sorted
-    const char *sortedHeaders[S3_MAX_META_HEADER_COUNT];
+    const char *sortedHeaders[S3_MAX_METADATA_COUNT];
 
     memcpy(sortedHeaders, values->amzHeaders,
            (values->amzHeadersCount * sizeof(sortedHeaders[0])));
@@ -563,7 +565,8 @@ static S3Status compose_auth_header(const RequestParams *params,
     len += snprintf(&(signbuf[len]), sizeof(signbuf) - len,     \
                     format, __VA_ARGS__)
 
-    signbuf_append("%s\n", http_request_type_to_verb(params->httpRequestType));
+    signbuf_append
+        ("%s\n", http_request_type_to_verb(params->httpRequestType));
 
     // For MD5 and Content-Type, use the value in the actual header, because
     // it's already been trimmed
@@ -597,7 +600,8 @@ static S3Status compose_auth_header(const RequestParams *params,
     base64mem->data[base64mem->length - 1] = 0;
 
     snprintf(values->authorizationHeader, sizeof(values->authorizationHeader),
-             "Authorization: AWS %s:%s", params->accessKeyId, base64mem->data);
+             "Authorization: AWS %s:%s", params->accessKeyId, 
+             base64mem->data);
 
     BIO_free_all(base64);
 
@@ -844,7 +848,7 @@ static S3Status request_get(const RequestParams *params,
         return status;
     }
 
-    request->headersCallback = params->headersCallback;
+    request->propertiesCallback = params->propertiesCallback;
 
     request->toS3Callback = params->toS3Callback;
 
@@ -856,7 +860,7 @@ static S3Status request_get(const RequestParams *params,
 
     response_headers_handler_initialize(&(request->responseHeadersHandler));
 
-    request->headersCallbackMade = 0;
+    request->propertiesCallbackMade = 0;
     
     error_parser_initialize(&(request->errorParser));
 
@@ -949,8 +953,8 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     
     // Validate the bucket name
     if (params->bucketName && 
-        ((status = S3_validate_bucket_name(params->bucketName,
-                                           params->uriStyle)) != S3StatusOK)) {
+        ((status = S3_validate_bucket_name
+          (params->bucketName, params->uriStyle)) != S3StatusOK)) {
         return_status(status);
     }
 
@@ -960,7 +964,8 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     }
 
     // Compose standard headers
-    if ((status = compose_standard_headers(params, &computed)) != S3StatusOK) {
+    if ((status = compose_standard_headers
+         (params, &computed)) != S3StatusOK) {
         return_status(status);
     }
 

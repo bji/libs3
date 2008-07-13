@@ -184,8 +184,8 @@ const char *S3_get_status_name(S3Status status)
         handlecase(FailedToCreateRequest);
         handlecase(FailedToInitializeRequest);
         handlecase(FailedToCreateRequestContext);
-        handlecase(MetaHeadersTooLong);
-        handlecase(BadMetaHeader);
+        handlecase(MetaDataHeadersTooLong);
+        handlecase(BadMetaData);
         handlecase(BadContentType);
         handlecase(ContentTypeTooLong);
         handlecase(BadMD5);

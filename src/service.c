@@ -33,7 +33,7 @@ typedef struct XmlCallbackData
 {
     SimpleXml simpleXml;
     
-    S3ResponseHeadersCallback *responseHeadersCallback;
+    S3ResponsePropertiesCallback *responsePropertiesCallback;
     S3ListServiceCallback *listServiceCallback;
     S3ResponseCompleteCallback *responseCompleteCallback;
     void *callbackData;
@@ -93,13 +93,13 @@ static S3Status xmlCallback(const char *elementPath, const char *data,
 }
 
 
-static S3Status headersCallback(const S3ResponseHeaders *responseHeaders, 
-                                void *callbackData)
+static S3Status propertiesCallback
+    (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     XmlCallbackData *cbData = (XmlCallbackData *) callbackData;
     
-    return (*(cbData->responseHeadersCallback))
-        (responseHeaders, cbData->callbackData);
+    return (*(cbData->responsePropertiesCallback))
+        (responseProperties, cbData->callbackData);
 }
 
 
@@ -151,7 +151,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         return;
     }
 
-    data->responseHeadersCallback = handler->responseHandler.headersCallback;
+    data->responsePropertiesCallback =
+        handler->responseHandler.propertiesCallback;
     data->listServiceCallback = handler->listServiceCallback;
     data->responseCompleteCallback = handler->responseHandler.completeCallback;
     data->callbackData = callbackData;
@@ -161,9 +162,6 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
     string_buffer_initialize(data->bucketName);
     string_buffer_initialize(data->creationDate);
     
-    // stopped here - change the params that follow, and make sure that the
-    // complete callback frees the XmlCallbackData that we allocated
-
     // Set up the RequestParams
     RequestParams params =
     {
@@ -176,8 +174,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         0,                                  // subResource
         accessKeyId,                        // accessKeyId
         secretAccessKey,                    // secretAccessKey
-        0,                                  // requestHeaders 
-        &headersCallback,                   // headersCallback
+        0,                                  // requestProperties
+        &propertiesCallback,                // propertiesCallback
         0,                                  // toS3Callback
         0,                                  // toS3CallbackTotalSize
         &dataCallback,                      // fromS3Callback

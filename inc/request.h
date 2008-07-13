@@ -73,11 +73,11 @@ typedef struct RequestParams
     // AWS Secret Access Key
     const char *secretAccessKey;
 
-    // Request headers
-    const S3RequestHeaders *requestHeaders;
+    // Put properties
+    const S3PutProperties *putProperties;
 
     // Callback to be made when headers are available.  Might not be called.
-    S3ResponseHeadersCallback *headersCallback;
+    S3ResponsePropertiesCallback *propertiesCallback;
 
     // Callback to be made to supply data to send to S3.  Might not be called.
     S3PutObjectDataCallback *toS3Callback;
@@ -119,7 +119,7 @@ typedef struct Request
     int httpResponseCode;
 
     // Callback to be made when headers are available.  Might not be called.
-    S3ResponseHeadersCallback *headersCallback;
+    S3ResponsePropertiesCallback *propertiesCallback;
 
     // Callback to be made to supply data to send to S3.  Might not be called.
     S3PutObjectDataCallback *toS3Callback;
@@ -141,8 +141,8 @@ typedef struct Request
     // Handler of response headers
     ResponseHeadersHandler responseHeadersHandler;
 
-    // This is set to nonzero after the haders callback has been made
-    int headersCallbackMade;
+    // This is set to nonzero after the properties callback has been made
+    int propertiesCallbackMade;
 
     // Parser of errors
     ErrorParser errorParser;

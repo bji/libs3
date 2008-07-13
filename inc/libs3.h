@@ -69,27 +69,27 @@
 
 
 /**
- * S3_MAX_META_HEADERS_SIZE is the maximum number of bytes allowed for
+ * S3_MAX_METADATA_SIZE is the maximum number of bytes allowed for
  * x-amz-meta header names and values in any request passed to Amazon S3
  **/
-#define S3_MAX_META_HEADER_SIZE         2048
+#define S3_MAX_METADATA_SIZE            2048
 
 
 /**
- * S3_META_HEADER_NAME_PREFIX is the prefix of an S3 "meta header"
+ * S3_METADATA_HEADER_NAME_PREFIX is the prefix of an S3 "meta header"
  **/
-#define S3_META_HEADER_NAME_PREFIX "x-amz-meta-"
+#define S3_METADATA_HEADER_NAME_PREFIX "x-amz-meta-"
 
 
 /**
- * S3_MAX_META_HEADER_COUNT is the maximum number of x-amz-meta- headers that
+ * S3_MAX_METADATA_COUNT is the maximum number of x-amz-meta- headers that
  * could be included in a request to S3.  The smallest meta header is
  * "x-amz-meta-n: v".  Since S3 doesn't count the ": " against the total, the
  * smallest amount of data to count for a header would be the length of
  * "x-amz-meta-nv".
  **/
-#define S3_MAX_META_HEADER_COUNT \
-    (S3_MAX_META_HEADER_SIZE / (sizeof(S3_META_HEADER_NAME_PREFIX "nv") - 1))
+#define S3_MAX_METADATA_COUNT \
+    (S3_MAX_METADATA_SIZE / (sizeof(S3_METADATA_HEADER_NAME_PREFIX "nv") - 1))
 
 
 /**
@@ -126,8 +126,8 @@ typedef enum
     S3StatusFailedToCreateRequest                           ,
     S3StatusFailedToInitializeRequest                       ,
     S3StatusFailedToCreateRequestContext                    ,
-    S3StatusMetaHeadersTooLong                              ,
-    S3StatusBadMetaHeader                                   ,
+    S3StatusMetaDataHeadersTooLong                          ,
+    S3StatusBadMetaData                                     ,
     S3StatusBadContentType                                  ,
     S3StatusContentTypeTooLong                              ,
     S3StatusBadMD5                                          ,
@@ -308,12 +308,12 @@ typedef struct S3NameValue
 } S3NameValue;
 
 /**
- * S3ResponseHeaders is passed to the header callback function which is called
- * when the complete response status code and headers have been received.
- * Some of the fields of this structure are optional and may not be provided
- * in the response, and some will always be provided in the response.
+ * S3ResponseProperties is passed to the properties callback function which is
+ * called when the complete response status code and properties have been
+ * received.  Some of the fields of this structure are optional and may not be
+ * provided in the response, and some will always be provided in the response.
  **/
-typedef struct S3ResponseHeaders
+typedef struct S3ResponseProperties
 {
     /**
      * This optional field identifies the request ID and may be used when
@@ -337,7 +337,7 @@ typedef struct S3ResponseHeaders
      * provided in the response.  A value of 0 means that there is no content
      * provided.
      **/
-    int64_t contentLength;
+    uint64_t contentLength;
     /**
      * This optional field names the server which serviced the request.  It
      * may or may not be provided.
@@ -359,15 +359,15 @@ typedef struct S3ResponseHeaders
      **/
     time_t lastModified;
     /**
-     * This is the number of user-provided metadata headers associated with
-     * the resource.
+     * This is the number of user-provided meta data associated with the
+     * resource.
      **/
-    int metaHeadersCount;
+    int metaDataCount;
     /**
-     * These are the metadata headers associated with the resource.
+     * These are the meta data associated with the resource.
      **/
-    const S3NameValue *metaHeaders;
-} S3ResponseHeaders;
+    const S3NameValue *metaData;
+} S3ResponseProperties;
 
 
 /**
@@ -495,7 +495,7 @@ typedef struct S3ListBucketContent
 
 
 /**
- * S3RequestHeaders is the set of headers that may optionally be set by the
+ * S3PutProperties is the set of properties that may optionally be set by the
  * user when putting objects to S3.  Each field of this structure is optional
  * and may or may not be present.
  **/
@@ -510,7 +510,7 @@ typedef struct S3ListBucketContent
 //   care.
 // expires is optional
 */
-typedef struct S3RequestHeaders
+typedef struct S3PutProperties
 {
     /**
      * If present, this is the Content-Type that should be associated with the
@@ -567,15 +567,37 @@ typedef struct S3RequestHeaders
      **/
     S3MetaDataDirective metaDataDirective;
     /**
-     * This is the number of headers in the metaHeaders field.  Ignored and
-     * assumed to be 0, for all except put_object and copy_object operations.
+     * This is the number of values in the metaData field.
      **/
-    int metaHeadersCount;
+    int metaDataCount;
     /**
-     * These are the meta headers to pass to S3.
+     * These are the meta data to pass to S3.
      **/
-    const S3NameValue *metaHeaders;
-} S3RequestHeaders;
+    const S3NameValue *metaData;
+} S3PutProperties;
+
+
+// Used for get object or head object, specify properties for controlling
+// the get/head
+typedef struct S3GetProperties
+{
+    /**
+     * If >= 0, ...
+     **/
+    time_t ifModifiedSince;
+    /**
+     * If >= 0 ...
+     **/
+    time_t ifNotModifiedSince;
+    /**
+     * If present ...
+     **/
+    const char *ifMatchETag;
+    /**
+     * If present ...
+     **/
+    const char *ifNotMatchETag;
+} S3GetProperties;
 
 
 typedef struct S3ErrorDetails
@@ -612,17 +634,16 @@ typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
 
 
 /**
- * This callback is made whenever the response headers become available for
+ * This callback is made whenever the response properties become available for
  * any request.
  *
  * @param callbackData is the callback data as specified when the S3Request
  *        for which this callback was specified was initialized
- * @param headers is the headers (includes the response status code) that
- *        are available from the response.
+ * @param properties is the properties that are available from the response.
  * @return S3Status???
  **/
-typedef S3Status (S3ResponseHeadersCallback)(const S3ResponseHeaders *headers,
-                                             void *callbackData);
+typedef S3Status (S3ResponsePropertiesCallback)
+    (const S3ResponseProperties *properties, void *callbackData);
 
 typedef void (S3ResponseCompleteCallback)(S3Status status,
                                           int httpResponseCode,
@@ -853,8 +874,8 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
 
 typedef struct S3ResponseHandler
 {
-    // Headers callback
-    S3ResponseHeadersCallback *headersCallback;
+    // Properties callback
+    S3ResponsePropertiesCallback *propertiesCallback;
     
     // Request complete callback - always called if the call which initiates
     // the request doesn't return an error code
@@ -1034,7 +1055,7 @@ void S3_list_bucket(S3BucketContext *bucketContext,
 */
 void S3_put_object(S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
-                   const S3RequestHeaders *requestHeaders,
+                   const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
                    S3PutObjectHandler *handler, void *callbackData);
                         
@@ -1042,12 +1063,12 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
 /*
 // destinationBucket NULL means the same bucket as in pBucketContext
 // destinationKey NULL means the same object key as [key]
-// if pOptionalHeaders is NULL, existing headers will not be changed
+// if putProperties is NULL, existing properties will not be changed
 */
 void S3_copy_object(S3BucketContext *bucketContext,
                     const char *key, const char *destinationBucket,
                     const char *destinationKey,
-                    const S3RequestHeaders *requestHeaders,
+                    const S3PutProperties *putProperties,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData);
 
@@ -1057,8 +1078,7 @@ void S3_copy_object(S3BucketContext *bucketContext,
 // not, fail and close the request.  We expect S3 to be sensible about
 // Range and anything not returned properly must indicate an error in the
 // request.
-// byte range is a freeform Byte Range specification string, of the form:
-// MMM-NNN[,OOO-PPP...]
+// byteRangeCount == 0 means get everything
 // We only allow complete ranges and we enforce this on the request
 // The response has to have the exact same set of ranges, or it is an error.
 // In this way, the caller can be sure that they will get exactly what they
@@ -1066,16 +1086,15 @@ void S3_copy_object(S3BucketContext *bucketContext,
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 */
 void S3_get_object(S3BucketContext *bucketContext, const char *key,
-                   long ifModifiedSince, long ifUnmodifiedSince,
-                   const char *ifMatchETag, const char *ifNotMatchETag,
-                   const char *byteRange, S3RequestContext *requestContext,
+                   const S3GetProperties *getProperties,
+                   uint64_t startByte, uint64_t byteCount,
+                   S3RequestContext *requestContext,
                    S3GetObjectHandler *handler, void *callbackData);
 
 
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    long ifModifiedSince, long ifUnmodifiedSince,
-                    const char *ifMatchETag, const char *ifNotMatchETag,
+                    const S3GetProperties *getProperties,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData);
                          

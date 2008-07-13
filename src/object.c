@@ -26,11 +26,11 @@
 #include "request.h"
 
 
-// put object -----------------------------------------------------------------
+// put object ----------------------------------------------------------------
 
 void S3_put_object(S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
-                   const S3RequestHeaders *requestHeaders,
+                   const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
                    S3PutObjectHandler *handler, void *callbackData)
 {
@@ -46,8 +46,8 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
         0,                                          // subResource
         bucketContext->accessKeyId,                 // accessKeyId
         bucketContext->secretAccessKey,             // secretAccessKey
-        requestHeaders,                             // requestHeaders
-        handler->responseHandler.headersCallback,   // headersCallback
+        putProperties,                                 // putProperties
+        handler->responseHandler.propertiesCallback,   // propertiesCallback
         handler->putObjectDataCallback,             // toS3Callback
         contentLength,                              // toS3CallbackTotalSize
         0,                                          // fromS3Callback
@@ -62,7 +62,7 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
 
 void S3_copy_object(S3BucketContext *bucketContext, const char *key,
                     const char *destinationBucket, const char *destinationKey,
-                    const S3RequestHeaders *requestHeaders,
+                    const S3PutProperties *putProperties,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData)
 {
@@ -70,17 +70,41 @@ void S3_copy_object(S3BucketContext *bucketContext, const char *key,
 
 
 void S3_get_object(S3BucketContext *bucketContext, const char *key,
-                   long ifModifiedSince, long ifUnmodifiedSince,
-                   const char *ifMatchETag, const char *ifNotMatchETag,
-                   const char *byteRange, S3RequestContext *requestContext,
+                   const S3GetProperties *getProperties,
+                   uint64_t startByte, uint64_t byteCount,
+                   S3RequestContext *requestContext,
                    S3GetObjectHandler *handler, void *callbackData)
 {
+    // xxx todo - do something with getProperties, startByte, and byteCount
+
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypeGET,                            // httpRequestType
+        bucketContext->protocol,                       // protocol
+        bucketContext->uriStyle,                       // uriStyle
+        bucketContext->bucketName,                     // bucketName
+        key,                                           // key
+        0,                                             // queryParams
+        0,                                             // subResource
+        bucketContext->accessKeyId,                    // accessKeyId
+        bucketContext->secretAccessKey,                // secretAccessKey
+        0,                                             // putProperties
+        handler->responseHandler.propertiesCallback,   // propertiesCallback
+        0,                                             // toS3Callback
+        0,                                             // toS3CallbackTotalSize
+        handler->getObjectDataCallback,                // fromS3Callback
+        handler->responseHandler.completeCallback,     // completeCallback
+        callbackData                                   // callbackData
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
 }
 
 
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    long ifModifiedSince, long ifUnmodifiedSince,
-                    const char *ifMatchETag, const char *ifNotMatchETag,
+                    const S3GetProperties *getProperties,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData)
 {

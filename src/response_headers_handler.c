@@ -29,25 +29,25 @@
 
 void response_headers_handler_initialize(ResponseHeadersHandler *handler)
 {
-    handler->responseHeaders.requestId = 0;
-    handler->responseHeaders.requestId2 = 0;
-    handler->responseHeaders.contentType = 0;
-    handler->responseHeaders.contentLength = -1;
-    handler->responseHeaders.server = 0;
-    handler->responseHeaders.eTag = 0;
-    handler->responseHeaders.lastModified = -1;
-    handler->responseHeaders.metaHeadersCount = 0;
-    handler->responseHeaders.metaHeaders = 0;
+    handler->responseProperties.requestId = 0;
+    handler->responseProperties.requestId2 = 0;
+    handler->responseProperties.contentType = 0;
+    handler->responseProperties.contentLength = -1;
+    handler->responseProperties.server = 0;
+    handler->responseProperties.eTag = 0;
+    handler->responseProperties.lastModified = -1;
+    handler->responseProperties.metaDataCount = 0;
+    handler->responseProperties.metaData = 0;
     handler->done = 0;
-    string_multibuffer_initialize(handler->responseHeaderStrings);
-    string_multibuffer_initialize(handler->responseMetaHeaderStrings);
+    string_multibuffer_initialize(handler->responsePropertyStrings);
+    string_multibuffer_initialize(handler->responseMetaDataStrings);
 }
 
 
 void response_headers_handler_add(ResponseHeadersHandler *handler,
                                   char *header, int len)
 {
-    S3ResponseHeaders *responseHeaders = &(handler->responseHeaders);
+    S3ResponseProperties *responseProperties = &(handler->responseProperties);
     char *end = &(header[len]);
     
     // Curl might call back the header function after the body has been
@@ -60,8 +60,8 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
     // If we've already filled up the response headers, ignore this data.
     // This sucks, but it shouldn't happen - S3 should not be sending back
     // really long headers.
-    if (handler->responseHeaderStringsSize == 
-        (sizeof(handler->responseHeaderStrings) - 1)) {
+    if (handler->responsePropertyStringsSize == 
+        (sizeof(handler->responsePropertyStrings) - 1)) {
         return;
     }
 
@@ -111,54 +111,54 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
     int valuelen = (end - c) + 1, fit;
 
     if (!strncmp(header, "x-amz-request-id", namelen)) {
-        responseHeaders->requestId = 
-            string_multibuffer_current(handler->responseHeaderStrings);
-        string_multibuffer_add(handler->responseHeaderStrings, c, 
+        responseProperties->requestId = 
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
     else if (!strncmp(header, "x-amz-id-2", namelen)) {
-        responseHeaders->requestId2 = 
-            string_multibuffer_current(handler->responseHeaderStrings);
-        string_multibuffer_add(handler->responseHeaderStrings, c, 
+        responseProperties->requestId2 = 
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
     else if (!strncmp(header, "Content-Type", namelen)) {
-        responseHeaders->contentType = 
-            string_multibuffer_current(handler->responseHeaderStrings);
-        string_multibuffer_add(handler->responseHeaderStrings, c, 
+        responseProperties->contentType = 
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
     else if (!strncmp(header, "Content-Length", namelen)) {
-        handler->responseHeaders.contentLength = 0;
+        handler->responseProperties.contentLength = 0;
         while (*c) {
-            handler->responseHeaders.contentLength *= 10;
-            handler->responseHeaders.contentLength += (*c++ - '0');
+            handler->responseProperties.contentLength *= 10;
+            handler->responseProperties.contentLength += (*c++ - '0');
         }
     }
     else if (!strncmp(header, "Server", namelen)) {
-        responseHeaders->server = 
-            string_multibuffer_current(handler->responseHeaderStrings);
-        string_multibuffer_add(handler->responseHeaderStrings, c, 
+        responseProperties->server = 
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
     else if (!strncmp(header, "ETag", namelen)) {
-        responseHeaders->eTag = 
-            string_multibuffer_current(handler->responseHeaderStrings);
-        string_multibuffer_add(handler->responseHeaderStrings, c, 
+        responseProperties->eTag = 
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
     else if (!strncmp(header, "x-amz-meta-", sizeof("x-amz-meta-") - 1)) {
         // Make sure there is room for another x-amz-meta header
-        if (handler->responseHeaders.metaHeadersCount ==
-            sizeof(handler->responseMetaHeaders)) {
+        if (handler->responseProperties.metaDataCount ==
+            sizeof(handler->responseMetaData)) {
             return;
         }
         // Copy the name in
-        char *metaName = &(header[sizeof("x-amz-meta-")]);
+        char *metaName = &(header[sizeof("x-amz-meta-") - 1]);
         int metaNameLen = (namelen - (sizeof("x-amz-meta-") - 1));
         char *copiedName = 
-            string_multibuffer_current(handler->responseMetaHeaderStrings);
-        string_multibuffer_add(handler->responseMetaHeaderStrings, metaName,
+            string_multibuffer_current(handler->responseMetaDataStrings);
+        string_multibuffer_add(handler->responseMetaDataStrings, metaName,
                                metaNameLen, fit);
         if (!fit) {
             return;
@@ -166,16 +166,21 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
 
         // Copy the value in
         char *copiedValue = 
-            string_multibuffer_current(handler->responseMetaHeaderStrings);
-        string_multibuffer_add(handler->responseMetaHeaderStrings,
+            string_multibuffer_current(handler->responseMetaDataStrings);
+        string_multibuffer_add(handler->responseMetaDataStrings,
                                c, valuelen, fit);
         if (!fit) {
             return;
         }
 
+        if (!handler->responseProperties.metaDataCount) {
+            handler->responseProperties.metaData = 
+                handler->responseMetaData;
+        }
+
         S3NameValue *metaHeader = 
-            &(handler->responseMetaHeaders
-              [handler->responseHeaders.metaHeadersCount++]);
+            &(handler->responseMetaData
+              [handler->responseProperties.metaDataCount++]);
         metaHeader->name = copiedName;
         metaHeader->value = copiedValue;
     }
@@ -188,8 +193,8 @@ void response_headers_handler_done(ResponseHeadersHandler *handler, CURL *curl)
     // curl parse it
     if (curl_easy_getinfo
         (curl, CURLINFO_FILETIME, 
-         &(handler->responseHeaders.lastModified)) != CURLE_OK) {
-        handler->responseHeaders.lastModified = -1;
+         &(handler->responseProperties.lastModified)) != CURLE_OK) {
+        handler->responseProperties.lastModified = -1;
     }
     
     handler->done = 1;

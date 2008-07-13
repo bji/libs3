@@ -102,8 +102,9 @@ static S3Status errorXmlCallback(const char *elementPath, const char *data,
             // Value didn't fit; ignore this one.
             return S3StatusOK;
         }
-        S3NameValue *nv = &(errorParser->extraDetails
-                            [errorParser->s3ErrorDetails.extraDetailsCount++]);
+        S3NameValue *nv = 
+            &(errorParser->extraDetails
+              [errorParser->s3ErrorDetails.extraDetailsCount++]);
         nv->name = name;
         nv->value = value;
     }
