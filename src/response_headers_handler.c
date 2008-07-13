@@ -32,7 +32,7 @@ void response_headers_handler_initialize(ResponseHeadersHandler *handler)
     handler->responseProperties.requestId = 0;
     handler->responseProperties.requestId2 = 0;
     handler->responseProperties.contentType = 0;
-    handler->responseProperties.contentLength = -1;
+    handler->responseProperties.contentLength = 0;
     handler->responseProperties.server = 0;
     handler->responseProperties.eTag = 0;
     handler->responseProperties.lastModified = -1;

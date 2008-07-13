@@ -456,7 +456,7 @@ static struct option longOptionsG[] =
 {
     { "path-style",           no_argument,        0,  'p' },
     { "unencrypted",          no_argument,        0,  'u' },
-    { "show-headers",         no_argument,        0,  's' },
+    { "show-proerties",         no_argument,      0,  's' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -699,6 +699,11 @@ static void delete_bucket(int argc, char **argv, int optind)
     }
 
     const char *bucketName = argv[optind++];
+
+    if (optind != argc) {
+        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        usageExit(stderr);
+    }
 
     S3_init();
 
@@ -1253,6 +1258,66 @@ static void get_object(int argc, char **argv, int optind)
 }
 
 
+// head object ---------------------------------------------------------------
+
+static void head_object(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        usageExit(stderr);
+    }
+    
+    // Head implies showing response properties
+    showResponsePropertiesG = 1;
+
+    // Split bucket/key
+    char *slash = argv[optind];
+
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    if (!*slash || !*(slash + 1)) {
+        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        usageExit(stderr);
+    }
+    *slash++ = 0;
+
+    const char *bucketName = argv[optind++];
+    const char *key = slash;
+
+    if (optind != argc) {
+        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        usageExit(stderr);
+    }
+
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3ResponseHandler responseHandler =
+    { 
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
+
+    if ((statusG != S3StatusOK) &&
+        (statusG != S3StatusErrorPreconditionFailed)) {
+        printError();
+    }
+
+    S3_deinitialize();
+}
+
+
 // main ----------------------------------------------------------------------
 
 int main(int argc, char **argv)
@@ -1333,6 +1398,7 @@ int main(int argc, char **argv)
         get_object(argc, argv, optind);
     }
     else if (!strcmp(command, "head")) {
+        head_object(argc, argv, optind);
     }
     else {
         fprintf(stderr, "Unknown command: %s\n", command);

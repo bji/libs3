@@ -413,53 +413,53 @@ static S3Status compose_standard_headers(const RequestParams *params,
         values->expiresHeader[0] = 0;
     }
 
-    if (params->getConditions) {
-        // If-Modified-Since
-        if (params->getConditions->ifModifiedSince >= 0) {
-            strftime(values->ifModifiedSinceHeader,
-                     sizeof(values->ifModifiedSinceHeader),
-                     "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", 
-                     gmtime(&(params->getConditions->ifModifiedSince)));
+    // If-Modified-Since
+    if (params->getConditions &&
+        (params->getConditions->ifModifiedSince >= 0)) {
+        strftime(values->ifModifiedSinceHeader,
+                 sizeof(values->ifModifiedSinceHeader),
+                 "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", 
+                 gmtime(&(params->getConditions->ifModifiedSince)));
+    }
+    else {
+        values->ifModifiedSinceHeader[0] = 0;
+    }
+
+    // If-Unmodified-Since header
+    if (params->getConditions &&
+        (params->getConditions->ifNotModifiedSince >= 0)) {
+        strftime(values->ifUnmodifiedSinceHeader,
+                 sizeof(values->ifUnmodifiedSinceHeader),
+                 "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", 
+                 gmtime(&(params->getConditions->ifNotModifiedSince)));
+    }
+    else {
+        values->ifUnmodifiedSinceHeader[0] = 0;
+    }
+    
+    // If-Match header
+    do_get_header("If-Match: %s", ifMatchETag, ifMatchHeader,
+                  S3StatusBadIfMatchETag, S3StatusIfMatchETagTooLong);
+    
+    // If-None-Match header
+    do_get_header("If-None-Match: %s", ifNotMatchETag, ifNoneMatchHeader,
+                  S3StatusBadIfNotMatchETag, 
+                  S3StatusIfNotMatchETagTooLong);
+    
+    // Range header
+    if (params->getConditions && (params->startByte || params->byteCount)) {
+        if (params->byteCount) {
+            snprintf(values->rangeHeader, sizeof(values->rangeHeader),
+                     "Range: bytes=%llu-%llu", params->startByte,
+                     (params->startByte + params->byteCount - 1));
         }
         else {
-            values->ifModifiedSinceHeader[0] = 0;
+            snprintf(values->rangeHeader, sizeof(values->rangeHeader),
+                     "Range: bytes=%llu-", params->startByte);
         }
-
-        // If-Unmodified-Since header
-        if (params->getConditions->ifNotModifiedSince >= 0) {
-            strftime(values->ifUnmodifiedSinceHeader,
-                     sizeof(values->ifUnmodifiedSinceHeader),
-                     "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", 
-                     gmtime(&(params->getConditions->ifNotModifiedSince)));
-        }
-        else {
-            values->ifUnmodifiedSinceHeader[0] = 0;
-        }
-
-        // If-Match header
-        do_get_header("If-Match: %s", ifMatchETag, ifMatchHeader,
-                      S3StatusBadIfMatchETag, S3StatusIfMatchETagTooLong);
-
-        // If-None-Match header
-        do_get_header("If-None-Match: %s", ifNotMatchETag, ifNoneMatchHeader,
-                      S3StatusBadIfNotMatchETag, 
-                      S3StatusIfNotMatchETagTooLong);
-
-        // Range header
-        if (params->startByte || params->byteCount) {
-            if (params->byteCount) {
-                snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                         "Range: bytes=%llu-%llu", params->startByte,
-                         (params->startByte + params->byteCount - 1));
-            }
-            else {
-                snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                         "Range: bytes=%llu-", params->startByte);
-            }
-        }
-        else {
-            values->rangeHeader[0] = 0;
-        }
+    }
+    else {
+        values->rangeHeader[0] = 0;
     }
 
     return S3StatusOK;

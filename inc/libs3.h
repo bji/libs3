@@ -1098,7 +1098,6 @@ void S3_get_object(S3BucketContext *bucketContext, const char *key,
 
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    const S3GetConditions *getConditions,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData);
                          

@@ -108,10 +108,35 @@ void S3_get_object(S3BucketContext *bucketContext, const char *key,
 
 
 void S3_head_object(S3BucketContext *bucketContext, const char *key,
-                    const S3GetConditions *getConditions,
                     S3RequestContext *requestContext,
                     S3ResponseHandler *handler, void *callbackData)
 {
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypeHEAD,                          // httpRequestType
+        bucketContext->protocol,                      // protocol
+        bucketContext->uriStyle,                      // uriStyle
+        bucketContext->bucketName,                    // bucketName
+        key,                                          // key
+        0,                                            // queryParams
+        0,                                            // subResource
+        bucketContext->accessKeyId,                   // accessKeyId
+        bucketContext->secretAccessKey,               // secretAccessKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // putProperties
+        handler->propertiesCallback,                  // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        0,                                            // fromS3Callback
+        handler->completeCallback,                    // completeCallback
+        callbackData                                  // callbackData
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
 }
                          
 
