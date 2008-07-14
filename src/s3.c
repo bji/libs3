@@ -51,7 +51,6 @@ extern int fileno(FILE *);
 static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
-// request properties stuff
 // acl stuff
 
 
@@ -1426,9 +1425,19 @@ static void get_object(int argc, char **argv, int optind)
     FILE *outfile;
 
     if (filename) {
-        // Open in r+ so that we don't truncate the file, just in case there
-        // is an error and we write no bytes, we leave the file unmodified
-        if ((outfile = fopen(filename, "r+")) == NULL) {
+        // Stat the file, and if it doesn't exist, open it in w mode
+        struct stat buf;
+        if (stat(filename, &buf) == -1) {
+            outfile = fopen(filename, "w");
+        }
+        else {
+            // Open in r+ so that we don't truncate the file, just in case
+            // there is an error and we write no bytes, we leave the file
+            // unmodified
+            outfile = fopen(filename, "r+");
+        }
+        
+        if (!outfile) {
             fprintf(stderr, "ERROR: Failed to open output file %s: ",
                     filename);
             perror(0);
