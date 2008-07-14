@@ -131,7 +131,7 @@ static void completeCallback(S3Status requestStatus, int httpResponseCode,
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey,
                      S3RequestContext *requestContext,
-                     S3ListServiceHandler *handler, void *callbackData)
+                     const S3ListServiceHandler *handler, void *callbackData)
 {
     // Create and set up the callback data
     XmlCallbackData *data = 
@@ -174,6 +174,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         0,                                            // subResource
         accessKeyId,                                  // accessKeyId
         secretAccessKey,                              // secretAccessKey
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount

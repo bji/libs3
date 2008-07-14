@@ -560,17 +560,6 @@ typedef struct S3PutProperties
      **/
     S3CannedAcl cannedAcl;
     /**
-     * For copy operations, this identifies the source object; must be
-     * of the form /source_bucket/source_key.  This value is ignored for all
-     * operations except copy_object.
-     **/
-    const char *sourceObject;
-    /**
-     * For copy operations, this gives the metadata directive.  This value is
-     * ignored for all operations except copy_object.
-     **/
-    S3MetaDataDirective metaDataDirective;
-    /**
      * This is the number of values in the metaData field.
      **/
     int metaDataCount;
@@ -943,7 +932,7 @@ typedef struct S3GetObjectHandler
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey,
                      S3RequestContext *requestContext,
-                     S3ListServiceHandler *handler, void *callbackData);
+                     const S3ListServiceHandler *handler, void *callbackData);
                          
                             
 /** **************************************************************************
@@ -977,7 +966,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
-                    S3ResponseHandler *handler, void *callbackData);
+                    const S3ResponseHandler *handler, void *callbackData);
 
                            
 /**
@@ -999,7 +988,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *bucketName, 
                       S3CannedAcl cannedAcl, const char *locationConstraint,
                       S3RequestContext *requestContext,
-                      S3ResponseHandler *handler, void *callbackData);
+                      const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -1016,7 +1005,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
                       const char *bucketName, S3RequestContext *requestContext,
-                      S3ResponseHandler *handler, void *callbackData);
+                      const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -1039,11 +1028,11 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param callbackData will be passed into the callback
  * @return S3Status ???
  **/
-void S3_list_bucket(S3BucketContext *bucketContext,
+void S3_list_bucket(const S3BucketContext *bucketContext,
                     const char *prefix, const char *marker, 
                     const char *delimiter, int maxkeys,
                     S3RequestContext *requestContext,
-                    S3ListBucketHandler *handler, void *callbackData);
+                    const S3ListBucketHandler *handler, void *callbackData);
 
 
 /**
@@ -1057,11 +1046,11 @@ void S3_list_bucket(S3BucketContext *bucketContext,
 /*
 // xxx todo - possible Cache-Control
 */
-void S3_put_object(S3BucketContext *bucketContext, const char *key,
+void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
                    const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
-                   S3PutObjectHandler *handler, void *callbackData);
+                   const S3PutObjectHandler *handler, void *callbackData);
                         
 
 /*
@@ -1069,12 +1058,13 @@ void S3_put_object(S3BucketContext *bucketContext, const char *key,
 // destinationKey NULL means the same object key as [key]
 // if putProperties is NULL, existing properties will not be changed
 */
-void S3_copy_object(S3BucketContext *bucketContext,
+void S3_copy_object(const S3BucketContext *bucketContext,
                     const char *key, const char *destinationBucket,
                     const char *destinationKey,
                     const S3PutProperties *putProperties,
-                    S3RequestContext *requestContext,
-                    S3ResponseHandler *handler, void *callbackData);
+                    time_t *lastModifiedReturn, int eTagReturnSize,
+                    char *eTagReturn, S3RequestContext *requestContext,
+                    const S3ResponseHandler *handler, void *callbackData);
 
 
 /*
@@ -1089,22 +1079,22 @@ void S3_copy_object(S3BucketContext *bucketContext,
 // expect.
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 */
-void S3_get_object(S3BucketContext *bucketContext, const char *key,
+void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
                    S3RequestContext *requestContext,
-                   S3GetObjectHandler *handler, void *callbackData);
+                   const S3GetObjectHandler *handler, void *callbackData);
 
 
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
-void S3_head_object(S3BucketContext *bucketContext, const char *key,
+void S3_head_object(const S3BucketContext *bucketContext, const char *key,
                     S3RequestContext *requestContext,
-                    S3ResponseHandler *handler, void *callbackData);
+                    const S3ResponseHandler *handler, void *callbackData);
                          
 
-void S3_delete_object(S3BucketContext *bucketContext, const char *key,
+void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
                       S3RequestContext *requestContext,
-                      S3ResponseHandler *handler, void *callbackData);
+                      const S3ResponseHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -1116,27 +1106,28 @@ void S3_delete_object(S3BucketContext *bucketContext, const char *key,
 // aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
 // and does not need to be zero-terminated
 */
-void S3_set_acl(S3BucketContext *bucketContext, const char *key, 
+void S3_set_acl(const S3BucketContext *bucketContext, const char *key, 
                 int aclGrantCount, S3AclGrant *aclGrants, 
                 S3RequestContext *requestContext,
-                S3ResponseHandler *handler, void *callbackData);
+                const S3ResponseHandler *handler, void *callbackData);
 
 
-void S3_add_acl_grants(S3BucketContext *bucketContext, const char *key,
+void S3_add_acl_grants(const S3BucketContext *bucketContext, const char *key,
                        int aclGrantCount, S3AclGrant *aclGrants,
                        S3RequestContext *requestContext,
-                       S3ResponseHandler *handler, void *callbackData);
+                       const S3ResponseHandler *handler, void *callbackData);
                            
 
-void S3_remove_acl_grants(S3BucketContext *bucketContext, const char *key,
-                          int aclGrantsCount, S3AclGrant *aclGrants,
+void S3_remove_acl_grants(const S3BucketContext *bucketContext, const char *key,
+                          int aclGrantsCount, const S3AclGrant *aclGrants,
                           S3RequestContext *requestContext,
+                          const S3ResponseHandler *handler,
                           void *callbackData);
 
 
-void S3_clear_acl(S3BucketContext *bucketContext, const char *key,
+void S3_clear_acl(const S3BucketContext *bucketContext, const char *key,
                   S3RequestContext *requestContext,
-                  S3ResponseHandler *hander, void *callbackData);
+                  const S3ResponseHandler *hander, void *callbackData);
 
 
 /**

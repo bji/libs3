@@ -73,6 +73,12 @@ typedef struct RequestParams
     // AWS Secret Access Key
     const char *secretAccessKey;
 
+    // If this is a copy operation, this gives the source bucket
+    const char *copySourceBucketName;
+
+    // If this is a copy operation, this gives the source key
+    const char *copySourceKey;
+
     // Get conditions
     const S3GetConditions *getConditions;
 

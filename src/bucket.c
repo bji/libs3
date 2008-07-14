@@ -107,7 +107,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
-                    S3ResponseHandler *handler, void *callbackData)
+                    const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
     TestBucketData *tbData = 
@@ -146,6 +146,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         "?location",                                  // subResource
         accessKeyId,                                  // accessKeyId
         secretAccessKey,                              // secretAccessKey
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
@@ -230,7 +232,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *bucketName,
                       S3CannedAcl cannedAcl, const char *locationConstraint,
                       S3RequestContext *requestContext,
-                      S3ResponseHandler *handler, void *callbackData)
+                      const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
     CreateBucketData *cbData = 
@@ -267,8 +269,6 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         0,                                       // contentEncoding
         0,                                       // expires
         cannedAcl,                               // cannedAcl
-        0,                                       // sourceObject
-        0,                                       // metaDataDirective
         0,                                       // metaDataCount
         0                                        // metaData
     };
@@ -285,6 +285,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         0,                                            // subResource
         accessKeyId,                                  // accessKeyId
         secretAccessKey,                              // secretAccessKey
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
@@ -341,7 +343,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
                       const char *bucketName,
                       S3RequestContext *requestContext,
-                      S3ResponseHandler *handler, void *callbackData)
+                      const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
     DeleteBucketData *dbData = 
@@ -368,6 +370,8 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // subResource
         accessKeyId,                                  // accessKeyId
         secretAccessKey,                              // secretAccessKey
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
@@ -619,10 +623,10 @@ static void listBucketCompleteCallback(S3Status requestStatus,
 }
 
 
-void S3_list_bucket(S3BucketContext *bucketContext, const char *prefix,
+void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
                     const char *marker, const char *delimiter, int maxkeys,
                     S3RequestContext *requestContext,
-                    S3ListBucketHandler *handler, void *callbackData)
+                    const S3ListBucketHandler *handler, void *callbackData)
 {
     // Compose the query params
     string_buffer(queryParams, 4096);
@@ -717,6 +721,8 @@ void S3_list_bucket(S3BucketContext *bucketContext, const char *prefix,
         0,                                            // subResource
         bucketContext->accessKeyId,                   // accessKeyId
         bucketContext->secretAccessKey,               // secretAccessKey
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount

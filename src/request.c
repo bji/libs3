@@ -126,10 +126,15 @@ static S3Status request_headers_done(Request *request)
 
     response_headers_handler_done(&(request->responseHeadersHandler), 
                                   request->curl);
-        
-    return (*(request->propertiesCallback))
-        (&(request->responseHeadersHandler.responseProperties), 
-         request->callbackData);
+
+    if (request->propertiesCallback) {
+        return (*(request->propertiesCallback))
+            (&(request->responseHeadersHandler.responseProperties), 
+             request->callbackData);
+    }
+    else {
+        return S3StatusOK;
+    } 
 }
 
 
@@ -203,11 +208,12 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb,
 // params->requestHeaders, which means it removes all whitespace from
 // them such that they all look exactly like this:
 // x-amz-meta-${NAME}: ${VALUE}
-// It also adds the x-amz-acl header, if necessary, and always adds the
-// x-amz-date header.  It copies the raw string values into
-// params->amzHeadersRaw, and creates an array of string pointers representing
-// these headers in params->amzHeaders (and also sets params->amzHeadersCount
-// to be the count of the total number of x-amz- headers thus created).
+// It also adds the x-amz-acl, x-amz-copy-source, and x-amz-metadata-directive
+// headers if necessary, and always adds the x-amz-date header.  It copies the
+// raw string values into params->amzHeadersRaw, and creates an array of
+// string pointers representing these headers in params->amzHeaders (and also
+// sets params->amzHeadersCount to be the count of the total number of x-amz-
+// headers thus created).
 static S3Status compose_amz_headers(const RequestParams *params,
                                     RequestComputedValues *values)
 {
@@ -299,14 +305,14 @@ static S3Status compose_amz_headers(const RequestParams *params,
 
     if (params->httpRequestType == HttpRequestTypeCOPY) {
         // Add the x-amz-copy-source header
-        if (params->putProperties->sourceObject &&
-            params->putProperties->sourceObject[0]) {
-            headers_append(1, "x-amz-copy-source: %s", 
-                           params->putProperties->sourceObject);
+        if (params->copySourceBucketName && params->copySourceBucketName[0] &&
+            params->copySourceKey && params->copySourceKey[0]) {
+            headers_append(1, "x-amz-copy-source: /%s/%s",
+                           params->copySourceBucketName,
+                           params->copySourceKey);
         }
         // And the x-amz-metadata-directive header
-        if (params->putProperties->metaDataDirective != 
-            S3MetaDataDirectiveCopy) {
+        if (params->putProperties) {
             headers_append(1, "%s", "x-amz-metadata-directive: REPLACE");
         }
     }
@@ -629,9 +635,8 @@ static const char *http_request_type_to_verb(HttpRequestType requestType)
     case HttpRequestTypeHEAD:
         return "HEAD";
     case HttpRequestTypePUT:
-        return "PUT";
     case HttpRequestTypeCOPY:
-        return "COPY";
+        return "PUT";
     default: // HttpRequestTypeDELETE
         return "DELETE";
     }
@@ -674,7 +679,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     signbuf_append("%s", values->canonicalizedAmzHeaders);
 
     signbuf_append("%s", values->canonicalizedResource);
-
+    
     unsigned int md_len;
     unsigned char md[EVP_MAX_MD_SIZE];
 	
@@ -861,10 +866,8 @@ static S3Status setup_curl(Request *request,
 	curl_easy_setopt_safe(CURLOPT_NOBODY, 1);
         break;
     case HttpRequestTypePUT:
-        curl_easy_setopt_safe(CURLOPT_UPLOAD, 1);
-        break;
     case HttpRequestTypeCOPY:
-	curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "COPY");
+        curl_easy_setopt_safe(CURLOPT_UPLOAD, 1);
         break;
     case HttpRequestTypeDELETE:
 	curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "DELETE");

@@ -851,6 +851,50 @@ static void list_bucket(int argc, char **argv, int optind)
 }
 
 
+// delete object -------------------------------------------------------------
+
+static void delete_object(int argc, char **argv, int optind)
+{
+    // Split bucket/key
+    char *slash = argv[optind];
+
+    // We know there is a slash in there, put_object is only called if so
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    *slash++ = 0;
+
+    const char *bucketName = argv[optind++];
+    const char *key = slash;
+
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3ResponseHandler responseHandler =
+    { 
+        0,
+        &responseCompleteCallback
+    };
+
+    S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
+
+    if ((statusG != S3StatusOK) &&
+        (statusG != S3StatusErrorPreconditionFailed)) {
+        printError();
+    }
+
+    S3_deinitialize();
+}
+
+
 // put object ----------------------------------------------------------------
 
 typedef struct put_object_callback_data
@@ -1074,8 +1118,6 @@ static void put_object(int argc, char **argv, int optind)
         contentEncoding,
         expires,
         cannedAcl,
-        0,
-        0,
         metaPropertiesCount,
         metaProperties
     };
@@ -1102,6 +1144,192 @@ static void put_object(int argc, char **argv, int optind)
     else if (data.contentLength) {
         fprintf(stderr, "ERROR: Failed to read remaining %llu bytes from "
                 "input\n", data.contentLength);
+    }
+
+    S3_deinitialize();
+}
+
+
+// copy object ---------------------------------------------------------------
+
+static void copy_object(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: source bucket/key\n");
+        usageExit(stderr);
+    }
+
+    // Split bucket/key
+    char *slash = argv[optind];
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    if (!*slash || !*(slash + 1)) {
+        fprintf(stderr, "ERROR: Invalid source bucket/key name: %s\n",
+                argv[optind]);
+        usageExit(stderr);
+    }
+    *slash++ = 0;
+
+    const char *sourceBucketName = argv[optind++];
+    const char *sourceKey = slash;
+
+    if (optind == argc) {
+        fprintf(stderr, "ERROR: Missing parameter: destination bucket/key\n");
+        usageExit(stderr);
+    }
+
+    // Split bucket/key
+    slash = argv[optind];
+    while (*slash && (*slash != '/')) {
+        slash++;
+    }
+    if (!*slash || !*(slash + 1)) {
+        fprintf(stderr, "ERROR: Invalid destination bucket/key name: %s\n",
+                argv[optind]);
+        usageExit(stderr);
+    }
+    *slash++ = 0;
+
+    const char *destinationBucketName = argv[optind++];
+    const char *destinationKey = slash;
+
+    const char *cacheControl = 0, *contentType = 0;
+    const char *contentDispositionFilename = 0, *contentEncoding = 0;
+    time_t expires = -1;
+    S3CannedAcl cannedAcl = S3CannedAclPrivate;
+    int metaPropertiesCount = 0;
+    S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
+    int anyPropertiesSet = 0;
+
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, CACHE_CONTROL_PREFIX, 
+                          CACHE_CONTROL_PREFIX_LEN)) {
+            cacheControl = &(param[CACHE_CONTROL_PREFIX_LEN]);
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, CONTENT_TYPE_PREFIX, 
+                          CONTENT_TYPE_PREFIX_LEN)) {
+            contentType = &(param[CONTENT_TYPE_PREFIX_LEN]);
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX, 
+                          CONTENT_DISPOSITION_FILENAME_PREFIX_LEN)) {
+            contentDispositionFilename = 
+                &(param[CONTENT_DISPOSITION_FILENAME_PREFIX_LEN]);
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, CONTENT_ENCODING_PREFIX, 
+                          CONTENT_ENCODING_PREFIX_LEN)) {
+            contentEncoding = &(param[CONTENT_ENCODING_PREFIX_LEN]);
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, EXPIRES_PREFIX, EXPIRES_PREFIX_LEN)) {
+            expires = parseIso8601Time(&(param[EXPIRES_PREFIX_LEN]));
+            if (expires < 0) {
+                fprintf(stderr, "ERROR: Invalid expires time "
+                        "value; ISO 8601 time format required\n");
+                usageExit(stderr);
+            }
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
+            if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
+                fprintf(stderr, "ERROR: Too many x-amz-meta- properties, "
+                        "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
+                usageExit(stderr);
+            }
+            char *name = &(param[X_AMZ_META_PREFIX_LEN]);
+            char *value = name;
+            while (*value && (*value != '=')) {
+                value++;
+            }
+            if (!*value || !*(value + 1)) {
+                fprintf(stderr, "ERROR: Invalid parameter: %s\n", param);
+                usageExit(stderr);
+            }
+            *value++ = 0;
+            metaProperties[metaPropertiesCount].name = name;
+            metaProperties[metaPropertiesCount++].value = value;
+            anyPropertiesSet = 1;
+        }
+        else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
+            char *val = &(param[CANNED_ACL_PREFIX_LEN]);
+            if (!strcmp(val, "private")) {
+                cannedAcl = S3CannedAclPrivate;
+            }
+            else if (!strcmp(val, "public-read")) {
+                cannedAcl = S3CannedAclPublicRead;
+            }
+            else if (!strcmp(val, "public-read-write")) {
+                cannedAcl = S3CannedAclPublicReadWrite;
+            }
+            else if (!strcmp(val, "authenticated-read")) {
+                cannedAcl = S3CannedAclAuthenticatedRead;
+            }
+            else {
+                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                usageExit(stderr);
+            }
+            anyPropertiesSet = 1;
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    S3_init();
+    
+    S3BucketContext bucketContext =
+    {
+        sourceBucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG
+    };
+
+    S3PutProperties putProperties =
+    {
+        contentType,
+        0,
+        cacheControl,
+        contentDispositionFilename,
+        contentEncoding,
+        expires,
+        cannedAcl,
+        metaPropertiesCount,
+        metaProperties
+    };
+
+    S3ResponseHandler responseHandler =
+    { 
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    time_t lastModified;
+    char eTag[256];
+
+    S3_copy_object(&bucketContext, sourceKey, destinationBucketName,
+                   destinationKey, anyPropertiesSet ? &putProperties : 0,
+                   &lastModified, sizeof(eTag), eTag, 0, &responseHandler, 0);
+
+    if (statusG == S3StatusOK) {
+        if (lastModified >= 0) {
+            char timebuf[256];
+            strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
+                     localtime(&lastModified));
+            printf("Last-Modified: %s\n", timebuf);
+        }
+        if (eTag[0]) {
+            printf("ETag: %s\n", eTag);
+        }
+    }
+    else {
+        printError();
     }
 
     S3_deinitialize();
@@ -1387,12 +1615,30 @@ int main(int argc, char **argv)
         create_bucket(argc, argv, optind);
     }
     else if (!strcmp(command, "delete")) {
-        delete_bucket(argc, argv, optind);
+        if (optind == argc) {
+            fprintf(stderr, "ERROR: Missing parameter: bucket or bucket/key\n");
+            usageExit(stderr);
+        }
+        char *val = argv[optind];
+        int hasSlash = 0;
+        while (*val) {
+            if (*val++ == '/') {
+                hasSlash = 1;
+                break;
+            }
+        }
+        if (hasSlash) {
+            delete_object(argc, argv, optind);
+        }
+        else {
+            delete_bucket(argc, argv, optind);
+        }
     }
     else if (!strcmp(command, "put")) {
         put_object(argc, argv, optind);
     }
     else if (!strcmp(command, "copy")) {
+        copy_object(argc, argv, optind);
     }
     else if (!strcmp(command, "get")) {
         get_object(argc, argv, optind);
