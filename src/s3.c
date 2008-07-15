@@ -114,6 +114,8 @@ static const S3ErrorDetails *errorG = 0;
 #define BYTE_COUNT_PREFIX_LEN (sizeof(BYTE_COUNT_PREFIX) - 1)
 #define ALL_DETAILS_PREFIX "allDetails="
 #define ALL_DETAILS_PREFIX_LEN (sizeof(ALL_DETAILS_PREFIX) - 1)
+#define NO_STATUS_PREFIX "noStatus="
+#define NO_STATUS_PREFIX_LEN (sizeof(NO_STATUS_PREFIX) - 1)
 
 
 // libs3 mutex stuff ---------------------------------------------------------
@@ -236,8 +238,10 @@ static void usageExit(FILE *out)
 "   setacl <bucket> [filename]"
 "   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
 "                       md5, contentDispositionFilename, contentEncoding,\n"
-"                       validDuration, cannedAcl, [x-amz-meta-...]]\n"
-"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey> [properties]\n"
+"                       expires, cannedAcl, [x-amz-meta-...]]\n"
+"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey>\n"
+"         [cacheControl, contentType, contentDispositionFilename,\n"
+"          contentEncoding, expires, cannedAcl, [x-amz-meta-...]]\n"
 "   get <buckey>/<key> [filename (required if -s is used), ifModifiedSince,\n"
 "                       ifNotmodifiedSince, ifMatch, ifNotMatch,\n"
 "                       startByte, byteCount]\n"
@@ -458,10 +462,12 @@ static time_t parseIso8601Time(const char *str)
 
 
 // Simple ACL format:  Lines of this format:
-// Email: email_address - permission
-// UserID: user_id (display_name) - permission
-// AWS - permission
-// Anyone - permission
+// Type - ignored
+// Starting with a dash - ignored
+// Email email_address permission
+// UserID user_id (display_name) permission
+// Group Authenticated AWS Users permission
+// Group All Users  permission
 // permission is one of READ, WRITE, READ_ACP, WRITE_ACP, FULL_CONTROL
 static S3Status convert_simple_acl(char *aclXml, char *ownerId,
                                    char *ownerDisplayName,
@@ -502,6 +508,15 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
             break;
         }
         
+        // Skip Type lines and dash lines
+        if (!strncmp(aclXml, "Type", sizeof("Type") - 1) ||
+            (*aclXml == '-')) {
+            while (*aclXml && ((*aclXml != '\n') && (*aclXml != '\r'))) {
+                aclXml++;
+            }
+            continue;
+        }
+        
         if (!strncmp(aclXml, "OwnerID", sizeof("OwnerID") - 1)) {
             aclXml += sizeof("OwnerID") - 1;
             COPY_STRING_MAXLEN(ownerId, S3_MAX_GRANTEE_USER_ID_SIZE);
@@ -530,13 +545,21 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
             // Now do display name
             COPY_STRING(grant->grantee.canonicalUser.displayName);
         }
-        else if (!strncmp(aclXml, "AWS", sizeof("AWS") - 1)) {
-            aclXml += sizeof("AWS") - 1;
-            grant->granteeType = S3GranteeTypeAllAwsUsers;
-        }
-        else if (!strncmp(aclXml, "Anyone", sizeof("Anyone") - 1)) {
-            aclXml += sizeof("Anyone") - 1;
-            grant->granteeType = S3GranteeTypeAllUsers;
+        else if (!strncmp(aclXml, "Group", sizeof("Group") - 1)) {
+            aclXml += sizeof("Group") - 1;
+            SKIP_SPACE(1);
+            if (!strncmp(aclXml, "Authenticated AWS Users",
+                         sizeof("Authenticated AWS Users") - 1)) {
+                grant->granteeType = S3GranteeTypeAllAwsUsers;
+                aclXml += (sizeof("Authenticated AWS Users") - 1);
+            }
+            else if (!strncmp(aclXml, "All Users", sizeof("All Users") - 1)) {
+                grant->granteeType = S3GranteeTypeAllUsers;
+                aclXml += (sizeof("All Users") - 1);
+            }
+            else {
+                return S3StatusFailure;
+            }
         }
         else {
             return S3StatusFailure;
@@ -849,7 +872,10 @@ static void create_bucket(int argc, char **argv, int optind)
     S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, bucketName,
                      cannedAcl, locationConstraint, 0, &responseHandler, 0);
 
-    if (statusG != S3StatusOK) {
+    if (statusG == S3StatusOK) {
+        printf("Bucket successfully created.\n");
+    }
+    else {
         printError();
     }
     
@@ -1170,7 +1196,8 @@ typedef struct put_object_callback_data
 {
     FILE *infile;
     growbuffer *gb;
-    uint64_t contentLength;
+    uint64_t contentLength, originalContentLength;
+    int noStatus;
 } put_object_callback_data;
 
 
@@ -1193,6 +1220,14 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     }
 
     data->contentLength -= ret;
+
+    if (data->contentLength && !data->noStatus) {
+        printf("%llu bytes remaining (%d%% complete) ...\n", 
+               data->contentLength,
+               (int) (((data->originalContentLength - 
+                        data->contentLength) * 100) /
+                      data->originalContentLength));
+    }
 
     return ret;
 }
@@ -1227,6 +1262,7 @@ static void put_object(int argc, char **argv, int optind)
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
     int metaPropertiesCount = 0;
     S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
+    int noStatus = 0;
 
     while (optind < argc) {
         char *param = argv[optind++];
@@ -1309,6 +1345,13 @@ static void put_object(int argc, char **argv, int optind)
                 usageExit(stderr);
             }
         }
+        else if (!strncmp(param, NO_STATUS_PREFIX, NO_STATUS_PREFIX_LEN)) {
+            const char *ns = &(param[NO_STATUS_PREFIX_LEN]);
+            if (!strcasecmp(ns, "true") || !strcasecmp(ns, "yes") ||
+                !strcmp(ns, "1")) {
+                noStatus = 1;
+            }
+        }
         else {
             fprintf(stderr, "ERROR: Unknown param: %s\n", param);
             usageExit(stderr);
@@ -1319,6 +1362,7 @@ static void put_object(int argc, char **argv, int optind)
 
     data.infile = 0;
     data.gb = 0;
+    data.noStatus = noStatus;
 
     if (filename) {
         if (!contentLength) {
@@ -1365,7 +1409,7 @@ static void put_object(int argc, char **argv, int optind)
         }
     }
 
-    data.contentLength = contentLength;
+    data.contentLength = data.originalContentLength = contentLength;
 
     S3_init();
     
@@ -1851,11 +1895,19 @@ void get_acl(int argc, char **argv, int optind)
     }
 
     const char *filename = 0;
+    int allDetails = 0;
 
     while (optind < argc) {
         char *param = argv[optind++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, ALL_DETAILS_PREFIX, ALL_DETAILS_PREFIX_LEN)) {
+            const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
+            if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
+                !strcmp(ad, "1")) {
+                allDetails = 1;
+            }
         }
         else {
             fprintf(stderr, "ERROR: Unknown param: %s\n", param);
@@ -1919,26 +1971,46 @@ void get_acl(int argc, char **argv, int optind)
                &aclGrantCount, aclGrants, 0, &responseHandler, 0);
 
     if (statusG == S3StatusOK) {
-        printf("OwnerID %s (%s)\n", ownerId, ownerDisplayName);
+        if (allDetails) {
+            fprintf(outfile, "OwnerID %s %s\n", ownerId, ownerDisplayName);
+        }
+        fprintf(outfile, "%-6s  %-56s  %-12s\n", " Type", 
+                "                   User Identifier", " Permission");
+        fprintf(outfile, "------  "
+                "--------------------------------------------------------"
+                "  ------------\n");
         int i;
         for (i = 0; i < aclGrantCount; i++) {
             S3AclGrant *grant = &(aclGrants[i]);
+            const char *type;
+            char composedId[S3_MAX_GRANTEE_USER_ID_SIZE + 
+                            S3_MAX_GRANTEE_DISPLAY_NAME_SIZE + 16];
+            const char *id;
 
             switch (grant->granteeType) {
             case S3GranteeTypeAmazonCustomerByEmail:
-                fprintf(outfile, "Email %s", 
-                        grant->grantee.amazonCustomerByEmail.emailAddress);
+                type = "Email";
+                id = grant->grantee.amazonCustomerByEmail.emailAddress;
                 break;
             case S3GranteeTypeCanonicalUser:
-                fprintf(outfile, "UserID %s (%s)", 
-                        grant->grantee.canonicalUser.id,
-                        grant->grantee.canonicalUser.displayName);
+                type = "UserID";
+                if (allDetails) {
+                    snprintf(composedId, sizeof(composedId),
+                             "%s (%s)", grant->grantee.canonicalUser.id,
+                             grant->grantee.canonicalUser.displayName);
+                    id = composedId;
+                }
+                else {
+                    id = grant->grantee.canonicalUser.displayName;
+                }
                 break;
             case S3GranteeTypeAllAwsUsers:
-                fprintf(outfile, "AWS");
+                type = "Group";
+                id = "Authenticated AWS Users";
                 break;
             default:
-                fprintf(outfile, "Anyone");
+                type = "Group";
+                id = "All Users";
                 break;
             }
             const char *perm;
@@ -1959,7 +2031,7 @@ void get_acl(int argc, char **argv, int optind)
                 perm = "FULL_CONTROL";
                 break;
             }
-            fprintf(outfile, " %s\n", perm);
+            fprintf(outfile, "%-6s  %-56s  %-12s\n", type, id, perm);
         }
     }
     else {
