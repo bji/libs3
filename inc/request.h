@@ -64,7 +64,7 @@ typedef struct RequestParams
     // Query params - ready to append to URI (i.e. ?p1=v1?p2=v2)
     const char *queryParams;
 
-    // sub resource, like ?acl, ?location, ?torrent
+    // sub resource, like ?acl, ?location, ?torrent, ?logging
     const char *subResource;
 
     // AWS Access Key ID

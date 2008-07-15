@@ -80,8 +80,6 @@ static S3Status xmlCallback(const char *elementPath, const char *data,
                 (cbData->ownerId, cbData->ownerDisplayName,
                  cbData->bucketName, creationDate, cbData->callbackData);
 
-            string_buffer_initialize(cbData->ownerId);
-            string_buffer_initialize(cbData->ownerDisplayName);
             string_buffer_initialize(cbData->bucketName);
             string_buffer_initialize(cbData->creationDate);
 

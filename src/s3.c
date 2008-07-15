@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -111,6 +112,8 @@ static const S3ErrorDetails *errorG = 0;
 #define START_BYTE_PREFIX_LEN (sizeof(START_BYTE_PREFIX) - 1)
 #define BYTE_COUNT_PREFIX "byteCount="
 #define BYTE_COUNT_PREFIX_LEN (sizeof(BYTE_COUNT_PREFIX) - 1)
+#define ALL_DETAILS_PREFIX "allDetails="
+#define ALL_DETAILS_PREFIX_LEN (sizeof(ALL_DETAILS_PREFIX) - 1)
 
 
 // libs3 mutex stuff ---------------------------------------------------------
@@ -224,11 +227,11 @@ static void usageExit(FILE *out)
 " Commands:\n"
 "\n"
 "   help\n"            
-"   list\n"
+"   list [allDetails]\n"
 "   test <bucket>\n"
 "   create <bucket> [cannedAcl, locationConstraint]\n"
 "   delete <bucket>\n"
-"   list <bucket> [prefix, marker, delimiter, maxkeys]\n"
+"   list <bucket> [prefix, marker, delimiter, maxkeys, allDetails]\n"
 "   getacl <bucket> [filename]"
 "   setacl <bucket> [filename]"
 "   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
@@ -243,7 +246,6 @@ static void usageExit(FILE *out)
 "   delete <bucket>/<key>\n"
 "   getacl <bucket>/<key> [filename]"
 "   setacl <bucket>/<key> [filename]"
-"   todo : acl stuff\n"
 "\n");
 
     exit(-1);
@@ -641,36 +643,65 @@ static void responseCompleteCallback(S3Status status, int httpResponseCode,
 
 // list service --------------------------------------------------------------
 
+typedef struct list_service_data
+{
+    int headerPrinted;
+    int allDetails;
+} list_service_data;
+
 static S3Status listServiceCallback(const char *ownerId, 
                                     const char *ownerDisplayName,
                                     const char *bucketName,
                                     time_t creationDate, void *callbackData)
 {
-    static int ownerPrinted = 0;
+    list_service_data *data = (list_service_data *) callbackData;
 
-    if (!ownerPrinted) {
-        printf("Owner ID: %s\n", ownerId);
-        printf("Owner Display Name: %s\n", ownerDisplayName);
-        ownerPrinted = 1;
+    if (!data->headerPrinted) {
+        data->headerPrinted = 1;
+        printf("%-56s  %-20s", "                         Bucket",
+               "      Created");
+        if (data->allDetails) {
+            printf("  %-64s  %-12s", 
+                   "                            Owner ID",
+                   "Display Name");
+        }
+        printf("\n");
+        printf("--------------------------------------------------------  "
+               "--------------------");
+        if (data->allDetails) {
+            printf("  -------------------------------------------------"
+                   "---------------  ------------");
+        }
+        printf("\n");
     }
 
-    printf("Bucket Name: %s\n", bucketName);
+    char timebuf[256];
     if (creationDate >= 0) {
-        char timebuf[256];
-        // localtime is not thread-safe but we don't care here.  xxx note -
-        // localtime doesn't seem to actually do anything, localtime of 0
-        // returns EST Unix epoch, it should return the NZST equivalent ...
-        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                 localtime(&creationDate));
-        printf("Creation Date: %s\n", timebuf);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                 gmtime(&creationDate));
     }
+    else {
+        timebuf[0] = 0;
+    }
+
+    printf("%-56s  %-20s", bucketName, timebuf);
+    if (data->allDetails) {
+        printf("  %-64s  %-12s", ownerId ? ownerId : "", 
+               ownerDisplayName ? ownerDisplayName : "");
+    }
+    printf("\n");
 
     return S3StatusOK;
 }
 
 
-static void list_service()
+static void list_service(int allDetails)
 {
+    list_service_data data;
+
+    data.headerPrinted = 0;
+    data.allDetails = allDetails;
+
     S3_init();
 
     S3ListServiceHandler listServiceHandler =
@@ -680,7 +711,7 @@ static void list_service()
     };
 
     S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
-                    &listServiceHandler, 0);
+                    &listServiceHandler, &data);
 
     if (statusG != S3StatusOK) {
         printError();
@@ -719,28 +750,33 @@ static void test_bucket(int argc, char **argv, int optind)
                    bucketName, sizeof(locationConstraint), locationConstraint,
                    0, &responseHandler, 0);
 
+    const char *result;
+
     switch (statusG) {
     case S3StatusOK:
         // bucket exists
-        printf("Bucket '%s' exists", bucketName);
-        if (locationConstraint[0]) {
-            printf(" in location %s\n", locationConstraint);
-        }
-        else {
-            printf(".\n");
-        }
+        result = locationConstraint[0] ? locationConstraint : "USA";
         break;
     case S3StatusErrorNoSuchBucket:
-        // bucket does not exist
-        printf("Bucket '%s' does not exist.\n", bucketName);
+        result = "Does Not Exist";
         break;
     case S3StatusErrorAccessDenied:
-        // bucket exists, but no access
-        printf("Bucket '%s' exists, but is not accessible.\n", bucketName);
+        result = "Access Denied";
         break;
     default:
-        printError();
+        result = 0;
         break;
+    }
+
+    if (result) {
+        printf("%-56s  %-20s\n", "                         Bucket",
+               "       Status");
+        printf("--------------------------------------------------------  "
+               "--------------------\n");
+        printf("%-56s  %-20s\n", bucketName, result);
+    }
+    else {
+        printError();
     }
 
     S3_deinitialize();
@@ -849,6 +885,8 @@ typedef struct list_bucket_callback_data
 {
     int isTruncated;
     char nextMarker[1024];
+    int keyCount;
+    int allDetails;
 } list_bucket_callback_data;
 
 
@@ -867,7 +905,7 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
     // delimiter.  Why, I don't know, since it's still useful for paging
     // through results.  We want NextMarker to be the last content in the
     // list, so set it to that if necessary.
-    if (!nextMarker && contentsCount) {
+    if ((!nextMarker || !nextMarker[0]) && contentsCount) {
         nextMarker = contents[contentsCount - 1].key;
     }
     if (nextMarker) {
@@ -876,27 +914,82 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
     else {
         data->nextMarker[0] = 0;
     }
+    
+    if (contentsCount && !data->keyCount) {
+        printf("%-50s  %-20s  %-5s", 
+               "                       Key", 
+               "   Last Modified", "Size");
+        if (data->allDetails) {
+            printf("  %-34s  %-64s  %-12s", 
+                   "               ETag", 
+                   "                            Owner ID",
+                   "Display Name");
+        }
+        printf("\n");
+        printf("--------------------------------------------------  "
+               "--------------------  -----");
+        if (data->allDetails) {
+            printf("  ----------------------------------  "
+                   "-------------------------------------------------"
+                   "---------------  ------------");
+        }
+        printf("\n");
+    }
 
     int i;
     for (i = 0; i < contentsCount; i++) {
         const S3ListBucketContent *content = &(contents[i]);
-        printf("\nKey: %s\n", content->key);
         char timebuf[256];
-        // localtime is not thread-safe but we don't care here.  xxx note -
-        // localtime doesn't seem to actually do anything, 0 locatime of 0
-        // returns EST Unix epoch, it should return the NZST equivalent ...
-        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                 localtime(&(content->lastModified)));
-        printf("Last Modified: %s\n", timebuf);
-        printf("ETag: %s\n", content->eTag);
-        printf("Size: %llu\n", content->size);
-        if (content->ownerId) {
-            printf("Owner ID: %s\n", content->ownerId);
+        if (0) {
+            strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
+                     localtime(&(content->lastModified)));
+            printf("\nKey: %s\n", content->key);
+            printf("Last Modified: %s\n", timebuf);
+            printf("ETag: %s\n", content->eTag);
+            printf("Size: %llu\n", content->size);
+            if (content->ownerId) {
+                printf("Owner ID: %s\n", content->ownerId);
+            }
+            if (content->ownerDisplayName) {
+                printf("Owner Display Name: %s\n", content->ownerDisplayName);
+            }
         }
-        if (content->ownerDisplayName) {
-            printf("Owner Display Name: %s\n", content->ownerDisplayName);
+        else {
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                     gmtime(&(content->lastModified)));
+            char sizebuf[16];
+            if (content->size < 100000) {
+                sprintf(sizebuf, "%5lld", content->size);
+            }
+            else if (content->size < (1024 * 1024)) {
+                sprintf(sizebuf, "%4lldK", content->size / 1024);
+            }
+            else if (content->size < (10 * 1024 * 1024)) {
+                float f = content->size;
+                f /= (1024 * 1024);
+                sprintf(sizebuf, "%1.2fM", f);
+            }
+            else if (content->size < (1024 * 1024 * 1024)) {
+                sprintf(sizebuf, "%4lldM", content->size / (1024 * 1024));
+            }
+            else {
+                float f = (content->size / 1024);
+                f /= (1024 * 1024);
+                sprintf(sizebuf, "%1.2fG", f);
+            }
+            printf("%-50s  %s  %s", content->key, timebuf, sizebuf);
+            if (data->allDetails) {
+                printf("  %-34s  %-64s  %-12s",
+                       content->eTag, 
+                       content->ownerId ? content->ownerId : "",
+                       content->ownerDisplayName ? 
+                       content->ownerDisplayName : "");
+            }
+            printf("\n");
         }
     }
+
+    data->keyCount += contentsCount;
 
     for (i = 0; i < commonPrefixesCount; i++) {
         printf("\nCommon Prefix: %s\n", commonPrefixes[i]);
@@ -906,37 +999,10 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
 }
 
 
-static void list_bucket(int argc, char **argv, int optind)
+static void list_bucket(const char *bucketName, const char *prefix,
+                        const char *marker, const char *delimiter,
+                        int maxkeys, int allDetails)
 {
-    if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
-        usageExit(stderr);
-    }
-
-    const char *bucketName = argv[optind++];
-
-    const char *prefix = 0, *marker = 0, *delimiter = 0;
-    int maxkeys = 0;
-    while (optind < argc) {
-        char *param = argv[optind++];
-        if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
-            prefix = &(param[PREFIX_PREFIX_LEN]);
-        }
-        else if (!strncmp(param, MARKER_PREFIX, MARKER_PREFIX_LEN)) {
-            marker = &(param[MARKER_PREFIX_LEN]);
-        }
-        else if (!strncmp(param, DELIMITER_PREFIX, DELIMITER_PREFIX_LEN)) {
-            delimiter = &(param[DELIMITER_PREFIX_LEN]);
-        }
-        else if (!strncmp(param, MAXKEYS_PREFIX, MAXKEYS_PREFIX_LEN)) {
-            maxkeys = convertInt(&(param[MAXKEYS_PREFIX_LEN]), "maxkeys");
-        }
-        else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
-            usageExit(stderr);
-        }
-    }
-    
     S3_init();
     
     S3BucketContext bucketContext =
@@ -956,20 +1022,76 @@ static void list_bucket(int argc, char **argv, int optind)
 
     list_bucket_callback_data data;
 
+    snprintf(data.nextMarker, sizeof(data.nextMarker), "%s", marker);
+    data.keyCount = 0;
+    data.allDetails = allDetails;
+
     do {
         data.isTruncated = 0;
-        S3_list_bucket(&bucketContext, prefix, marker, delimiter, maxkeys,
-                       0, &listBucketHandler, &data);
+        S3_list_bucket(&bucketContext, prefix, data.nextMarker, delimiter,
+                       maxkeys, 0, &listBucketHandler, &data);
         if (statusG != S3StatusOK) {
             printError();
             break;
         }
         marker = data.nextMarker;
-    } while (data.isTruncated);
+    } while (data.isTruncated && (!maxkeys || (data.keyCount < maxkeys)));
 
     S3_deinitialize();
 }
 
+
+static void list(int argc, char **argv, int optind)
+{
+    if (optind == argc) {
+        list_service(0);
+        return;
+    }
+
+    const char *bucketName = 0;
+
+    const char *prefix = 0, *marker = 0, *delimiter = 0;
+    int maxkeys = 0, allDetails = 0;
+    while (optind < argc) {
+        char *param = argv[optind++];
+        if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
+            prefix = &(param[PREFIX_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, MARKER_PREFIX, MARKER_PREFIX_LEN)) {
+            marker = &(param[MARKER_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, DELIMITER_PREFIX, DELIMITER_PREFIX_LEN)) {
+            delimiter = &(param[DELIMITER_PREFIX_LEN]);
+        }
+        else if (!strncmp(param, MAXKEYS_PREFIX, MAXKEYS_PREFIX_LEN)) {
+            maxkeys = convertInt(&(param[MAXKEYS_PREFIX_LEN]), "maxkeys");
+        }
+        else if (!strncmp(param, ALL_DETAILS_PREFIX, ALL_DETAILS_PREFIX_LEN)) {
+            const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
+            if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
+                !strcmp(ad, "1")) {
+                allDetails = 1;
+            }
+        }
+        else if (!bucketName) {
+            bucketName = param;
+        }
+        else {
+            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    if (bucketName) {
+        list_bucket(bucketName, prefix, marker, delimiter, maxkeys, 
+                    allDetails);
+    }
+    else {
+        list_service(allDetails);
+    }
+}
+
+    
 
 // delete object -------------------------------------------------------------
 
@@ -1976,12 +2098,7 @@ int main(int argc, char **argv)
     }
 
     if (!strcmp(command, "list")) {
-        if (optind == argc) {
-            list_service();
-        }
-        else {
-            list_bucket(argc, argv, optind);
-        }
+        list(argc, argv, optind);
     }
     else if (!strcmp(command, "test")) {
         test_bucket(argc, argv, optind);
