@@ -769,6 +769,9 @@ static S3Status setup_curl(Request *request,
     // Debugging only
     // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
     
+    // Set private data to request for the benefit of S3RequestContext
+    curl_easy_setopt_safe(CURLOPT_PRIVATE, request);
+    
     // Set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
@@ -921,6 +924,7 @@ static S3Status request_get(const RequestParams *params,
     }
 
     // Initialize the request
+    request->prev = request->next = 0;
 
     // Request status is initialized to no error, will be updated whenever
     // an error occurs
@@ -1091,6 +1095,15 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     if (context) {
         switch (curl_multi_add_handle(context->curlm, request->curl)) {
         case CURLM_OK:
+            if (context->requests) {
+                request->prev = context->requests->prev;
+                request->next = context->requests;
+                context->requests->prev->next = 
+                    context->requests->prev = request;
+            }
+            else {
+                context->requests = request->next = request->prev = request;
+            }
             break;
         default:
             // This isn't right.  Figure this out.

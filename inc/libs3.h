@@ -34,7 +34,7 @@
  *
  * xxx todo
  * NOTE: Response headers from Amazon S3 are limited to 4K (2K of metas is all
- * that Amazon supports, and Amazon is allowed an additional 2K of headers).
+ * that Amazon supports, and libs3 allows Amazon an additional 2K of headers).
  * 
  * Threading
  * ---------
@@ -59,26 +59,26 @@
  * style requests will prepend the bucket name to this host name, and
  * path-style requests will use this hostname directly
  **/
-#define S3_HOSTNAME "s3.amazonaws.com"
+#define S3_HOSTNAME                        "s3.amazonaws.com"
 
 
 /**
  * S3_MAX_KEY_SIZE is the maximum size of keys that Amazon S3 supports.
  **/
-#define S3_MAX_KEY_SIZE                 1024
+#define S3_MAX_KEY_SIZE                    1024
 
 
 /**
  * S3_MAX_METADATA_SIZE is the maximum number of bytes allowed for
  * x-amz-meta header names and values in any request passed to Amazon S3
  **/
-#define S3_MAX_METADATA_SIZE            2048
+#define S3_MAX_METADATA_SIZE               2048
 
 
 /**
  * S3_METADATA_HEADER_NAME_PREFIX is the prefix of an S3 "meta header"
  **/
-#define S3_METADATA_HEADER_NAME_PREFIX "x-amz-meta-"
+#define S3_METADATA_HEADER_NAME_PREFIX     "x-amz-meta-"
 
 
 /**
@@ -97,28 +97,28 @@
  * set on a bucket or object at one time.  It is also the maximum number of
  * ACL grants that the XML ACL parsing routine will parse.
  **/
-#define S3_MAX_ACL_GRANT_COUNT           100
+#define S3_MAX_ACL_GRANT_COUNT             100
 
 
 /**
  * This is the maximum number of characters (including terminating \0) that
  * libs3 supports in an ACL grantee email address.
  **/
-#define MAX_GRANTEE_EMAIL_ADDRESS_SIZE  128
+#define S3_MAX_GRANTEE_EMAIL_ADDRESS_SIZE  128
 
 
 /**
  * This is the maximum number of characters (including terminating \0) that
  * libs3 supports in an ACL grantee user id.
  **/
-#define MAX_GRANTEE_USER_ID_SIZE        128
+#define S3_MAX_GRANTEE_USER_ID_SIZE        128
 
 
 /**
  * This is the maximum number of characters (including terminating \0) that
  * libs3 supports in an ACL grantee user display name.
  **/
-#define MAX_GRANTEE_DISPLAY_NAME_SIZE   128
+#define S3_MAX_GRANTEE_DISPLAY_NAME_SIZE   128
 
 
 /** **************************************************************************
@@ -136,6 +136,7 @@ typedef enum
     // being read
     S3StatusFailure                                         ,
     S3StatusOutOfMemory                                     ,
+    S3StatusInterrupted                                     ,
     S3StatusFailedToCreateMutex                             ,
     S3StatusInvalidBucketNameTooLong                        ,
     S3StatusInvalidBucketNameFirstCharacter                 ,
@@ -435,7 +436,7 @@ typedef struct S3AclGrant
              * This is the email address of the Amazon Customer being granted
              * permissions by this S3AclGrant.
              **/
-            char emailAddress[MAX_GRANTEE_EMAIL_ADDRESS_SIZE];
+            char emailAddress[S3_MAX_GRANTEE_EMAIL_ADDRESS_SIZE];
         } amazonCustomerByEmail;
         /**
          * This structure is used iff the granteeType is
@@ -446,11 +447,11 @@ typedef struct S3AclGrant
             /**
              * This is the CanonicalUser ID of the grantee
              **/
-            char id[MAX_GRANTEE_USER_ID_SIZE];
+            char id[S3_MAX_GRANTEE_USER_ID_SIZE];
             /**
              * This is the display name of the grantee
              **/
-            char displayName[MAX_GRANTEE_DISPLAY_NAME_SIZE];
+            char displayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
         } canonicalUser;
     } grantee;
     /**
@@ -898,6 +899,10 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext);
 */
 S3Status S3_runonce_request_context(S3RequestContext *requestContext, 
                                     int *requestsRemainingReturn);
+
+S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
+                                       fd_set *readFdSet, fd_set *writeFdSet,
+                                       fd_set *exceptFdSet, int *maxFd);
 
 /*
 // xxx todo the function for getting the fdsets

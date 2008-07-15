@@ -117,6 +117,11 @@ typedef struct RequestParams
 // (and thus live while a curl_multi is in use).
 typedef struct Request
 {
+    // These put the request on a doubly-linked list of requests in a
+    // request context, *if* the request is in a request context (else these
+    // will both be 0)
+    struct Request *prev, *next;
+
     // The status of this Request, as will be reported to the user via the
     // complete callback
     S3Status status;

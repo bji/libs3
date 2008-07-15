@@ -23,28 +23,71 @@
  ************************************************************************** **/
 
 #include <curl/curl.h>
+#include <stdlib.h>
+#include <sys/select.h>
 #include "request.h"
 #include "request_context.h"
 
 
 S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
 {
-    return ((*requestContextReturn = (S3RequestContext *) curl_multi_init()) ?
-            S3StatusOK : S3StatusFailedToCreateRequestContext);
+    *requestContextReturn = 
+        (S3RequestContext *) malloc(sizeof(S3RequestContext));
+    
+    if (!*requestContextReturn) {
+        return S3StatusFailedToCreateRequestContext;
+    }
+    
+    if (!((*requestContextReturn)->curlm = curl_multi_init())) {
+        free(*requestContextReturn);
+        return S3StatusOutOfMemory;
+    }
+
+    (*requestContextReturn)->requests = 0;
+
+    return S3StatusOK;
 }
 
 
 void S3_destroy_request_context(S3RequestContext *requestContext)
 {
     curl_multi_cleanup(requestContext->curlm);
+
+    // For each request in the context, call back its done method with
+    // 'interrupted' status
+    Request *r = requestContext->requests, *rFirst = r;
+    
+    if (r) do {
+        r->status = S3StatusInterrupted;
+        Request *rNext = r->next;
+        request_finish(r);
+        r = rNext;
+    } while (r != rFirst);
+
+    free(requestContext);
 }
 
 
 S3Status S3_runall_request_context(S3RequestContext *requestContext)
 {
-    // This should use the socket stuff to watch the fds and run only
-    // when there is data ready
-    return S3StatusFailure;
+    int requestsRemaining;
+    do {
+        fd_set readfds, writefds, exceptfds;
+        int maxfd;
+        S3Status status = S3_get_request_context_fdsets
+            (requestContext, &readfds, &writefds, &exceptfds, &maxfd);
+        if (status != S3StatusOK) {
+            return status;
+        }
+        select(maxfd + 1, &readfds, &writefds, &exceptfds, 0);
+        status = S3_runonce_request_context(requestContext,
+                                            &requestsRemaining);
+        if (status != S3StatusOK) {
+            return status;
+        }
+    } while (requestsRemaining);
+    
+    return S3StatusOK;
 }
 
 
@@ -59,6 +102,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
 
         switch (status) {
         case CURLM_OK:
+        case CURLM_CALL_MULTI_PERFORM:
             break;
         case CURLM_OUT_OF_MEMORY:
             return S3StatusOutOfMemory;
@@ -79,6 +123,19 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                                   (char **) &request) != CURLE_OK) {
                 return S3StatusFailure;
             }
+            // Remove the request from the list of requests
+            if (request->prev == request->next) {
+                // It was the only one on the list
+                requestContext->requests = 0;
+            }
+            else {
+                // It doesn't matter what the order of them are, so just in
+                // case request was at the head of the list, put the one after
+                // request to the head of the list
+                requestContext->requests = request->next;
+                request->prev->next = request->next;
+                request->next->prev = request->prev;
+            }
             // Make response complete callback
             switch (msg->data.result) {
             case CURLE_OK:
@@ -96,4 +153,13 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
     } while (status == CURLM_CALL_MULTI_PERFORM);
 
     return S3StatusOK;
+}
+
+S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
+                                       fd_set *readFdSet, fd_set *writeFdSet,
+                                       fd_set *exceptFdSet, int *maxFd)
+{
+    return ((curl_multi_fdset(requestContext->curlm, readFdSet, writeFdSet,
+                              exceptFdSet, maxFd) == CURLM_OK) ?
+            S3StatusOK : S3StatusFailure);
 }

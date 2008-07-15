@@ -27,12 +27,11 @@
 
 #include "libs3.h"
 
-
 struct S3RequestContext
 {
     CURLM *curlm;
 
-    int count;
+    struct Request *requests;
 };
 
 

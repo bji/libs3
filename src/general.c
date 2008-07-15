@@ -175,6 +175,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(OK);
         handlecase(Failure);
         handlecase(OutOfMemory);
+        handlecase(Interrupted);
         handlecase(FailedToCreateMutex);
         handlecase(InvalidBucketNameTooLong);
         handlecase(InvalidBucketNameFirstCharacter);
@@ -365,9 +366,9 @@ typedef struct ConvertAclData
     int *aclGrantCountReturn;
     S3AclGrant *aclGrants;
 
-    string_buffer(emailAddress, MAX_GRANTEE_EMAIL_ADDRESS_SIZE);
-    string_buffer(userId, MAX_GRANTEE_USER_ID_SIZE);
-    string_buffer(userDisplayName, MAX_GRANTEE_DISPLAY_NAME_SIZE);
+    string_buffer(emailAddress, S3_MAX_GRANTEE_EMAIL_ADDRESS_SIZE);
+    string_buffer(userId, S3_MAX_GRANTEE_USER_ID_SIZE);
+    string_buffer(userDisplayName, S3_MAX_GRANTEE_DISPLAY_NAME_SIZE);
     string_buffer(groupUri, 128);
     string_buffer(permission, 32);
 } ConvertAclData;
@@ -385,9 +386,9 @@ static S3Status convertAclXmlCallback(const char *elementPath,
         if (!strcmp(elementPath, "AccessControlPolicy/Owner/ID")) {
             caData->ownerIdLen += 
                 snprintf(&(caData->ownerId[caData->ownerIdLen]),
-                         MAX_GRANTEE_USER_ID_SIZE - caData->ownerIdLen - 1,
+                         S3_MAX_GRANTEE_USER_ID_SIZE - caData->ownerIdLen - 1,
                          "%.*s", dataLen, data);
-            if (caData->ownerIdLen >= MAX_GRANTEE_USER_ID_SIZE) {
+            if (caData->ownerIdLen >= S3_MAX_GRANTEE_USER_ID_SIZE) {
                 return S3StatusBadAclUserIdTooLong;
             }
         }
@@ -396,11 +397,11 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             caData->ownerDisplayNameLen += 
                 snprintf(&(caData->ownerDisplayName
                            [caData->ownerDisplayNameLen]),
-                         MAX_GRANTEE_DISPLAY_NAME_SIZE -
+                         S3_MAX_GRANTEE_DISPLAY_NAME_SIZE -
                          caData->ownerDisplayNameLen - 1, 
                          "%.*s", dataLen, data);
             if (caData->ownerDisplayNameLen >= 
-                MAX_GRANTEE_DISPLAY_NAME_SIZE) {
+                S3_MAX_GRANTEE_DISPLAY_NAME_SIZE) {
                 return S3StatusBadAclUserDisplayNameTooLong;
             }
         }

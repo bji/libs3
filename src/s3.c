@@ -502,10 +502,10 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
         
         if (!strncmp(aclXml, "OwnerID", sizeof("OwnerID") - 1)) {
             aclXml += sizeof("OwnerID") - 1;
-            COPY_STRING_MAXLEN(ownerId, MAX_GRANTEE_USER_ID_SIZE);
+            COPY_STRING_MAXLEN(ownerId, S3_MAX_GRANTEE_USER_ID_SIZE);
             SKIP_SPACE(1);
             COPY_STRING_MAXLEN(ownerDisplayName,
-                               MAX_GRANTEE_DISPLAY_NAME_SIZE);
+                               S3_MAX_GRANTEE_DISPLAY_NAME_SIZE);
             continue;
         }
 
@@ -1746,8 +1746,8 @@ void get_acl(int argc, char **argv, int optind)
 
     int aclGrantCount;
     S3AclGrant aclGrants[S3_MAX_ACL_GRANT_COUNT];
-    char ownerId[MAX_GRANTEE_USER_ID_SIZE];
-    char ownerDisplayName[MAX_GRANTEE_DISPLAY_NAME_SIZE];
+    char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
+    char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
 
     S3_init();
 
@@ -1877,8 +1877,8 @@ void set_acl(int argc, char **argv, int optind)
     // Read in the complete ACL
     char aclBuf[65536];
     aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
-    char ownerId[MAX_GRANTEE_USER_ID_SIZE];
-    char ownerDisplayName[MAX_GRANTEE_DISPLAY_NAME_SIZE];
+    char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
+    char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
     
     // Parse it
     int aclGrantCount;
