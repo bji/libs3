@@ -209,8 +209,6 @@ static S3Status generateAclXmlDocument(const char *ownerId,
 
     append("%s", "</AccessControlList></AccessControlPolicy>");
 
-    printf("XML: [%s]\n", xmlDocument); 
-
     return S3StatusOK;
 }
 

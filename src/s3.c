@@ -1886,7 +1886,7 @@ void set_acl(int argc, char **argv, int optind)
     S3Status status = convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
                                          &aclGrantCount, aclGrants);
     if (status != S3StatusOK) {
-        fprintf(stderr, "ERROR: Failed to parse ACLs");
+        fprintf(stderr, "ERROR: Failed to parse ACLs\n");
         fclose(infile);
         exit(-1);
     }
