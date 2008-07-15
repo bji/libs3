@@ -649,6 +649,27 @@ typedef struct list_service_data
     int allDetails;
 } list_service_data;
 
+
+static void printListServiceHeader(int allDetails)
+{
+    printf("%-56s  %-20s", "                         Bucket",
+           "      Created");
+    if (allDetails) {
+        printf("  %-64s  %-12s", 
+               "                            Owner ID",
+               "Display Name");
+    }
+    printf("\n");
+    printf("--------------------------------------------------------  "
+           "--------------------");
+    if (allDetails) {
+        printf("  -------------------------------------------------"
+               "---------------  ------------");
+    }
+    printf("\n");
+}
+
+
 static S3Status listServiceCallback(const char *ownerId, 
                                     const char *ownerDisplayName,
                                     const char *bucketName,
@@ -658,21 +679,7 @@ static S3Status listServiceCallback(const char *ownerId,
 
     if (!data->headerPrinted) {
         data->headerPrinted = 1;
-        printf("%-56s  %-20s", "                         Bucket",
-               "      Created");
-        if (data->allDetails) {
-            printf("  %-64s  %-12s", 
-                   "                            Owner ID",
-                   "Display Name");
-        }
-        printf("\n");
-        printf("--------------------------------------------------------  "
-               "--------------------");
-        if (data->allDetails) {
-            printf("  -------------------------------------------------"
-                   "---------------  ------------");
-        }
-        printf("\n");
+        printListServiceHeader(data->allDetails);
     }
 
     char timebuf[256];
@@ -713,7 +720,12 @@ static void list_service(int allDetails)
     S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
                     &listServiceHandler, &data);
 
-    if (statusG != S3StatusOK) {
+    if (statusG == S3StatusOK) {
+        if (!data.headerPrinted) {
+            printListServiceHeader(allDetails);
+        }
+    }
+    else {
         printError();
     }
 
@@ -890,6 +902,29 @@ typedef struct list_bucket_callback_data
 } list_bucket_callback_data;
 
 
+static void printListBucketHeader(int allDetails)
+{
+    printf("%-50s  %-20s  %-5s", 
+           "                       Key", 
+           "   Last Modified", "Size");
+    if (allDetails) {
+        printf("  %-34s  %-64s  %-12s", 
+               "               ETag", 
+               "                            Owner ID",
+               "Display Name");
+    }
+    printf("\n");
+    printf("--------------------------------------------------  "
+           "--------------------  -----");
+    if (allDetails) {
+        printf("  ----------------------------------  "
+               "-------------------------------------------------"
+               "---------------  ------------");
+    }
+    printf("\n");
+}
+
+
 static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                                    int contentsCount, 
                                    const S3ListBucketContent *contents,
@@ -916,24 +951,7 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
     }
     
     if (contentsCount && !data->keyCount) {
-        printf("%-50s  %-20s  %-5s", 
-               "                       Key", 
-               "   Last Modified", "Size");
-        if (data->allDetails) {
-            printf("  %-34s  %-64s  %-12s", 
-                   "               ETag", 
-                   "                            Owner ID",
-                   "Display Name");
-        }
-        printf("\n");
-        printf("--------------------------------------------------  "
-               "--------------------  -----");
-        if (data->allDetails) {
-            printf("  ----------------------------------  "
-                   "-------------------------------------------------"
-                   "---------------  ------------");
-        }
-        printf("\n");
+        printListBucketHeader(data->allDetails);
     }
 
     int i;
@@ -1036,6 +1054,15 @@ static void list_bucket(const char *bucketName, const char *prefix,
         }
         marker = data.nextMarker;
     } while (data.isTruncated && (!maxkeys || (data.keyCount < maxkeys)));
+
+    if (statusG == S3StatusOK) {
+        if (!data.keyCount) {
+            printListBucketHeader(allDetails);
+        }
+    }
+    else {
+        printError();
+    }
 
     S3_deinitialize();
 }
