@@ -30,7 +30,9 @@
 #error "Threading support required in OpenSSL library, but not provided"
 #endif
 #include <pthread.h>
+#include <string.h>
 #include "request.h"
+#include "simplexml.h"
 #include "util.h"
 
 typedef struct S3Mutex CRYPTO_dynlock_value;
@@ -204,6 +206,15 @@ const char *S3_get_status_name(S3Status status)
         handlecase(KeyTooLong);
         handlecase(UriTooLong);
         handlecase(XmlParseFailure);
+        handlecase(BadAclEmailAddressTooLong);
+        handlecase(BadAclUserIdTooLong);
+        handlecase(BadAclUserDisplayNameTooLong);
+        handlecase(BadAclGroupUriTooLong);
+        handlecase(BadAclPermissionTooLong);
+        handlecase(TooManyAclGrants);
+        handlecase(BadAclGrantee);
+        handlecase(BadAclPermission);
+        handlecase(AclXmlDocumentTooLarge);
         handlecase(ErrorAccessDenied);
         handlecase(ErrorAccountProblem);
         handlecase(ErrorAmbiguousGrantByEmailAddress);
@@ -345,8 +356,208 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle)
 }
 
 
-S3Status S3_convert_acl(char *aclXml, int *aclGrantCountReturn,
-                        S3AclGrant *aclGrantsReturn)
+typedef struct ConvertAclData
 {
+    char *ownerId;
+    int ownerIdLen;
+    char *ownerDisplayName;
+    int ownerDisplayNameLen;
+    int *aclGrantCountReturn;
+    S3AclGrant *aclGrants;
+
+    string_buffer(emailAddress, MAX_GRANTEE_EMAIL_ADDRESS_SIZE);
+    string_buffer(userId, MAX_GRANTEE_USER_ID_SIZE);
+    string_buffer(userDisplayName, MAX_GRANTEE_DISPLAY_NAME_SIZE);
+    string_buffer(groupUri, 128);
+    string_buffer(permission, 32);
+} ConvertAclData;
+
+
+static S3Status convertAclXmlCallback(const char *elementPath,
+                                      const char *data, int dataLen,
+                                      void *callbackData)
+{
+    ConvertAclData *caData = (ConvertAclData *) callbackData;
+
+    int fit;
+
+    if (data) {
+        if (!strcmp(elementPath, "AccessControlPolicy/Owner/ID")) {
+            caData->ownerIdLen += 
+                snprintf(&(caData->ownerId[caData->ownerIdLen]),
+                         MAX_GRANTEE_USER_ID_SIZE - caData->ownerIdLen - 1,
+                         "%.*s", dataLen, data);
+            if (caData->ownerIdLen >= MAX_GRANTEE_USER_ID_SIZE) {
+                return S3StatusBadAclUserIdTooLong;
+            }
+        }
+        else if (!strcmp(elementPath, "AccessControlPolicy/Owner/"
+                         "DisplayName")) {
+            caData->ownerDisplayNameLen += 
+                snprintf(&(caData->ownerDisplayName
+                           [caData->ownerDisplayNameLen]),
+                         MAX_GRANTEE_DISPLAY_NAME_SIZE -
+                         caData->ownerDisplayNameLen - 1, 
+                         "%.*s", dataLen, data);
+            if (caData->ownerDisplayNameLen >= 
+                MAX_GRANTEE_DISPLAY_NAME_SIZE) {
+                return S3StatusBadAclUserDisplayNameTooLong;
+            }
+        }
+        else if (!strcmp(elementPath, 
+                    "AccessControlPolicy/AccessControlList/Grant/"
+                    "Grantee/EmailAddress")) {
+            // AmazonCustomerByEmail
+            string_buffer_append(caData->emailAddress, data, dataLen, fit);
+            if (!fit) {
+                return S3StatusBadAclEmailAddressTooLong;
+            }
+        }
+        else if (!strcmp(elementPath,
+                         "AccessControlPolicy/AccessControlList/Grant/"
+                         "Grantee/ID")) {
+            // CanonicalUser
+            string_buffer_append(caData->userId, data, dataLen, fit);
+            if (!fit) {
+                return S3StatusBadAclUserIdTooLong;
+            }
+        }
+        else if (!strcmp(elementPath,
+                         "AccessControlPolicy/AccessControlList/Grant/"
+                         "Grantee/DisplayName")) {
+            // CanonicalUser
+            string_buffer_append(caData->userDisplayName, data, dataLen, fit);
+            if (!fit) {
+                return S3StatusBadAclUserDisplayNameTooLong;
+            }
+        }
+        else if (!strcmp(elementPath,
+                         "AccessControlPolicy/AccessControlList/Grant/"
+                         "Grantee/URI")) {
+            // Group
+            string_buffer_append(caData->groupUri, data, dataLen, fit);
+            if (!fit) {
+                return S3StatusBadAclGroupUriTooLong;
+            }
+        }
+        else if (!strcmp(elementPath,
+                         "AccessControlPolicy/AccessControlList/Grant/"
+                         "Permission")) {
+            // Permission
+            string_buffer_append(caData->permission, data, dataLen, fit);
+            if (!fit) {
+                return S3StatusBadAclPermissionTooLong;
+            }
+        }
+    }
+    else {
+        if (!strcmp(elementPath, "AccessControlPolicy/AccessControlList/"
+                    "Grant")) {
+            // A grant has just been completed; so add the next S3AclGrant
+            // based on the values read
+            if (*(caData->aclGrantCountReturn) == S3_MAX_ACL_GRANT_COUNT) {
+                return S3StatusTooManyAclGrants;
+            }
+
+            S3AclGrant *grant = &(caData->aclGrants
+                                  [*(caData->aclGrantCountReturn)]);
+
+            if (caData->emailAddress[0]) {
+                grant->granteeType = S3GranteeTypeAmazonCustomerByEmail;
+                strcpy(grant->grantee.amazonCustomerByEmail.emailAddress,
+                       caData->emailAddress);
+            }
+            else if (caData->userId[0] && caData->userDisplayName[0]) {
+                grant->granteeType = S3GranteeTypeCanonicalUser;
+                strcpy(grant->grantee.canonicalUser.id, caData->userId);
+                strcpy(grant->grantee.canonicalUser.displayName, 
+                       caData->userDisplayName);
+            }
+            else if (caData->groupUri[0]) {
+                if (!strcmp(caData->groupUri,
+                            "http://acs.amazonaws.com/groups/global/"
+                            "AuthenticatedUsers")) {
+                    grant->granteeType = S3GranteeTypeAllAwsUsers;
+                }
+                else if (!strcmp(caData->groupUri,
+                                 "http://acs.amazonaws.com/groups/global/"
+                                 "AllUsers")) {
+                    grant->granteeType = S3GranteeTypeAllUsers;
+                }
+                else {
+                    return S3StatusBadAclGrantee;
+                }
+            }
+            else {
+                return S3StatusBadAclGrantee;
+            }
+
+            if (!strcmp(caData->permission, "READ")) {
+                grant->permission = S3PermissionRead;
+            }
+            else if (!strcmp(caData->permission, "WRITE")) {
+                grant->permission = S3PermissionWrite;
+            }
+            else if (!strcmp(caData->permission, "READ_ACP")) {
+                grant->permission = S3PermissionReadAcp;
+            }
+            else if (!strcmp(caData->permission, "WRITE_ACP")) {
+                grant->permission = S3PermissionWriteAcp;
+            }
+            else if (!strcmp(caData->permission, "FULL_CONTROL")) {
+                grant->permission = S3PermissionFullControl;
+            }
+            else {
+                return S3StatusBadAclPermission;
+            }
+
+            (*(caData->aclGrantCountReturn))++;
+
+            string_buffer_initialize(caData->emailAddress);
+            string_buffer_initialize(caData->userId);
+            string_buffer_initialize(caData->userDisplayName);
+            string_buffer_initialize(caData->groupUri);
+            string_buffer_initialize(caData->permission);
+        }
+    }
+
+    return S3StatusOK;
+}
+
+
+S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
+                        int *aclGrantCountReturn, S3AclGrant *aclGrants)
+{
+    ConvertAclData data;
+
+    data.ownerId = ownerId;
+    data.ownerIdLen = 0;
+    data.ownerId[0] = 0;
+    data.ownerDisplayName = ownerDisplayName;
+    data.ownerDisplayNameLen = 0;
+    data.ownerDisplayName[0] = 0;
+    data.aclGrantCountReturn = aclGrantCountReturn;
+    data.aclGrants = aclGrants;
+    *aclGrantCountReturn = 0;
+    string_buffer_initialize(data.emailAddress);
+    string_buffer_initialize(data.userId);
+    string_buffer_initialize(data.userDisplayName);
+    string_buffer_initialize(data.groupUri);
+    string_buffer_initialize(data.permission);
+
+    // Use a simplexml parser
+    SimpleXml simpleXml;
+
+    S3Status status;
+
+    if (((status = simplexml_initialize
+          (&simpleXml, &convertAclXmlCallback, &data)) != S3StatusOK) ||
+        ((status = simplexml_add
+          (&simpleXml, aclXml, strlen(aclXml))) != S3StatusOK)) {
+        return status;
+    }
+
+    simplexml_deinitialize(&simpleXml);
+                                          
     return S3StatusOK;
 }

@@ -151,7 +151,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
-        0,                                            // requestProperties
+        0,                                            // putProperties
         &testBucketPropertiesCallback,                // propertiesCallback
         0,                                            // toS3Callback
         0,                                            // toS3CallbackTotalSize
@@ -290,7 +290,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
-        &properties,                                  // requestProperties
+        &properties,                                  // putProperties
         &createBucketPropertiesCallback,              // propertiesCallback
         &createBucketDataCallback,                    // toS3Callback
         cbData->docLen,                               // toS3CallbackTotalSize
@@ -375,7 +375,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
-        0,                                            // requestProperties
+        0,                                            // putProperties
         &deleteBucketPropertiesCallback,              // propertiesCallback
         0,                                            // toS3Callback
         0,                                            // toS3CallbackTotalSize
@@ -544,6 +544,10 @@ static S3Status listBucketXmlCallback(const char *elementPath,
                          sizeof(lbData->commonPrefixes[which]) -
                          lbData->commonPrefixLens[which] - 1,
                          "%.*s", dataLen, data);
+            if (lbData->commonPrefixLens[which] >=
+                sizeof(lbData->commonPrefixes[which])) {
+                return S3StatusXmlParseFailure;
+            }
         }
     }
     else {
@@ -618,6 +622,10 @@ static void listBucketCompleteCallback(S3Status requestStatus,
     if (lbData->contentsCount || lbData->commonPrefixesCount) {
         make_list_bucket_callback(lbData);
     }
+
+    (*(lbData->responseCompleteCallback))
+        (requestStatus, httpResponseCode, s3ErrorDetails, 
+         lbData->callbackData);
 
     free(lbData);
 }
@@ -726,7 +734,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         0,                                            // getConditions
         0,                                            // startByte
         0,                                            // byteCount
-        0,                                            // requestProperties
+        0,                                            // putProperties
         &listBucketPropertiesCallback,                // propertiesCallback
         0,                                            // toS3Callback
         0,                                            // toS3CallbackTotalSize

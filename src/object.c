@@ -103,8 +103,12 @@ static S3Status copyObjectXmlCallback(const char *elementPath,
             if (coData->eTagReturnSize && coData->eTagReturn) {
                 coData->eTagReturnLen +=
                     snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
-                             coData->eTagReturnSize - coData->eTagReturnLen,
+                             coData->eTagReturnSize - 
+                             coData->eTagReturnLen - 1,
                              "%.*s", dataLen, data);
+                if (coData->eTagReturnLen >= coData->eTagReturnSize) {
+                    return S3StatusXmlParseFailure;
+                }
             }
         }
     }

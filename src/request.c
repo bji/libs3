@@ -679,7 +679,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     signbuf_append("%s", values->canonicalizedAmzHeaders);
 
     signbuf_append("%s", values->canonicalizedResource);
-    
+
     unsigned int md_len;
     unsigned char md[EVP_MAX_MD_SIZE];
 	
@@ -741,15 +741,12 @@ static S3Status compose_uri(const RequestParams *params, Request *request)
         uri_append("%s", params->key);
     }
 
-    if (params->subResource) {
+    if (params->subResource && params->subResource[0]) {
         uri_append("%s", params->subResource);
     }
     
     if (params->queryParams) {
         uri_append("%s", params->queryParams);
-    }
-    else if (params->subResource && params->subResource[0]) {
-        uri_append("%s", params->subResource);
     }
 
     return S3StatusOK;

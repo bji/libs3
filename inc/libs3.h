@@ -93,11 +93,32 @@
 
 
 /**
- * S3_ACL_GRANT_MAXCOUNT is the maximum number of ACL grants that may be
+ * S3_MAX_ACL_GRANT_COUNT is the maximum number of ACL grants that may be
  * set on a bucket or object at one time.  It is also the maximum number of
  * ACL grants that the XML ACL parsing routine will parse.
  **/
-#define S3_ACL_GRANT_MAXCOUNT           100
+#define S3_MAX_ACL_GRANT_COUNT           100
+
+
+/**
+ * This is the maximum number of characters (including terminating \0) that
+ * libs3 supports in an ACL grantee email address.
+ **/
+#define MAX_GRANTEE_EMAIL_ADDRESS_SIZE  128
+
+
+/**
+ * This is the maximum number of characters (including terminating \0) that
+ * libs3 supports in an ACL grantee user id.
+ **/
+#define MAX_GRANTEE_USER_ID_SIZE        128
+
+
+/**
+ * This is the maximum number of characters (including terminating \0) that
+ * libs3 supports in an ACL grantee user display name.
+ **/
+#define MAX_GRANTEE_DISPLAY_NAME_SIZE   128
 
 
 /** **************************************************************************
@@ -146,6 +167,15 @@ typedef enum
     S3StatusKeyTooLong                                      ,
     S3StatusUriTooLong                                      ,
     S3StatusXmlParseFailure                                 ,
+    S3StatusBadAclEmailAddressTooLong                       ,
+    S3StatusBadAclUserIdTooLong                             ,
+    S3StatusBadAclUserDisplayNameTooLong                    ,
+    S3StatusBadAclGroupUriTooLong                           ,
+    S3StatusBadAclPermissionTooLong                         ,
+    S3StatusTooManyAclGrants                                ,
+    S3StatusBadAclGrantee                                   ,
+    S3StatusBadAclPermission                                ,
+    S3StatusAclXmlDocumentTooLarge                          ,
     
     // Errors from the S3 service
     S3StatusErrorAccessDenied                               ,
@@ -263,7 +293,8 @@ typedef enum
     S3PermissionRead                    = 0,
     S3PermissionWrite                   = 1,
     S3PermissionReadAcp                 = 2,
-    S3PermissionWriteAcp                = 3
+    S3PermissionWriteAcp                = 3,
+    S3PermissionFullControl             = 4
 } S3Permission;
 
 
@@ -404,7 +435,7 @@ typedef struct S3AclGrant
              * This is the email address of the Amazon Customer being granted
              * permissions by this S3AclGrant.
              **/
-            const char *emailAddress;
+            char emailAddress[MAX_GRANTEE_EMAIL_ADDRESS_SIZE];
         } amazonCustomerByEmail;
         /**
          * This structure is used iff the granteeType is
@@ -415,11 +446,11 @@ typedef struct S3AclGrant
             /**
              * This is the CanonicalUser ID of the grantee
              **/
-            const char *id;
+            char id[MAX_GRANTEE_USER_ID_SIZE];
             /**
              * This is the display name of the grantee
              **/
-            const char *displayName;
+            char displayName[MAX_GRANTEE_DISPLAY_NAME_SIZE];
         } canonicalUser;
     } grantee;
     /**
@@ -803,6 +834,12 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  *
  * @param aclXml is the XML representation of the ACL.  This must be a
  *        zero-terminated character string in ASCII format.
+ * @param ownerId will be filled in with the Owner ID specified in the XML.
+ *        At most MAX_GRANTEE_USER_ID_SIZE bytes will be stored at this
+ *        location.
+ * @param ownerDisplayName will be filled in with the Owner Display Name
+ *        specified in the XML.  At most MAX_GRANTEE_DISPLAY_NAME_SIZE bytes
+ *        will be stored at this location.
  * @param aclGrantCountReturn returns the number of S3AclGrant structures
  *        returned in the aclGrantsReturned array
  * @param aclGransReturned must be passed in as an array of at least
@@ -811,8 +848,9 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  *        represented by the input XML.
  * @return S3Status ???
  **/
-S3Status S3_convert_acl(char *aclXml, int *aclGrantCountReturn,
-                        S3AclGrant *aclGrantsReturn);
+S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
+                        int *aclGrantCountReturn, S3AclGrant *aclGrants);
+                        
 
 
 /** **************************************************************************
@@ -1106,28 +1144,24 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
 // aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
 // and does not need to be zero-terminated
 */
-void S3_set_acl(const S3BucketContext *bucketContext, const char *key, 
-                int aclGrantCount, S3AclGrant *aclGrants, 
+void S3_get_acl(const S3BucketContext *bucketContext, const char *key, 
+                char *ownerId, char *ownerDisplayName,
+                int *aclGrantCountReturn, S3AclGrant *aclGrants, 
                 S3RequestContext *requestContext,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
-void S3_add_acl_grants(const S3BucketContext *bucketContext, const char *key,
-                       int aclGrantCount, S3AclGrant *aclGrants,
-                       S3RequestContext *requestContext,
-                       const S3ResponseHandler *handler, void *callbackData);
-                           
+/*
+// key is optional, if not present the ACL applies to the bucket
+// aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
+// and does not need to be zero-terminated
+*/
+void S3_set_acl(const S3BucketContext *bucketContext, const char *key, 
+                const char *ownerId, const char *ownerDisplayName,
+                int aclGrantCount, const S3AclGrant *aclGrants, 
+                S3RequestContext *requestContext,
+                const S3ResponseHandler *handler, void *callbackData);
 
-void S3_remove_acl_grants(const S3BucketContext *bucketContext, const char *key,
-                          int aclGrantsCount, const S3AclGrant *aclGrants,
-                          S3RequestContext *requestContext,
-                          const S3ResponseHandler *handler,
-                          void *callbackData);
-
-
-void S3_clear_acl(const S3BucketContext *bucketContext, const char *key,
-                  S3RequestContext *requestContext,
-                  const S3ResponseHandler *hander, void *callbackData);
 
 
 /**
