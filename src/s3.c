@@ -68,8 +68,8 @@ static const S3ErrorDetails *errorG = 0;
 
 // Option prefixes -----------------------------------------------------------
 
-#define LOCATION_CONSTRAINT_PREFIX "locationConstraint="
-#define LOCATION_CONSTRAINT_PREFIX_LEN (sizeof(LOCATION_CONSTRAINT_PREFIX) - 1)
+#define LOCATION_PREFIX "location="
+#define LOCATION_PREFIX_LEN (sizeof(LOCATION_PREFIX) - 1)
 #define CANNED_ACL_PREFIX "cannedAcl="
 #define CANNED_ACL_PREFIX_LEN (sizeof(CANNED_ACL_PREFIX) - 1)
 #define PREFIX_PREFIX "prefix="
@@ -231,7 +231,7 @@ static void usageExit(FILE *out)
 "   help\n"            
 "   list [allDetails]\n"
 "   test <bucket>\n"
-"   create <bucket> [cannedAcl, locationConstraint]\n"
+"   create <bucket> [cannedAcl, location]\n"
 "   delete <bucket>\n"
 "   list <bucket> [prefix, marker, delimiter, maxkeys, allDetails]\n"
 "   getacl <bucket> [filename, allDetails]"
@@ -831,9 +831,8 @@ static void create_bucket(int argc, char **argv, int optind)
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
     while (optind < argc) {
         char *param = argv[optind++];
-        if (!strncmp(param, LOCATION_CONSTRAINT_PREFIX, 
-                     LOCATION_CONSTRAINT_PREFIX_LEN)) {
-            locationConstraint = &(param[LOCATION_CONSTRAINT_PREFIX_LEN]);
+        if (!strncmp(param, LOCATION_PREFIX, LOCATION_PREFIX_LEN)) {
+            locationConstraint = &(param[LOCATION_PREFIX_LEN]);
         }
         else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
             char *val = &(param[CANNED_ACL_PREFIX_LEN]);

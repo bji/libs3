@@ -170,4 +170,4 @@ rm -f acl acl_new
 echo "$S3_COMMAND delete $TEST_BUCKET/aclkey"
 $S3_COMMAND delete $TEST_BUCKET/aclkey
 echo "$S3_COMMAND delete $TEST_BUCKET"
-$S3_COMMAND delete $TEST_BUCKET"
+$S3_COMMAND delete $TEST_BUCKET
