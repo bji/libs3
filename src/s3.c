@@ -234,7 +234,7 @@ static void usageExit(FILE *out)
 "   create <bucket> [cannedAcl, locationConstraint]\n"
 "   delete <bucket>\n"
 "   list <bucket> [prefix, marker, delimiter, maxkeys, allDetails]\n"
-"   getacl <bucket> [filename]"
+"   getacl <bucket> [filename, allDetails]"
 "   setacl <bucket> [filename]"
 "   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
 "                       md5, contentDispositionFilename, contentEncoding,\n"
@@ -248,7 +248,7 @@ static void usageExit(FILE *out)
 "   head <bucket>/<key> [ifModifiedSince, ifNotmodifiedSince, ifMatch,\n"
 "                       ifNotMatch] (implies -s)\n"
 "   delete <bucket>/<key>\n"
-"   getacl <bucket>/<key> [filename]"
+"   getacl <bucket>/<key> [filename, allDetails]"
 "   setacl <bucket>/<key> [filename]"
 "\n");
 
@@ -630,11 +630,9 @@ static S3Status responsePropertiesCallback
     print_nonnull("ETag", eTag);
     if (properties->lastModified > 0) {
         char timebuf[256];
-        // localtime is not thread-safe but we don't care here.  xxx note -
-        // localtime doesn't seem to actually do anything, 0 locatime of 0
-        // returns EST Unix epoch, it should return the NZST equivalent ...
-        strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                 localtime(&(properties->lastModified)));
+        // gmtime is not thread-safe but we don't care here.
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                 gmtime(&(properties->lastModified)));
         printf("Last-Modified: %s\n", timebuf);
     }
     int i;
@@ -985,8 +983,8 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
         const S3ListBucketContent *content = &(contents[i]);
         char timebuf[256];
         if (0) {
-            strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                     localtime(&(content->lastModified)));
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                     gmtime(&(content->lastModified)));
             printf("\nKey: %s\n", content->key);
             printf("Last Modified: %s\n", timebuf);
             printf("ETag: %s\n", content->eTag);
@@ -1075,7 +1073,6 @@ static void list_bucket(const char *bucketName, const char *prefix,
         S3_list_bucket(&bucketContext, prefix, data.nextMarker, delimiter,
                        maxkeys, 0, &listBucketHandler, &data);
         if (statusG != S3StatusOK) {
-            printError();
             break;
         }
         marker = data.nextMarker;
@@ -1211,11 +1208,11 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     if (data->contentLength) {
         int toRead = ((data->contentLength > bufferSize) ?
                       bufferSize : data->contentLength);
-        if (data->infile) {
-            ret = fread(buffer, 1, toRead, data->infile);
+        if (data->gb) {
+            growbuffer_read(&(data->gb), toRead, &ret, buffer);
         }
-        else if (data->gb) {
-            growbuffer_read(&(data->gb), data->contentLength, &ret, buffer);
+        else if (data->infile) {
+            ret = fread(buffer, 1, toRead, data->infile);
         }
     }
 
@@ -1633,8 +1630,8 @@ static void copy_object(int argc, char **argv, int optind)
     if (statusG == S3StatusOK) {
         if (lastModified >= 0) {
             char timebuf[256];
-            strftime(timebuf, sizeof(timebuf), "%Y/%m/%d %H:%M:%S %Z",
-                     localtime(&lastModified));
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                     gmtime(&lastModified));
             printf("Last-Modified: %s\n", timebuf);
         }
         if (eTag[0]) {
