@@ -935,15 +935,15 @@ static S3Status request_get(const RequestParams *params,
     // Start out with no headers
     request->headers = 0;
 
-    // Set all of the curl handle options
-    if ((status = setup_curl(request, params, values)) != S3StatusOK) {
+    // Compute the URL
+    if ((status = compose_uri(params, request)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
         free(request);
         return status;
     }
 
-    // Compute the URL
-    if ((status = compose_uri(params, request)) != S3StatusOK) {
+    // Set all of the curl handle options
+    if ((status = setup_curl(request, params, values)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
         free(request);
         return status;
