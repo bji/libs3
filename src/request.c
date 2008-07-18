@@ -694,11 +694,10 @@ static S3Status compose_auth_header(const RequestParams *params,
     }
     BUF_MEM *base64mem;
     BIO_get_mem_ptr(base64, &base64mem);
-    base64mem->data[base64mem->length - 1] = 0;
 
     snprintf(values->authorizationHeader, sizeof(values->authorizationHeader),
-             "Authorization: AWS %s:%s", params->accessKeyId, 
-             base64mem->data);
+             "Authorization: AWS %s:%.*s", params->accessKeyId, 
+             base64mem->length - 1, base64mem->data);
 
     BIO_free_all(base64);
 
@@ -886,8 +885,6 @@ static void request_deinitialize(Request *request)
         curl_slist_free_all(request->headers);
     }
     
-    curl_easy_cleanup(request->curl);
-
     error_parser_deinitialize(&(request->errorParser));
 }
 
@@ -903,7 +900,7 @@ static S3Status request_get(const RequestParams *params,
     mutex_lock(requestStackMutexG);
 
     if (requestStackCountG) {
-        request = requestStackG[requestStackCountG--];
+        request = requestStackG[--requestStackCountG];
     }
     
     mutex_unlock(requestStackMutexG);
@@ -974,6 +971,7 @@ static S3Status request_get(const RequestParams *params,
 static void request_destroy(Request *request)
 {
     request_deinitialize(request);
+    curl_easy_cleanup(request->curl);
     free(request);
 }
 
