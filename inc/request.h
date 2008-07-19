@@ -136,7 +136,7 @@ typedef struct Request
     char uri[MAX_URI_SIZE + 1];
 
     // The HTTP response code that S3 sent back for this request
-    int httpResponseCode;
+    long httpResponseCode;
 
     // Callback to be made when headers are available.  Might not be called.
     S3ResponsePropertiesCallback *propertiesCallback;

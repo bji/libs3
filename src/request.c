@@ -778,8 +778,10 @@ static S3Status setup_curl(Request *request,
     // Set read callback, data, and readSize
     curl_easy_setopt_safe(CURLOPT_READFUNCTION, &curl_read_func);
     curl_easy_setopt_safe(CURLOPT_READDATA, request);
-    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, 
-                          params->toS3CallbackTotalSize)
+    // xxx the following does not work in some versions of CURL.
+    // CURL is retarded in how it defines large offsets, only using
+    // 32 bits sometimes, when it should always use 64 via int64_t
+    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->toS3CallbackTotalSize);
     
     // Set write callback and data
     curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
