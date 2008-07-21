@@ -137,7 +137,6 @@ static S3Status copyObjectDataCallback(int bufferSize, const char *buffer,
 
 
 static void copyObjectCompleteCallback(S3Status requestStatus, 
-                                       int httpResponseCode, 
                                        const S3ErrorDetails *s3ErrorDetails,
                                        void *callbackData)
 {
@@ -153,8 +152,7 @@ static void copyObjectCompleteCallback(S3Status requestStatus,
     }
 
     (*(coData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         coData->callbackData);
+        (requestStatus, s3ErrorDetails, coData->callbackData);
 
     simplexml_deinitialize(&(coData->simpleXml));
 
@@ -173,8 +171,7 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
     CopyObjectData *data = 
         (CopyObjectData *) malloc(sizeof(CopyObjectData));
     if (!data) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -182,7 +179,7 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
         (&(data->simpleXml), &copyObjectXmlCallback, data);
     if (status != S3StatusOK) {
         free(data);
-        (*(handler->completeCallback))(status, 0, 0, callbackData);
+        (*(handler->completeCallback))(status, 0, callbackData);
         return;
     }
 

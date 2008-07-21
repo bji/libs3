@@ -81,7 +81,6 @@ static S3Status testBucketDataCallback(int bufferSize, const char *buffer,
 
 
 static void testBucketCompleteCallback(S3Status requestStatus, 
-                                       int httpResponseCode, 
                                        const S3ErrorDetails *s3ErrorDetails,
                                        void *callbackData)
 {
@@ -93,8 +92,7 @@ static void testBucketCompleteCallback(S3Status requestStatus,
              tbData->locationConstraint);
 
     (*(tbData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         tbData->callbackData);
+        (requestStatus, s3ErrorDetails, tbData->callbackData);
 
     simplexml_deinitialize(&(tbData->simpleXml));
 
@@ -113,8 +111,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     TestBucketData *tbData = 
         (TestBucketData *) malloc(sizeof(TestBucketData));
     if (!tbData) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -122,7 +119,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         (&(tbData->simpleXml), &testBucketXmlCallback, tbData);
     if (status != S3StatusOK) {
         free(tbData);
-        (*(handler->completeCallback))(status, 0, 0, callbackData);
+        (*(handler->completeCallback))(status, 0, callbackData);
         return;
     }
 
@@ -214,15 +211,13 @@ static int createBucketDataCallback(int bufferSize, char *buffer,
 
 
 static void createBucketCompleteCallback(S3Status requestStatus, 
-                                         int httpResponseCode, 
                                          const S3ErrorDetails *s3ErrorDetails,
                                          void *callbackData)
 {
     CreateBucketData *cbData = (CreateBucketData *) callbackData;
 
     (*(cbData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         cbData->callbackData);
+        (requestStatus, s3ErrorDetails, cbData->callbackData);
 
     free(cbData);
 }
@@ -238,8 +233,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     CreateBucketData *cbData = 
         (CreateBucketData *) malloc(sizeof(CreateBucketData));
     if (!cbData) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -325,15 +319,13 @@ static S3Status deleteBucketPropertiesCallback
 
 
 static void deleteBucketCompleteCallback(S3Status requestStatus, 
-                                         int httpResponseCode, 
                                          const S3ErrorDetails *s3ErrorDetails,
                                          void *callbackData)
 {
     DeleteBucketData *dbData = (DeleteBucketData *) callbackData;
 
     (*(dbData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         dbData->callbackData);
+        (requestStatus, s3ErrorDetails, dbData->callbackData);
 
     free(dbData);
 }
@@ -349,8 +341,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     DeleteBucketData *dbData = 
         (DeleteBucketData *) malloc(sizeof(DeleteBucketData));
     if (!dbData) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -612,7 +603,6 @@ static S3Status listBucketDataCallback(int bufferSize, const char *buffer,
 
 
 static void listBucketCompleteCallback(S3Status requestStatus, 
-                                       int httpResponseCode, 
                                        const S3ErrorDetails *s3ErrorDetails,
                                        void *callbackData)
 {
@@ -624,8 +614,7 @@ static void listBucketCompleteCallback(S3Status requestStatus,
     }
 
     (*(lbData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         lbData->callbackData);
+        (requestStatus, s3ErrorDetails, lbData->callbackData);
 
     free(lbData);
 }
@@ -646,27 +635,27 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         string_buffer_append(queryParams, &sep, 1, fit);                \
         if (!fit) {                                                     \
             (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
             return;                                                     \
         }                                                               \
         string_buffer_append(queryParams, name "=",                     \
                              sizeof(name "=") - 1, fit);                \
         if (!fit) {                                                     \
             (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
             return;                                                     \
         }                                                               \
         sep = '&';                                                      \
         char encoded[3 * 1024];                                         \
         if (!urlEncode(encoded, value, 1024)) {                         \
             (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
         }                                                               \
         string_buffer_append(queryParams, encoded, strlen(encoded),     \
                              fit);                                      \
         if (!fit) {                                                     \
             (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, 0, callbackData);       \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
             return;                                                     \
         }                                                               \
     } while (0)
@@ -693,7 +682,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
 
     if (!lbData) {
         (*(handler->responseHandler.completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+            (S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -702,7 +691,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     if (status != S3StatusOK) {
         free(lbData);
         (*(handler->responseHandler.completeCallback))
-            (status, 0, 0, callbackData);
+            (status, 0, callbackData);
         return;
     }
     

@@ -109,32 +109,24 @@ typedef struct RequestComputedValues
 
 // Called whenever we detect that the request headers have been completely
 // processed; which happens either when we get our first read/write callback,
-// or the request is finished being procesed
-static S3Status request_headers_done(Request *request)
+// or the request is finished being procesed.  Returns nonzero on success,
+// zero on failure.
+static void request_headers_done(Request *request)
 {
     if (request->propertiesCallbackMade) {
-        return S3StatusOK;
+        return;
     }
 
     request->propertiesCallbackMade = 1;
-
-    // Get the http response code
-    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
-                          &(request->httpResponseCode)) != CURLE_OK) {
-        request->httpResponseCode = 0;
-    }
 
     response_headers_handler_done(&(request->responseHeadersHandler), 
                                   request->curl);
 
     if (request->propertiesCallback) {
-        return (*(request->propertiesCallback))
+        request->status = (*(request->propertiesCallback))
             (&(request->responseHeadersHandler.responseProperties), 
              request->callbackData);
     }
-    else {
-        return S3StatusOK;
-    } 
 }
 
 
@@ -158,16 +150,26 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
 
     int len = size * nmemb;
 
-    if (request_headers_done(request) != S3StatusOK) {
-        return 0;
+    request_headers_done(request);
+
+    if (request->status != S3StatusOK) {
+        return CURL_READFUNC_ABORT;
     }
 
     if (request->toS3Callback) {
-        return (*(request->toS3Callback))
+        int ret = (*(request->toS3Callback))
             (len, (char *) ptr, request->callbackData);
+        if (ret < 0) {
+            request->status = S3StatusAbortedByCallback;
+            return CURL_READFUNC_ABORT;
+        }
+        else {
+            return ret;
+        }
     }
     else {
-        return 0;
+        request->status = S3StatusInternalError;
+        return CURL_READFUNC_ABORT;
     }
 }
 
@@ -179,28 +181,36 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb,
 
     int len = size * nmemb;
 
-    if (request_headers_done(request) != S3StatusOK) {
+    request_headers_done(request);
+
+    if (request->status != S3StatusOK) {
         return 0;
     }
 
-    // On HTTP error, we expect to parse an HTTP error response
-    if ((request->httpResponseCode < 200) || 
-        (request->httpResponseCode > 299)) {
-        return ((error_parser_add(&(request->errorParser),
-                                  (char *) ptr, len) == S3StatusOK) ? len : 0);
+    // Get the http response code
+    int httpResponseCode = 0;
+    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
+                          &(httpResponseCode)) != CURLE_OK) {
+        // Not able to get the HTTP response code - error
+        request->status = S3StatusInternalError;
     }
-
+    // On HTTP error, we expect to parse an HTTP error response
+    else if ((httpResponseCode < 200) || (httpResponseCode > 299)) {
+        request->status = error_parser_add
+            (&(request->errorParser), (char *) ptr, len);
+    }
     // If there was a callback registered, make it
-    if (request->fromS3Callback) {
+    else if (request->fromS3Callback) {
         request->status = (*(request->fromS3Callback))
             (len, (char *) ptr, request->callbackData);
-        return (request->status == S3StatusOK) ? len : 0;
     }
     // Else, consider this an error - S3 has sent back data when it was not
     // expected
     else {
-        return 0;
+        request->status = S3StatusInternalError;
     }
+
+    return ((request->status == S3StatusOK) ? len : 0);
 }
 
 
@@ -545,7 +555,7 @@ static void canonicalize_amz_headers(RequestComputedValues *values)
     // - folding repeated headers into single lines, and
     // - folding multiple lines
     // - removing the space after the colon
-    int lastHeaderLen, i;
+    int lastHeaderLen = 0, i;
     char *buffer = values->canonicalizedAmzHeaders;
     for (i = 0; i < values->amzHeadersCount; i++) {
         const char *header = sortedHeaders[i];
@@ -690,7 +700,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     BIO_write(base64, md, md_len);
     if (BIO_flush(base64) != 1) {
         BIO_free_all(base64);
-        return S3StatusFailure;
+        return S3StatusInternalError;
     }
     BUF_MEM *base64mem;
     BIO_get_mem_ptr(base64, &base64mem);
@@ -779,9 +789,10 @@ static S3Status setup_curl(Request *request,
     curl_easy_setopt_safe(CURLOPT_READFUNCTION, &curl_read_func);
     curl_easy_setopt_safe(CURLOPT_READDATA, request);
     // xxx the following does not work in some versions of CURL.
-    // CURL is retarded in how it defines large offsets, only using
+    // CURL is retarded in how it defines large offsets, using only
     // 32 bits sometimes, when it should always use 64 via int64_t
-    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE, params->toS3CallbackTotalSize);
+    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE,
+                          params->toS3CallbackTotalSize);
     
     // Set write callback and data
     curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
@@ -1046,7 +1057,7 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     S3Status status;
 
 #define return_status(status)                                           \
-    (*(params->completeCallback))(status, 0, 0, params->callbackData);  \
+    (*(params->completeCallback))(status, 0, params->callbackData);     \
     return
 
     // These will hold the computed values
@@ -1093,8 +1104,8 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
 
     // If a RequestContext was provided, add the request to the curl multi
     if (context) {
-        switch (curl_multi_add_handle(context->curlm, request->curl)) {
-        case CURLM_OK:
+        CURLMcode code = curl_multi_add_handle(context->curlm, request->curl);
+        if (code == CURLM_OK) {
             if (context->requests) {
                 request->prev = context->requests->prev;
                 request->next = context->requests;
@@ -1104,23 +1115,20 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
             else {
                 context->requests = request->next = request->prev = request;
             }
-            break;
-        default:
-            // This isn't right.  Figure this out.
-            // xxx todo - more specific errors
-            return_status(S3StatusFailure);
-            request_release(request);
+        }
+        else {
+            if (request->status == S3StatusOK) {
+                request->status = (code == CURLM_OUT_OF_MEMORY) ?
+                    S3StatusOutOfMemory : S3StatusInternalError;
+            }
+            request_finish(request);
         }
     }
     // Else, perform the request immediately
     else {
-        switch (curl_easy_perform(request->curl)) {
-        case CURLE_OK:
-            break;
-        default:
-            // xxx todo - more specific errors
-            request->status = S3StatusFailure;
-            break;
+        CURLcode code = curl_easy_perform(request->curl);
+        if ((code != CURLE_OK) && (request->status == S3StatusOK)) {
+            request->status = request_curl_code_to_status(code);
         }
         // Finish the request, ensuring that all callbacks have been made, and
         // also releases the request
@@ -1133,8 +1141,8 @@ void request_finish(Request *request)
 {
     // If we haven't detected this already, we now know that the headers are
     // definitely done being read in
-    (void) request_headers_done(request);
-
+    request_headers_done(request);
+    
     // If there was no error processing the request, then possibly there was
     // an S3 error parsed, which should be converted into the request status
     if (request->status == S3StatusOK) {
@@ -1143,8 +1151,28 @@ void request_finish(Request *request)
     }
 
     (*(request->completeCallback))
-        (request->status, request->httpResponseCode,
-         &(request->errorParser.s3ErrorDetails), request->callbackData);
+        (request->status, &(request->errorParser.s3ErrorDetails),
+         request->callbackData);
 
     request_release(request);
 }
+
+
+S3Status request_curl_code_to_status(CURLcode code)
+{
+    switch (code) {
+    case CURLE_OUT_OF_MEMORY:
+        return S3StatusOutOfMemory;
+    case CURLE_COULDNT_RESOLVE_PROXY:
+    case CURLE_COULDNT_RESOLVE_HOST:
+        return S3StatusNameLookupError;
+    case CURLE_COULDNT_CONNECT:
+        return S3StatusFailedToConnect;
+    case CURLE_WRITE_ERROR:
+    case CURLE_OPERATION_TIMEDOUT:
+        return S3StatusConnectionFailed;
+    default:
+        return S3StatusInternalError;
+    }
+}
+

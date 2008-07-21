@@ -62,8 +62,8 @@ static const char *secretAccessKeyG = 0;
 
 // Request results, saved as globals -----------------------------------------
 
-static int statusG = 0, httpResponseCodeG = 0;
-static const S3ErrorDetails *errorG = 0;
+static int statusG = 0;
+static char errorDetailsG[4096] = { 0 };
 
 
 // Option prefixes -----------------------------------------------------------
@@ -179,33 +179,12 @@ static void S3_init()
 static void printError()
 {
     if (statusG < S3StatusErrorAccessDenied) {
-        fprintf(stderr, "ERROR: %s\n", S3_get_status_name(statusG));
+        fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(statusG));
     }
     else {
-        fprintf(stderr, "ERROR: S3 returned an unexpected error:\n");
-        fprintf(stderr, "  HTTP Code: %d\n", httpResponseCodeG);
-        fprintf(stderr, "  S3 Error: %s\n", S3_get_status_name(statusG));
-        if (errorG) {
-            if (errorG->message) {
-                fprintf(stderr, "  Message: %s\n", errorG->message);
-            }
-            if (errorG->resource) {
-                fprintf(stderr, "  Resource: %s\n", errorG->resource);
-            }
-            if (errorG->furtherDetails) {
-                fprintf(stderr, "  Further Details: %s\n", 
-                        errorG->furtherDetails);
-            }
-            if (errorG->extraDetailsCount) {
-                printf("  Extra Details:\n");
-                int i;
-                for (i = 0; i < errorG->extraDetailsCount; i++) {
-                    fprintf(stderr, "    %s: %s\n", 
-                            errorG->extraDetails[i].name,
-                            errorG->extraDetails[i].value);
-                }
-            }
-        }
+        fprintf(stderr, "\nERROR: S3 returned an unexpected error:\n");
+        fprintf(stderr, "  %s\n", S3_get_status_name(statusG));
+        fprintf(stderr, "%s\n", errorDetailsG);
     }
 }
 
@@ -262,7 +241,7 @@ static uint64_t convertInt(const char *str, const char *paramName)
 
     while (*str) {
         if (!isdigit(*str)) {
-            fprintf(stderr, "ERROR: Nondigit in %s parameter: %c\n", 
+            fprintf(stderr, "\nERROR: Nondigit in %s parameter: %c\n", 
                     paramName, *str);
             usageExit(stderr);
         }
@@ -469,10 +448,10 @@ static time_t parseIso8601Time(const char *str)
 // Group Authenticated AWS Users permission
 // Group All Users  permission
 // permission is one of READ, WRITE, READ_ACP, WRITE_ACP, FULL_CONTROL
-static S3Status convert_simple_acl(char *aclXml, char *ownerId,
-                                   char *ownerDisplayName,
-                                   int *aclGrantCountReturn,
-                                   S3AclGrant *aclGrants)
+static int convert_simple_acl(char *aclXml, char *ownerId,
+                              char *ownerDisplayName,
+                              int *aclGrantCountReturn,
+                              S3AclGrant *aclGrants)
 {
     *aclGrantCountReturn = 0;
     *ownerId = 0;
@@ -484,7 +463,7 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
             aclXml++;                           \
         }                                       \
         if (require_more && !*aclXml) {         \
-            return S3StatusFailure;             \
+            return 0;                           \
         }                                       \
     } while (0)
     
@@ -527,7 +506,7 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
         }
 
         if (*aclGrantCountReturn == S3_MAX_ACL_GRANT_COUNT) {
-            return S3StatusFailure;
+            return 0;
         }
 
         S3AclGrant *grant = &(aclGrants[(*aclGrantCountReturn)++]);
@@ -558,11 +537,11 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
                 aclXml += (sizeof("All Users") - 1);
             }
             else {
-                return S3StatusFailure;
+                return 0;
             }
         }
         else {
-            return S3StatusFailure;
+            return 0;
         }
 
         SKIP_SPACE(1);
@@ -590,7 +569,7 @@ static S3Status convert_simple_acl(char *aclXml, char *ownerId,
         }
     }
 
-    return S3StatusOK;
+    return 1;
 }
 
 
@@ -614,11 +593,11 @@ static S3Status responsePropertiesCallback
         return S3StatusOK;
     }
 
-#define print_nonnull(name, field)                              \
-    do {                                                        \
+#define print_nonnull(name, field)                                 \
+    do {                                                           \
         if (properties-> field) {                                  \
             printf("%s: %s\n", name, properties-> field);          \
-        }                                                       \
+        }                                                          \
     } while (0)
     
     print_nonnull("Request-Id", requestId);
@@ -649,16 +628,38 @@ static S3Status responsePropertiesCallback
 
 // This callback does the same thing for every request type: saves the status
 // and error stuff in global variables
-static void responseCompleteCallback(S3Status status, int httpResponseCode,
+static void responseCompleteCallback(S3Status status,
                                      const S3ErrorDetails *error, 
                                      void *callbackData)
 {
     statusG = status;
-    httpResponseCodeG = httpResponseCode;
-    // xxx todo - copy this instead of assigning it, since we are not supposed
-    // to rely on the value passed into this callback after the callback has
-    // completed.  Be sure to free errorG at the end of the program.
-    errorG = error;
+    // Compose the error details message now, although we might not use it.
+    // Can't just save a pointer to [error] since it's not guaranteed to last
+    // beyond this callback
+    int len = 0;
+    if (error->message) {
+        len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
+                        "  Message: %s\n", error->message);
+    }
+    if (error->resource) {
+        len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
+                        "  Resource: %s\n", error->resource);
+    }
+    if (error->furtherDetails) {
+        len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
+                        "  Further Details: %s\n", error->furtherDetails);
+    }
+    if (error->extraDetailsCount) {
+        len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
+                        "%s", "  Extra Details:\n");
+        int i;
+        for (i = 0; i < error->extraDetailsCount; i++) {
+            len += snprintf(&(errorDetailsG[len]), 
+                            sizeof(errorDetailsG) - len, "    %s: %s\n", 
+                            error->extraDetails[i].name,
+                            error->extraDetails[i].value);
+        }
+    }
 }
 
 
@@ -760,14 +761,14 @@ static void test_bucket(int argc, char **argv, int optind)
 {
     // test bucket
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
 
     if (optind != argc) {
-        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
         usageExit(stderr);
     }
 
@@ -821,7 +822,7 @@ static void test_bucket(int argc, char **argv, int optind)
 static void create_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
@@ -849,12 +850,12 @@ static void create_bucket(int argc, char **argv, int optind)
                 cannedAcl = S3CannedAclAuthenticatedRead;
             }
             else {
-                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                fprintf(stderr, "\nERROR: Unknown canned ACL: %s\n", val);
                 usageExit(stderr);
             }
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -885,14 +886,14 @@ static void create_bucket(int argc, char **argv, int optind)
 static void delete_bucket(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
     const char *bucketName = argv[optind++];
 
     if (optind != argc) {
-        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
         usageExit(stderr);
     }
 
@@ -967,7 +968,8 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
         nextMarker = contents[contentsCount - 1].key;
     }
     if (nextMarker) {
-        snprintf(data->nextMarker, sizeof(data->nextMarker), "%s", nextMarker);
+        snprintf(data->nextMarker, sizeof(data->nextMarker), "%s", 
+                 nextMarker);
     }
     else {
         data->nextMarker[0] = 0;
@@ -1115,7 +1117,8 @@ static void list(int argc, char **argv, int optind)
         else if (!strncmp(param, MAXKEYS_PREFIX, MAXKEYS_PREFIX_LEN)) {
             maxkeys = convertInt(&(param[MAXKEYS_PREFIX_LEN]), "maxkeys");
         }
-        else if (!strncmp(param, ALL_DETAILS_PREFIX, ALL_DETAILS_PREFIX_LEN)) {
+        else if (!strncmp(param, ALL_DETAILS_PREFIX,
+                          ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
             if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
                 !strcmp(ad, "1")) {
@@ -1126,7 +1129,7 @@ static void list(int argc, char **argv, int optind)
             bucketName = param;
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -1200,7 +1203,8 @@ typedef struct put_object_callback_data
 static int putObjectDataCallback(int bufferSize, char *buffer,
                                  void *callbackData)
 {
-    put_object_callback_data *data = (put_object_callback_data *) callbackData;
+    put_object_callback_data *data = 
+        (put_object_callback_data *) callbackData;
     
     int ret = 0;
 
@@ -1232,7 +1236,7 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
 static void put_object(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
 
@@ -1242,7 +1246,8 @@ static void put_object(int argc, char **argv, int optind)
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
+                argv[optind]);
         usageExit(stderr);
     }
     *slash++ = 0;
@@ -1270,7 +1275,7 @@ static void put_object(int argc, char **argv, int optind)
             contentLength = convertInt(&(param[CONTENT_LENGTH_PREFIX_LEN]),
                                        "contentLength");
             if (contentLength > (5LL * 1024 * 1024 * 1024)) {
-                fprintf(stderr, "ERROR: contentLength must be no greater "
+                fprintf(stderr, "\nERROR: contentLength must be no greater "
                         "than 5 GB\n");
                 usageExit(stderr);
             }
@@ -1298,14 +1303,14 @@ static void put_object(int argc, char **argv, int optind)
         else if (!strncmp(param, EXPIRES_PREFIX, EXPIRES_PREFIX_LEN)) {
             expires = parseIso8601Time(&(param[EXPIRES_PREFIX_LEN]));
             if (expires < 0) {
-                fprintf(stderr, "ERROR: Invalid expires time "
+                fprintf(stderr, "\nERROR: Invalid expires time "
                         "value; ISO 8601 time format required\n");
                 usageExit(stderr);
             }
         }
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
-                fprintf(stderr, "ERROR: Too many x-amz-meta- properties, "
+                fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
                         "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
@@ -1315,7 +1320,7 @@ static void put_object(int argc, char **argv, int optind)
                 value++;
             }
             if (!*value || !*(value + 1)) {
-                fprintf(stderr, "ERROR: Invalid parameter: %s\n", param);
+                fprintf(stderr, "\nERROR: Invalid parameter: %s\n", param);
                 usageExit(stderr);
             }
             *value++ = 0;
@@ -1337,7 +1342,7 @@ static void put_object(int argc, char **argv, int optind)
                 cannedAcl = S3CannedAclAuthenticatedRead;
             }
             else {
-                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                fprintf(stderr, "\nERROR: Unknown canned ACL: %s\n", val);
                 usageExit(stderr);
             }
         }
@@ -1349,7 +1354,7 @@ static void put_object(int argc, char **argv, int optind)
             }
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -1365,7 +1370,8 @@ static void put_object(int argc, char **argv, int optind)
             struct stat statbuf;
             // Stat the file to get its length
             if (stat(filename, &statbuf) == -1) {
-                fprintf(stderr, "ERROR: Failed to stat file %s: ", filename);
+                fprintf(stderr, "\nERROR: Failed to stat file %s: ",
+                        filename);
                 perror(0);
                 exit(-1);
             }
@@ -1373,7 +1379,8 @@ static void put_object(int argc, char **argv, int optind)
         }
         // Open the file
         if (!(data.infile = fopen(filename, "r"))) {
-            fprintf(stderr, "ERROR: Failed to open input file %s: ", filename);
+            fprintf(stderr, "\nERROR: Failed to open input file %s: ",
+                    filename);
             perror(0);
             exit(-1);
         }
@@ -1390,7 +1397,7 @@ static void put_object(int argc, char **argv, int optind)
                     break;
                 }
                 if (!growbuffer_append(&(data.gb), buffer, amtRead)) {
-                    fprintf(stderr, "ERROR: Out of memory while reading "
+                    fprintf(stderr, "\nERROR: Out of memory while reading "
                             "stdin\n");
                     exit(-1);
                 }
@@ -1451,7 +1458,7 @@ static void put_object(int argc, char **argv, int optind)
         printError();
     }
     else if (data.contentLength) {
-        fprintf(stderr, "ERROR: Failed to read remaining %llu bytes from "
+        fprintf(stderr, "\nERROR: Failed to read remaining %llu bytes from "
                 "input\n", data.contentLength);
     }
 
@@ -1464,7 +1471,7 @@ static void put_object(int argc, char **argv, int optind)
 static void copy_object(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: source bucket/key\n");
+        fprintf(stderr, "\nERROR: Missing parameter: source bucket/key\n");
         usageExit(stderr);
     }
 
@@ -1474,7 +1481,7 @@ static void copy_object(int argc, char **argv, int optind)
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "ERROR: Invalid source bucket/key name: %s\n",
+        fprintf(stderr, "\nERROR: Invalid source bucket/key name: %s\n",
                 argv[optind]);
         usageExit(stderr);
     }
@@ -1484,7 +1491,8 @@ static void copy_object(int argc, char **argv, int optind)
     const char *sourceKey = slash;
 
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: destination bucket/key\n");
+        fprintf(stderr, "\nERROR: Missing parameter: "
+                "destination bucket/key\n");
         usageExit(stderr);
     }
 
@@ -1494,7 +1502,7 @@ static void copy_object(int argc, char **argv, int optind)
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "ERROR: Invalid destination bucket/key name: %s\n",
+        fprintf(stderr, "\nERROR: Invalid destination bucket/key name: %s\n",
                 argv[optind]);
         usageExit(stderr);
     }
@@ -1537,7 +1545,7 @@ static void copy_object(int argc, char **argv, int optind)
         else if (!strncmp(param, EXPIRES_PREFIX, EXPIRES_PREFIX_LEN)) {
             expires = parseIso8601Time(&(param[EXPIRES_PREFIX_LEN]));
             if (expires < 0) {
-                fprintf(stderr, "ERROR: Invalid expires time "
+                fprintf(stderr, "\nERROR: Invalid expires time "
                         "value; ISO 8601 time format required\n");
                 usageExit(stderr);
             }
@@ -1545,7 +1553,7 @@ static void copy_object(int argc, char **argv, int optind)
         }
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
-                fprintf(stderr, "ERROR: Too many x-amz-meta- properties, "
+                fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
                         "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
@@ -1555,7 +1563,7 @@ static void copy_object(int argc, char **argv, int optind)
                 value++;
             }
             if (!*value || !*(value + 1)) {
-                fprintf(stderr, "ERROR: Invalid parameter: %s\n", param);
+                fprintf(stderr, "\nERROR: Invalid parameter: %s\n", param);
                 usageExit(stderr);
             }
             *value++ = 0;
@@ -1578,13 +1586,13 @@ static void copy_object(int argc, char **argv, int optind)
                 cannedAcl = S3CannedAclAuthenticatedRead;
             }
             else {
-                fprintf(stderr, "ERROR: Unknown canned ACL: %s\n", val);
+                fprintf(stderr, "\nERROR: Unknown canned ACL: %s\n", val);
                 usageExit(stderr);
             }
             anyPropertiesSet = 1;
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -1654,14 +1662,14 @@ static S3Status getObjectDataCallback(int bufferSize, const char *buffer,
 
     size_t wrote = fwrite(buffer, 1, bufferSize, outfile);
     
-    return (wrote < bufferSize) ? S3StatusFailure : S3StatusOK;
+    return (wrote < bufferSize) ? S3StatusAbortedByCallback : S3StatusOK;
 }
 
 
 static void get_object(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
 
@@ -1671,7 +1679,8 @@ static void get_object(int argc, char **argv, int optind)
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
+                argv[optind]);
         usageExit(stderr);
     }
     *slash++ = 0;
@@ -1695,7 +1704,7 @@ static void get_object(int argc, char **argv, int optind)
             ifModifiedSince = parseIso8601Time
                 (&(param[IF_MODIFIED_SINCE_PREFIX_LEN]));
             if (ifModifiedSince < 0) {
-                fprintf(stderr, "ERROR: Invalid ifModifiedSince time "
+                fprintf(stderr, "\nERROR: Invalid ifModifiedSince time "
                         "value; ISO 8601 time format required\n");
                 usageExit(stderr);
             }
@@ -1706,7 +1715,7 @@ static void get_object(int argc, char **argv, int optind)
             ifNotModifiedSince = parseIso8601Time
                 (&(param[IF_NOT_MODIFIED_SINCE_PREFIX_LEN]));
             if (ifNotModifiedSince < 0) {
-                fprintf(stderr, "ERROR: Invalid ifNotModifiedSince time "
+                fprintf(stderr, "\nERROR: Invalid ifNotModifiedSince time "
                         "value; ISO 8601 time format required\n");
                 usageExit(stderr);
             }
@@ -1727,7 +1736,7 @@ static void get_object(int argc, char **argv, int optind)
                 (&(param[BYTE_COUNT_PREFIX_LEN]), "byteCount");
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -1748,14 +1757,14 @@ static void get_object(int argc, char **argv, int optind)
         }
         
         if (!outfile) {
-            fprintf(stderr, "ERROR: Failed to open output file %s: ",
+            fprintf(stderr, "\nERROR: Failed to open output file %s: ",
                     filename);
             perror(0);
             exit(-1);
         }
     }
     else if (showResponsePropertiesG) {
-        fprintf(stderr, "ERROR: get -s requires a filename parameter\n");
+        fprintf(stderr, "\nERROR: get -s requires a filename parameter\n");
         usageExit(stderr);
     }
     else {
@@ -1810,7 +1819,7 @@ static void get_object(int argc, char **argv, int optind)
 static void head_object(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket/key\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
     
@@ -1824,7 +1833,8 @@ static void head_object(int argc, char **argv, int optind)
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "ERROR: Invalid bucket/key name: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
+                argv[optind]);
         usageExit(stderr);
     }
     *slash++ = 0;
@@ -1833,7 +1843,7 @@ static void head_object(int argc, char **argv, int optind)
     const char *key = slash;
 
     if (optind != argc) {
-        fprintf(stderr, "ERROR: Extraneous parameter: %s\n", argv[optind]);
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
         usageExit(stderr);
     }
 
@@ -1870,7 +1880,7 @@ static void head_object(int argc, char **argv, int optind)
 void get_acl(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket[/key]\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket[/key]\n");
         usageExit(stderr);
     }
 
@@ -1898,7 +1908,8 @@ void get_acl(int argc, char **argv, int optind)
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
-        else if (!strncmp(param, ALL_DETAILS_PREFIX, ALL_DETAILS_PREFIX_LEN)) {
+        else if (!strncmp(param, ALL_DETAILS_PREFIX,
+                          ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
             if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
                 !strcmp(ad, "1")) {
@@ -1906,7 +1917,7 @@ void get_acl(int argc, char **argv, int optind)
             }
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -1927,14 +1938,14 @@ void get_acl(int argc, char **argv, int optind)
         }
         
         if (!outfile) {
-            fprintf(stderr, "ERROR: Failed to open output file %s: ",
+            fprintf(stderr, "\nERROR: Failed to open output file %s: ",
                     filename);
             perror(0);
             exit(-1);
         }
     }
     else if (showResponsePropertiesG) {
-        fprintf(stderr, "ERROR: getacl -s requires a filename parameter\n");
+        fprintf(stderr, "\nERROR: getacl -s requires a filename parameter\n");
         usageExit(stderr);
     }
     else {
@@ -2045,7 +2056,7 @@ void get_acl(int argc, char **argv, int optind)
 void set_acl(int argc, char **argv, int optind)
 {
     if (optind == argc) {
-        fprintf(stderr, "ERROR: Missing parameter: bucket[/key]\n");
+        fprintf(stderr, "\nERROR: Missing parameter: bucket[/key]\n");
         usageExit(stderr);
     }
 
@@ -2073,7 +2084,7 @@ void set_acl(int argc, char **argv, int optind)
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
         else {
-            fprintf(stderr, "ERROR: Unknown param: %s\n", param);
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
@@ -2082,7 +2093,8 @@ void set_acl(int argc, char **argv, int optind)
 
     if (filename) {
         if (!(infile = fopen(filename, "r"))) {
-            fprintf(stderr, "ERROR: Failed to open input file %s: ", filename);
+            fprintf(stderr, "\nERROR: Failed to open input file %s: ",
+                    filename);
             perror(0);
             exit(-1);
         }
@@ -2100,10 +2112,9 @@ void set_acl(int argc, char **argv, int optind)
     // Parse it
     int aclGrantCount;
     S3AclGrant aclGrants[S3_MAX_ACL_GRANT_COUNT];
-    S3Status status = convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
-                                         &aclGrantCount, aclGrants);
-    if (status != S3StatusOK) {
-        fprintf(stderr, "ERROR: Failed to parse ACLs\n");
+    if (!convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
+                            &aclGrantCount, aclGrants)) {
+        fprintf(stderr, "\nERROR: Failed to parse ACLs\n");
         fclose(infile);
         exit(-1);
     }
@@ -2163,7 +2174,7 @@ int main(int argc, char **argv)
             showResponsePropertiesG = 1;
             break;
         default:
-            fprintf(stderr, "ERROR: Unknown options: -%c\n", c);
+            fprintf(stderr, "\nERROR: Unknown options: -%c\n", c);
             // Usage exit
             usageExit(stderr);
         }
@@ -2171,7 +2182,7 @@ int main(int argc, char **argv)
 
     // The first non-option argument gives the operation to perform
     if (optind == argc) {
-        fprintf(stderr, "\nERROR: Missing argument: command\n\n");
+        fprintf(stderr, "\n\nERROR: Missing argument: command\n\n");
         usageExit(stderr);
     }
 
@@ -2188,7 +2199,8 @@ int main(int argc, char **argv)
     }
     secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
     if (!secretAccessKeyG) {
-        fprintf(stderr, "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
+        fprintf(stderr, 
+                "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
         return -1;
     }
 
@@ -2203,7 +2215,8 @@ int main(int argc, char **argv)
     }
     else if (!strcmp(command, "delete")) {
         if (optind == argc) {
-            fprintf(stderr, "ERROR: Missing parameter: bucket or bucket/key\n");
+            fprintf(stderr, 
+                    "\nERROR: Missing parameter: bucket or bucket/key\n");
             usageExit(stderr);
         }
         char *val = argv[optind];

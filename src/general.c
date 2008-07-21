@@ -173,7 +173,7 @@ const char *S3_get_status_name(S3Status status)
             return #s
 
         handlecase(OK);
-        handlecase(Failure);
+        handlecase(InternalError);
         handlecase(OutOfMemory);
         handlecase(Interrupted);
         handlecase(FailedToCreateMutex);
@@ -216,6 +216,10 @@ const char *S3_get_status_name(S3Status status)
         handlecase(BadAclGrantee);
         handlecase(BadAclPermission);
         handlecase(AclXmlDocumentTooLarge);
+        handlecase(NameLookupError);
+        handlecase(FailedToConnect);
+        handlecase(ConnectionFailed);
+        handlecase(AbortedByCallback);
         handlecase(ErrorAccessDenied);
         handlecase(ErrorAccountProblem);
         handlecase(ErrorAmbiguousGrantByEmailAddress);
@@ -562,3 +566,20 @@ S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
                                           
     return S3StatusOK;
 }
+
+
+int S3_status_is_retryable(S3Status status)
+{
+    switch (status) {
+    case S3StatusNameLookupError:
+    case S3StatusFailedToConnect:
+    case S3StatusConnectionFailed:
+    case S3StatusErrorInternalError:
+    case S3StatusErrorOperationAborted:
+    case S3StatusErrorRequestTimeout:
+        return 1;
+    default:
+        return 0;
+    }
+}
+

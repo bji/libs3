@@ -134,7 +134,7 @@ typedef enum
 
     // Errors that prevent the S3 request from being issued or response from
     // being read
-    S3StatusFailure                                         ,
+    S3StatusInternalError                                   ,
     S3StatusOutOfMemory                                     ,
     S3StatusInterrupted                                     ,
     S3StatusFailedToCreateMutex                             ,
@@ -177,6 +177,10 @@ typedef enum
     S3StatusBadAclGrantee                                   ,
     S3StatusBadAclPermission                                ,
     S3StatusAclXmlDocumentTooLarge                          ,
+    S3StatusNameLookupError                                 ,
+    S3StatusFailedToConnect                                 ,
+    S3StatusConnectionFailed                                ,
+    S3StatusAbortedByCallback                               ,
     
     // Errors from the S3 service
     S3StatusErrorAccessDenied                               ,
@@ -342,6 +346,7 @@ typedef struct S3NameValue
     // trailing whitespace.
     const char *value;
 } S3NameValue;
+
 
 /**
  * S3ResponseProperties is passed to the properties callback function which is
@@ -665,13 +670,13 @@ typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
  * @param callbackData is the callback data as specified when the S3Request
  *        for which this callback was specified was initialized
  * @param properties is the properties that are available from the response.
- * @return S3Status???
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with that status
  **/
 typedef S3Status (S3ResponsePropertiesCallback)
     (const S3ResponseProperties *properties, void *callbackData);
 
 typedef void (S3ResponseCompleteCallback)(S3Status status,
-                                          int httpResponseCode,
                                           const S3ErrorDetails *errorDetails,
                                           void *callbackData);
 
@@ -740,7 +745,8 @@ typedef S3Status (S3ListBucketCallback)(int isTruncated,
  *        in the bufferReturn parameter
  * @param bufferReturn returns the bext set of bytes to be written to the
  *        service as the contents of the object being put
- * @return S3Status???
+ * @return < 0 to abort the request with S3StatusAbortedByCallback,
+ *         0 to indicate end of data, > 0 to add more data.
  **/
 typedef int (S3PutObjectDataCallback)(int bufferSize, char *buffer,
                                       void *callbackData);
@@ -758,6 +764,8 @@ typedef int (S3PutObjectDataCallback)(int bufferSize, char *buffer,
  *        for which this callback was specified was initialized
  * @param bufferSize gives the number of bytes in buffer
  * @param buffer is the data being passed into the callback
+ * @return S3StatusOK to indicate success, anything else to abort the
+ *         request immediately with that status
  **/
 typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
                                            void *callbackData);
@@ -852,6 +860,17 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
 S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
                         int *aclGrantCountReturn, S3AclGrant *aclGrants);
                         
+
+/**
+ * Returns nonzero if the status indicates that the request should be
+ * immediately retried, because the error was of a nature that is likely due
+ * to transient conditions on the local system or S3, such as network
+ * failures, or internal retryable errors reported by S3.  Returns zero
+ * otherwise.
+ *
+ * @param status is the status to evaluate
+ **/
+int S3_status_is_retryable(S3Status status);
 
 
 /** **************************************************************************

@@ -135,9 +135,6 @@ typedef struct Request
     // libcurl requires that the uri be stored outside of the curl handle
     char uri[MAX_URI_SIZE + 1];
 
-    // The HTTP response code that S3 sent back for this request
-    long httpResponseCode;
-
     // Callback to be made when headers are available.  Might not be called.
     S3ResponsePropertiesCallback *propertiesCallback;
 
@@ -185,6 +182,9 @@ void request_perform(const RequestParams *params, S3RequestContext *context);
 // Called by the internal request code or internal request context code when a
 // curl has finished the request
 void request_finish(Request *request);
+
+// Convert a CURLE code to an S3Status
+S3Status request_curl_code_to_status(CURLcode code);
 
 
 #endif /* REQUEST_H */

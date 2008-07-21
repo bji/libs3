@@ -110,15 +110,14 @@ static S3Status dataCallback(int bufferSize, const char *buffer,
 }
 
 
-static void completeCallback(S3Status requestStatus, int httpResponseCode, 
+static void completeCallback(S3Status requestStatus,
                              const S3ErrorDetails *s3ErrorDetails,
                              void *callbackData)
 {
     XmlCallbackData *cbData = (XmlCallbackData *) callbackData;
 
     (*(cbData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         cbData->callbackData);
+        (requestStatus, s3ErrorDetails, cbData->callbackData);
 
     simplexml_deinitialize(&(cbData->simpleXml));
 
@@ -136,7 +135,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         (XmlCallbackData *) malloc(sizeof(XmlCallbackData));
     if (!data) {
         (*(handler->responseHandler.completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+            (S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -145,7 +144,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
     if (status != S3StatusOK) {
         free(data);
         (*(handler->responseHandler.completeCallback))
-            (status, 0, 0, callbackData);
+            (status, 0, callbackData);
         return;
     }
 

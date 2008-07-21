@@ -107,7 +107,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
         case CURLM_OUT_OF_MEMORY:
             return S3StatusOutOfMemory;
         default:
-            return S3StatusFailure;
+            return S3StatusInternalError;
         }
 
         CURLMsg *msg;
@@ -116,12 +116,12 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
             if ((msg->msg != CURLMSG_DONE) ||
                 (curl_multi_remove_handle(requestContext->curlm, 
                                           msg->easy_handle) != CURLM_OK)) {
-                return S3StatusFailure;
+                return S3StatusInternalError;
             }
             Request *request;
             if (curl_easy_getinfo(msg->easy_handle, CURLOPT_PRIVATE, 
-                                  (char **) &request) != CURLE_OK) {
-                return S3StatusFailure;
+                                  (char *) &request) != CURLE_OK) {
+                return S3StatusInternalError;
             }
             // Remove the request from the list of requests
             if (request->prev == request->next) {
@@ -136,15 +136,10 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                 request->prev->next = request->next;
                 request->next->prev = request->prev;
             }
-            // Make response complete callback
-            switch (msg->data.result) {
-            case CURLE_OK:
-                request->status = S3StatusOK;
-                break;
-                // xxx todo fill the rest in
-            default:
-                request->status = S3StatusFailure;
-                break;
+            if ((msg->data.result != CURLE_OK) &&
+                (request->status == S3StatusOK)) {
+                request->status = request_curl_code_to_status
+                    (msg->data.result);
             }
             // Finish the request, ensuring that all callbacks have been made,
             // and also releases the request
@@ -161,5 +156,5 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
 {
     return ((curl_multi_fdset(requestContext->curlm, readFdSet, writeFdSet,
                               exceptFdSet, maxFd) == CURLM_OK) ?
-            S3StatusOK : S3StatusFailure);
+            S3StatusOK : S3StatusInternalError);
 }

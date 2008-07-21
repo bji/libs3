@@ -73,7 +73,6 @@ static S3Status getAclDataCallback(int bufferSize, const char *buffer,
 
 
 static void getAclCompleteCallback(S3Status requestStatus, 
-                                   int httpResponseCode, 
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
@@ -87,8 +86,7 @@ static void getAclCompleteCallback(S3Status requestStatus,
     }
 
     (*(gaData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         gaData->callbackData);
+        (requestStatus, s3ErrorDetails, gaData->callbackData);
 
     free(gaData);
 }
@@ -103,8 +101,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
     // Create the callback data
     GetAclData *gaData = (GetAclData *) malloc(sizeof(GetAclData));
     if (!gaData) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
@@ -259,15 +256,13 @@ static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
 
 
 static void setAclCompleteCallback(S3Status requestStatus, 
-                                   int httpResponseCode, 
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
     SetAclData *paData = (SetAclData *) callbackData;
 
     (*(paData->responseCompleteCallback))
-        (requestStatus, httpResponseCode, s3ErrorDetails, 
-         paData->callbackData);
+        (requestStatus, s3ErrorDetails, paData->callbackData);
 
     free(paData);
 }
@@ -281,14 +276,13 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
 {
     if (aclGrantCount > S3_MAX_ACL_GRANT_COUNT) {
         (*(handler->completeCallback))
-            (S3StatusTooManyAclGrants, 0, 0, callbackData);
+            (S3StatusTooManyAclGrants, 0, callbackData);
         return;
     }
 
     SetAclData *data = (SetAclData *) malloc(sizeof(SetAclData));
     if (!data) {
-        (*(handler->completeCallback))
-            (S3StatusOutOfMemory, 0, 0, callbackData);
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
     
@@ -299,7 +293,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
          sizeof(data->aclXmlDocument));
     if (status != S3StatusOK) {
         free(data);
-        (*(handler->completeCallback))(status, 0, 0, callbackData);
+        (*(handler->completeCallback))(status, 0, callbackData);
         return;
     }
 
