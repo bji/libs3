@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 
+
 /** **************************************************************************
  * Overview
  * --------
@@ -46,7 +47,10 @@
  *    function returns.
  * 3. All functions may be called simultaneously by multiple threads as long
  *    as (1) and (2) are observed.
- *
+ * 4. All callbacks will be made in the thread of the caller of the function
+ *    which invoked them, so the caller of all libs3 functions should not hold
+ *    locks that it would try to re-acquire in a callback, as this may
+ *    deadlock.
  ************************************************************************** **/
 
 
@@ -126,14 +130,16 @@
  ************************************************************************** **/
 
 /**
- * S3Status is a status code as returned by a libs3 function.
+ * S3Status is a status code as returned by a libs3 function.  The meaning of
+ * each status code is defined in the comments for each function which returns
+ * that status.
  **/
 typedef enum
 {
     S3StatusOK                                              ,
 
-    // Errors that prevent the S3 request from being issued or response from
-    // being read
+    /* Errors that prevent the S3 request from being issued or response from
+       being read */
     S3StatusInternalError                                   ,
     S3StatusOutOfMemory                                     ,
     S3StatusInterrupted                                     ,
@@ -145,9 +151,7 @@ typedef enum
     S3StatusInvalidBucketNameTooShort                       ,
     S3StatusInvalidBucketNameDotQuadNotation                ,
     S3StatusQueryParamsTooLong                              ,
-    S3StatusFailedToCreateRequest                           ,
     S3StatusFailedToInitializeRequest                       ,
-    S3StatusFailedToCreateRequestContext                    ,
     S3StatusMetaDataHeadersTooLong                          ,
     S3StatusBadMetaData                                     ,
     S3StatusBadContentType                                  ,
@@ -182,7 +186,7 @@ typedef enum
     S3StatusConnectionFailed                                ,
     S3StatusAbortedByCallback                               ,
     
-    // Errors from the S3 service
+    /* Errors from the S3 service */
     S3StatusErrorAccessDenied                               ,
     S3StatusErrorAccountProblem                             ,
     S3StatusErrorAmbiguousGrantByEmailAddress               ,
@@ -253,6 +257,12 @@ typedef enum
 /**
  * S3Protocol represents a protocol that may be used for communicating a
  * request to the Amazon S3 service.
+ *
+ * In general, HTTPS is greatly preferred (and should be the default of any
+ * application using libs3) because it protects any data being sent to or
+ * from S3 using strong encryption.  However, HTTPS is much more CPU intensive
+ * than HTTP, and if the caller is absolutely certain that it is OK for the
+ * data to be viewable by anyone in transit, then HTTP can be used.
  **/
 typedef enum
 {
@@ -262,14 +272,16 @@ typedef enum
 
 
 /**
- * S3UriStyle defines the form that an Amazon S3 Uri identifying a bucket or
+ * S3UriStyle defines the form that an Amazon S3 URI identifying a bucket or
  * object can take.  They are of these forms:
  *
  * Virtual Host: ${protocol}://${bucket}.s3.amazonaws.com/[${key}]
  * Path: ${protocol}://s3.amazonaws.com/${bucket}/[${key}]
  *
- * xxx todo - I think there are some operations that can only be performed on
- * virtual host style prefixes, figure out what they are and comment here.
+ * It is generally better to use the Virual Host URI form, because it ensures
+ * that the bucket name used is compatible with normal HTTP GETs and POSTs of
+ * data to/from the bucket.  However, if DNS lookups for the bucket are too
+ * slow or unreliable for some reason, Path URI form may be used.
  **/
 typedef enum
 {
@@ -280,6 +292,13 @@ typedef enum
 
 /**
  * S3GranteeType defines the type of Grantee used in an S3 ACL Grant.
+ * Amazon Customer By Email - identifies the Grantee using their Amazon S3
+ *     account email address
+ * Canonical User - identifies the Grantee by S3 User ID and Display Name,
+ *     which can only be obtained by making requests to S3, for example, by
+ *     listing owned buckets
+ * All AWS Users - identifies all authenticated AWS users
+ * All Users - identifies all users
  **/
 typedef enum
 {
@@ -292,13 +311,25 @@ typedef enum
 
 /**
  * This is an individual permission granted to a grantee in an S3 ACL Grant.
+ * Read permission gives the Grantee the permission to list the bucket, or
+ *     read the object or its metadata
+ * Write permission gives the Grantee the permission to create, overwrite, or
+ *     delete any object in the bucket, and is not supported for objects
+ * ReadACP permission gives the Grantee the permission to read the ACP for
+ *     the bucket or object; the owner of the bucket or object always has
+ *     this permission implicitly
+ * WriteACP permission gives the Grantee the permission to overwrite the ACP
+ *     for the bucket or object; the owner of the bucket or object always has
+ *     this permission implicitly
+ * FullControl permission gives the Grantee all permissions specified by the
+ *     Read, Write, ReadACP, and WriteACP permissions
  **/
 typedef enum
 {
     S3PermissionRead                    = 0,
     S3PermissionWrite                   = 1,
-    S3PermissionReadAcp                 = 2,
-    S3PermissionWriteAcp                = 3,
+    S3PermissionReadACP                 = 2,
+    S3PermissionWriteACP                = 3,
     S3PermissionFullControl             = 4
 } S3Permission;
 
@@ -307,6 +338,14 @@ typedef enum
  * S3CannedAcl is an ACL that can be specified when an object is created or
  * updated.  Each canned ACL has a predefined value when expanded to a full
  * set of S3 ACL Grants.
+ * Private canned ACL gives the owner FULL_CONTROL and no other permissions
+ *     are issued
+ * Public Read canned ACL gives the owner FULL_CONTROL and all users Read
+ *     permission 
+ * Public Read Write canned ACL gives the owner FULL_CONTROL and all users
+ *     Read and Write permission
+ * AuthenticatedRead canned ACL gives the owner FULL_CONTROL and authenticated
+ *     S3 users Read permission
  **/
 typedef enum
 {
@@ -317,102 +356,122 @@ typedef enum
 } S3CannedAcl;
 
 
-/**
- * S3MetaDataDirective identifies what the S3 service should do with an
- * object's metadata when the object is copied.
- **/
-typedef enum
-{
-    S3MetaDataDirectiveCopy             = 0,
-    S3MetaDataDirectiveReplace          = 1
-} S3MetaDataDirective;
-
-
 /** **************************************************************************
  * Data Types
  ************************************************************************** **/
 
+/**
+ * This is a type which must be defined by the user of the S3 library.  It
+ * defines a Mutex type with standard Mutex semantics.
+ **/
 struct S3Mutex;
 
+
+/**
+ * An S3RequestContext manages multiple S3 requests simultaneously; see the
+ * S3_xxx_request_context functions below for details
+ **/
 typedef struct S3RequestContext S3RequestContext;
 
 
+/**
+ * S3NameValue represents a single Name - Value pair, used to represent either
+ * S3 metadata associated with a key, or S3 error details.
+ **/
 typedef struct S3NameValue
 {
-    // This is the part after x-amz-meta-
+    /**
+     * The name part of the Name - Value pair
+     **/
     const char *name;
 
-    // This is the value, not including any line terminators or leading or
-    // trailing whitespace.
+    /**
+     * The value part of the Name - Value pair
+     **/
     const char *value;
 } S3NameValue;
 
 
 /**
  * S3ResponseProperties is passed to the properties callback function which is
- * called when the complete response status code and properties have been
- * received.  Some of the fields of this structure are optional and may not be
- * provided in the response, and some will always be provided in the response.
+ * called when the complete response properties have been received.  Some of
+ * the fields of this structure are optional and may not be provided in the
+ * response, and some will always be provided in the response.
  **/
 typedef struct S3ResponseProperties
 {
     /**
      * This optional field identifies the request ID and may be used when
-     * reporting problems to Amazon.  It may or may not be provided.
+     * reporting problems to Amazon.
      **/
     const char *requestId;
+
     /**
      * This optional field identifies the request ID and may be used when
-     * reporting problems to Amazon.  It may or may not be provided.
+     * reporting problems to Amazon.
      **/
     const char *requestId2;
+
     /**
      * This optional field is the content type of the data which is returned
-     * by the request.  It may or may not be provided; if not provided, the
-     * default can be assumed to be "binary/octet-stream".
+     * by the request.  If not provided, the default can be assumed to be
+     * "binary/octet-stream".
      **/
     const char *contentType;
+
     /**
      * This optional field is the content length of the data which is returned
      * in the response.  A negative value means that this value was not
      * provided in the response.  A value of 0 means that there is no content
-     * provided.
+     * provided.  A positive value gives the number of bytes in the content of
+     * the response.
      **/
     uint64_t contentLength;
+
     /**
-     * This optional field names the server which serviced the request.  It
-     * may or may not be provided.
+     * This optional field names the server which serviced the request.
      **/
     const char *server;
+
     /**
      * This optional field provides a string identifying the unique contents
      * of the resource identified by the request, such that the contents can
      * be assumed not to be changed if the same eTag is returned at a later
-     * time decribing the same resource.  It may or may not be provided.
+     * time decribing the same resource.  This is an MD5 sum of the contents.
      **/
     const char *eTag;
+
     /**
      * This optional field provides the last modified time, relative to the
-     * Unix epoch, of the contents.  If this value is > 0, then the last
-     * modified date of the contents are availableb as a number of seconds
-     * since the UNIX epoch.  Note that this is second precision; HTTP
+     * Unix epoch, of the contents.  If this value is < 0, then the last
+     * modified time was not provided in the response.  If this value is >= 0,
+     * then the last modified date of the contents are available as a number
+     * of seconds since the UNIX epoch.
      * 
      **/
     time_t lastModified;
+
     /**
      * This is the number of user-provided meta data associated with the
      * resource.
      **/
     int metaDataCount;
+
     /**
-     * These are the meta data associated with the resource.
+     * These are the meta data associated with the resource.  In each case,
+     * the name will not include any S3-specific header prefixes
+     * (i.e. x-amz-meta- will have been removed from the beginning), and
+     * leading and trailing whitespace will have been stripped from the value.
      **/
     const S3NameValue *metaData;
 } S3ResponseProperties;
 
 
 /**
- * S3AclGrant identifies a single grant in the ACL for a bucket or object
+ * S3AclGrant identifies a single grant in the ACL for a bucket or object.  An
+ * ACL is composed of any number of grants, which specify a grantee and the
+ * permissions given to that grantee.  S3 does not normalize ACLs in any way,
+ * so a redundant ACL specification will lead to a redundant ACL stored in S3.
  **/
 typedef struct S3AclGrant
 {
@@ -478,19 +537,23 @@ typedef struct S3BucketContext
      * The name of the bucket to use in the bucket context
      **/
     const char *bucketName;
+
     /**
      * The protocol to use when accessing the bucket
      **/
     S3Protocol protocol;
+
     /**
      * The URI style to use for all URIs sent to Amazon S3 while working with
      * this bucket context
      **/
     S3UriStyle uriStyle;
+
     /**
      * The Amazon Access Key ID to use for access to the bucket
      **/
     const char *accessKeyId;
+
     /**
      *  The Amazon Secret Access Key to use for access to the bucket
      **/
@@ -509,24 +572,30 @@ typedef struct S3ListBucketContent
      * This is the next key in the list bucket results.
      **/
     const char *key;
+
     /**
      * This is the number of seconds since UNIX epoch of the last modified
      * date of the object identified by the key. 
      **/
     time_t lastModified;
+
     /**
-     * This gives a tag which gives a signature of the contents of the object.
+     * This gives a tag which gives a signature of the contents of the object,
+     * which is the MD5 of the contents of the object.
      **/
     const char *eTag;
+
     /**
-     * This is the size of the object
+     * This is the size of the object in bytes.
      **/
     uint64_t size;
+
     /**
-     * This is the ID of the owner of the key; it is present only if
-     * access permissions allow it to be viewed.
+     * This is the ID of the owner of the key; it is present only if access
+     * permissions allow it to be viewed.
      **/
     const char *ownerId;
+
     /**
      * This is the display name of the owner of the key; it is present only if
      * access permissions allow it to be viewed.
@@ -540,17 +609,6 @@ typedef struct S3ListBucketContent
  * user when putting objects to S3.  Each field of this structure is optional
  * and may or may not be present.
  **/
-
-/*
-// contentType is optional
-// md5 is optional
-// contentDispositionFilename: Set on the object so that if someone downloads
-//   it from S3 with a web browser, they will get a file dialog prompt.
-// contentEncoding is optional and free-form.  This is the Content-Encoding
-//   header that users downloading the object from S3 will get.  Use with
-//   care.
-// expires is optional
-*/
 typedef struct S3PutProperties
 {
     /**
@@ -558,17 +616,20 @@ typedef struct S3PutProperties
      * object.  If not provided, S3 defaults to "binary/octet-stream".
      **/
     const char *contentType;
+
     /**
      * If present, this provides the MD5 signature of the contents, and is
      * used to validate the contents.  This is highly recommended by Amazon
      * but not required.
      **/
     const char *md5;
+
     /**
      * If present, this gives a Cache-Control header string to be supplied to
      * HTTP clients which download this
      **/
     const char *cacheControl;
+
     /**
      * If present, this gives the filename to save the downloaded file to,
      * whenever the object is downloaded via a web browser.  This is only
@@ -577,69 +638,116 @@ typedef struct S3PutProperties
      * than viewed.
      **/
     const char *contentDispositionFilename;
+
     /**
      * If present, this identifies the content encoding of the object.  This
      * is only applicable to encoded (usually, compressed) content, and only
      * relevent if the object is intended to be downloaded via a browser.
      **/
     const char *contentEncoding;
+
     /**
      * If >= 0, this gives an expiration date for the content.  This
      * information is typically only delivered to users who download the
      * content via a web browser.
      **/
     time_t expires;
+
     /**
      * This identifies the "canned ACL" that should be used for this object.
      * The default (0) gives only the owner of the object access to it.
-     * This value is ignored for all operations except put_object and
-     * copy_object.
      **/
     S3CannedAcl cannedAcl;
+
     /**
      * This is the number of values in the metaData field.
      **/
     int metaDataCount;
+
     /**
-     * These are the meta data to pass to S3.
+     * These are the meta data to pass to S3.  In each case, the name part of
+     * the Name - Value pair should not include any special S3 HTTP header
+     * prefix (i.e., should be of the form 'foo', NOT 'x-amz-meta-foo').
      **/
     const S3NameValue *metaData;
 } S3PutProperties;
 
 
-// Used for get object or head object, specify conditions for controlling
-// the get/head
+/**
+ * S3GetConditions is used for the get_object operation, and specifies
+ * conditions which the object must meet in order to be successfully returned.
+ **/
 typedef struct S3GetConditions
 {
     /**
-     * If >= 0, ...
+     * The request will be processed if the Last-Modification header of the
+     * object is greater than or equal to this value, specified as a number of
+     * seconds since Unix epoch.  If this value is less than zero, it will not
+     * be used in the conditional.
      **/
     time_t ifModifiedSince;
+
     /**
-     * If >= 0 ...
+     * The request will be processed if the Last-Modification header of the
+     * object is less than this value, specified as a number of seconds since
+     * Unix epoch.  If this value is less than zero, it will not be used in
+     * the conditional.
      **/
     time_t ifNotModifiedSince;
+
     /**
-     * If present ...
+     * If non-NULL, this gives an eTag header value which the object must
+     * match in order to be returned.  Note that altough the eTag is simply an
+     * MD5, this must be presented in the S3 eTag form, which typically
+     * includes double-quotes.
      **/
     const char *ifMatchETag;
+
     /**
-     * If present ...
+     * If non-NULL, this gives an eTag header value which the object must not
+     * match in order to be returned.  Note that altough the eTag is simply an
+     * MD5, this must be presented in the S3 eTag form, which typically
+     * includes double-quotes.
      **/
     const char *ifNotMatchETag;
 } S3GetConditions;
 
 
+/**
+ * S3ErrorDetails provides detailed information describing an S3 error.  This
+ * is only presented when the error is an S3-generated error (i.e. one of the
+ * S3StatusErrorXXX values).
+ **/
 typedef struct S3ErrorDetails
 {
+    /**
+     * This is the human-readable message that Amazon supplied describing the
+     * error
+     **/
     const char *message;
 
+    /**
+     * This identifies the resource for which the error occurred
+     **/
     const char *resource;
 
+    /**
+     * This gives human-readable further details describing the specifics of
+     * this error
+     **/
     const char *furtherDetails;
 
+    /**
+     * This gives the number of S3NameValue pairs present in the extraDetails
+     * array
+     **/
     int extraDetailsCount;
 
+    /**
+     * S3 can provide extra details in a freeform Name - Value pair format.
+     * Each error can have any number of these, and this array provides these
+     * additional extra details.
+     **/
     S3NameValue *extraDetails;
 } S3ErrorDetails;
 
@@ -648,18 +756,55 @@ typedef struct S3ErrorDetails
  * Callback Signatures
  ************************************************************************** **/
 
+/**
+ * This is the signature of a "thread self" callback, that must be provided to
+ * the S3_initialize() method, and implemented by the user of the libs3
+ * library.  This function returns the thread id of the thread which calls it.
+ *
+ * @return the thread id of the thread which calls it
+ **/
 typedef unsigned long (S3ThreadSelfCallback)();
 
 
+/**
+ * This is the signature of a "mutex create" callback, that must be provided
+ * to the S3_initialize() method, and implemented by the user of the libs3
+ * library.  This function returns a newly-created and initialized S3Mutex
+ * structure (itself defined by the libs3 user).
+ *
+ * @return a newly-created and initialized S3Mutex structure
+ **/
 typedef struct S3Mutex *(S3MutexCreateCallback)();
 
 
+/**
+ * This is the signature of a "mutex lock" callback, that must be provided to
+ * the S3_initialize() method, and implemented by the user of the libs3
+ * library.  This function locks a mutex.
+ *
+ * @param mutex is the S3Mutex to lock
+ **/ 
 typedef void (S3MutexLockCallback)(struct S3Mutex *mutex);
 
 
+/**
+ * This is the signature of a "mutex unlock" callback, that must be provided
+ * to the S3_initialize() method, and implemented by the user of the libs3
+ * library.  This function unlocks a mutex.
+ *
+ * @param mutex is the S3Mutex to unlock
+ **/ 
 typedef void (S3MutexUnlockCallback)(struct S3Mutex *mutex);
 
 
+/**
+ * This is the signature of a "mutex destroy" callback, that must be provided
+ * to the S3_initialize() method, and implemented by the user of the libs3
+ * library.  This function destroys a mutex previously created by a call to
+ * S3MutexCreateCallback().
+ *
+ * @param mutex is the S3Mutex to destroy
+ **/ 
 typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
 
 
@@ -667,15 +812,35 @@ typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
  * This callback is made whenever the response properties become available for
  * any request.
  *
- * @param callbackData is the callback data as specified when the S3Request
- *        for which this callback was specified was initialized
- * @param properties is the properties that are available from the response.
+ * @param properties are the properties that are available from the response
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
  * @return S3StatusOK to continue processing the request, anything else to
- *         immediately abort the request with that status
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
  **/
 typedef S3Status (S3ResponsePropertiesCallback)
     (const S3ResponseProperties *properties, void *callbackData);
 
+
+/**
+ * This callback is made when the response has been completely received, or an
+ * error has occurred which has prematurely aborted the request, or one of the
+ * other user-supplied callbacks returned a value intended to abort the
+ * request.  This callback is always made for every request, as the very last
+ * callback made for that request.
+ *
+ * @param status gives the overall status of the response, indicating success
+ *        or failure; use S3_status_is_retryable() as a simple way to detect
+ *        whether or not the status indicates that the request failed but may
+ *        be retried.
+ * @param errorDetails, if non-NULL, gives details as returned by the S3
+ *        service, describing the error
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ **/
 typedef void (S3ResponseCompleteCallback)(S3Status status,
                                           const S3ErrorDetails *errorDetails,
                                           void *callbackData);
@@ -685,15 +850,19 @@ typedef void (S3ResponseCompleteCallback)(S3Status status,
  * This callback is made for each bucket resulting from a list service
  * operation.
  *
- * @param callbackData is the callback data as specified when the S3Request
- *        for which this callback was specified was initialized
  * @param ownerId is the ID of the owner of the bucket
  * @param ownerDisplayName is the owner display name of the owner of the bucket
  * @param bucketName is the name of the bucket
  * @param creationDateSeconds if < 0 indicates that no creation date was
- *        supplied for the bucket; if > 0 indicates the number of seconds
+ *        supplied for the bucket; if >= 0 indicates the number of seconds
  *        since UNIX Epoch of the creation date of the bucket
- * @return S3Status???
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
  **/
 typedef S3Status (S3ListServiceCallback)(const char *ownerId, 
                                          const char *ownerDisplayName,
@@ -706,8 +875,6 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
  * This callback is made once for each object resulting from a list bucket
  * operation.
  *
- * @param callbackData is the callback data as specified when the S3Request
- *        for which this callback was specified was initialized
  * @param isTruncated is true if the list bucket request was truncated by the
  *        S3 service, in which case the remainder of the list may be obtained
  *        by querying again using the Marker parameter to start the query
@@ -716,11 +883,21 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
  *        returned in the response, which, if isTruncated is true, may be used
  *        as the marker in a subsequent list buckets operation to continue
  *        listing
- * @param contentsLength is the number of ListBucketContent structures in the
+ * @param contentsCount is the number of ListBucketContent structures in the
  *        contents parameter
  * @param contents is an array of ListBucketContent structures, each one
  *        describing an object in the bucket
- * @return S3Status???
+ * @param commonPrefixesCount is the number of common prefixes strings in the
+ *        commonPrefixes parameter
+ * @param commonPrefixes is an array of strings, each specifing one of the
+ *        common prefixes as returned by S3
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
  **/
 typedef S3Status (S3ListBucketCallback)(int isTruncated,
                                         const char *nextMarker,
@@ -735,18 +912,19 @@ typedef S3Status (S3ListBucketCallback)(int isTruncated,
  * This callback is made during a put object operation, to obtain the next
  * chunk of data to put to the S3 service as the contents of the object.  This
  * callback is made repeatedly, each time acquiring the next chunk of data to
- * write to the service, until either the return code is ??? or
- * bufferSizeReturn is returned as 0, indicating that there is no more data to
- * put to the service.
+ * write to the service, until a negative or 0 value is returned.
  *
- * @param callbackData is the callback data as specified when the S3Request
- *        for which this callback was specified was initialized
- * @param bufferSizeReturn returns the number of bytes that are being returned
- *        in the bufferReturn parameter
- * @param bufferReturn returns the bext set of bytes to be written to the
- *        service as the contents of the object being put
- * @return < 0 to abort the request with S3StatusAbortedByCallback,
- *         0 to indicate end of data, > 0 to add more data.
+ * @param bufferSize gives the maximum number of bytes that may be written
+ *        into the buffer parameter by this callback
+ * @param buffer gives the buffer to fill with at most bufferSize bytes of
+ *        data as the next chunk of data to send to S3 as the contents of this
+ *        object
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return < 0 to abort the request with the S3StatusAbortedByCallback, which
+ *        will be pased to the response complete callback for this request, or
+ *        0 to indicate the end of data, or > 0 to identify the number of
+ *        bytes that were written into the buffer by this callback
  **/
 typedef int (S3PutObjectDataCallback)(int bufferSize, char *buffer,
                                       void *callbackData);
@@ -758,18 +936,130 @@ typedef int (S3PutObjectDataCallback)(int bufferSize, char *buffer,
  * the object being fetched.  This callback is made repeatedly, each time
  * providing the next chunk of data read, until the complete object contents
  * have been passed through the callback in this way, or the callback
- * returns ???.
+ * returns an error status.
  *
- * @param callbackData is the callback data as specified when the S3Request
- *        for which this callback was specified was initialized
  * @param bufferSize gives the number of bytes in buffer
  * @param buffer is the data being passed into the callback
- * @return S3StatusOK to indicate success, anything else to abort the
- *         request immediately with that status
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
  **/
 typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
                                            void *callbackData);
                                        
+
+/** **************************************************************************
+ * Callback Structures
+ ************************************************************************** **/
+
+
+/**
+ * An S3ResponseHandler defines the callbacks which are made for any
+ * request.
+ **/
+typedef struct S3ResponseHandler
+{
+    /**
+     * The propertiesCallback is made when the response properties have
+     * successfully been returned from S3.  This function may not be called
+     * if the response properties were not successfully returned from S3.
+     **/
+    S3ResponsePropertiesCallback *propertiesCallback;
+    
+    /**
+     * The completeCallback is always called for every request made to S3,
+     * regardless of the outcome of the request.  It provides the status of
+     * the request upon its completion, as well as extra error details in the
+     * event of an S3 error.
+     **/
+    S3ResponseCompleteCallback *completeCallback;
+} S3ResponseHandler;
+
+
+/**
+ * An S3ListServiceHandler defines the callbacks which are made for
+ * list_service requests.
+ **/
+typedef struct S3ListServiceHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    /**
+     * The listServiceCallback is called as items are reported back from S3 as
+     * responses to the request
+     **/
+    S3ListServiceCallback *listServiceCallback;
+} S3ListServiceHandler;
+
+
+/**
+ * An S3ListBucketHandler defines the callbacks which are made for
+ * list_bucket requests.
+ **/
+typedef struct S3ListBucketHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    /**
+     * The listBucketCallback is called as items are reported back from S3 as
+     * responses to the request
+     **/
+    S3ListBucketCallback *listBucketCallback;
+} S3ListBucketHandler;
+
+
+/**
+ * An S3PutObjectHandler defines the callbacks which are made for
+ * put_object requests.
+ **/
+typedef struct S3PutObjectHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    /**
+     * The putObjectDataCallback is called to acquire data to send to S3 as
+     * the contents of the put_object request.  It is made repeatedly until it
+     * returns a negative number (indicating that the request should be
+     * aborted), or 0 (indicating that all data has been supplied).
+     **/
+    S3PutObjectDataCallback *putObjectDataCallback;
+} S3PutObjectHandler;
+
+
+/**
+ * An S3GetObjectHandler defines the callbacks which are made for
+ * put_object requests.
+ **/
+typedef struct S3GetObjectHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    /**
+     * The getObjectDataCallback is called as data is read from S3 as the
+     * contents of the object being read in the get_object request.  It is
+     * called repeatedly until there is no more data provided in the request,
+     * or until the callback returns an error status indicating that the
+     * request should be aborted.
+     **/
+    S3GetObjectDataCallback *getObjectDataCallback;
+} S3GetObjectHandler;
+
 
 /** **************************************************************************
  * General Library Functions
@@ -785,7 +1075,12 @@ typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
  *        NULL or the empty string if you don't care about this.  The value
  *        will not be copied by this function and must remain unaltered by the
  *        caller until S3_deinitialize() is called.
- * @return S3Status ???
+ * @return One of:
+ *         S3StatusOK on success
+ *         S3StatusOutOfMemory on failure due to out of memory
+ *         S3StatusFailedToCreateMutex if the mutex creation function returned
+ *             NULL for one of the mutexes that are created during the
+ *             initialization process 
  **/
 S3Status S3_initialize(const char *userAgentInfo,
                        S3ThreadSelfCallback *threadSelfCallback,
@@ -806,6 +1101,7 @@ void S3_deinitialize();
 /**
  * Returns a string with the textual name of an S3Status code
  *
+ * @param status is S3Status code for which the textual name will be returned
  * @return a string with the textual name of an S3Status code
  **/
 const char *S3_get_status_name(S3Status status);
@@ -827,10 +1123,28 @@ const char *S3_get_status_name(S3Status status);
  * is accessible by the caller.  It merely validates that the bucket name is
  * valid for use with S3.
  *
- * @param *bucketName is the bucket name to validate
+ * @param bucketName is the bucket name to validate
  * @param uriStyle gives the URI style to validate the bucket name against.
  *        It is advisable to always use S3UriStyleVirtuallHost.
- * @return S3Status ???
+ * @return One of:
+ *         S3StatusOK if the bucket name was validates successfully
+ *         S3StatusInvalidBucketNameTooLong if the bucket name exceeded the
+ *             length limitation for the URI style, which is 255 bytes for
+ *             path style URIs and 63 bytes for virtual host type URIs
+ *         S3StatusInvalidBucketNameTooShort if the bucket name is less than
+ *             3 characters
+ *         S3StatusInvalidBucketNameFirstCharacter if the bucket name as an
+ *             invalid first character, which is anything other than
+ *             an alphanumeric character
+ *         S3StatusInvalidBucketNameCharacterSequence if the bucket name
+ *             includes an invalid character sequence, which for virtual host
+ *             style buckets is ".-" or "-."
+ *         S3StatusInvalidBucketNameCharacter if the bucket name includes an
+ *             invalid character, which is anything other than alphanumeric,
+ *             '-', '.', or for path style URIs only, '_'.
+ *         S3StatusInvalidBucketNameDotQuadNotation if the bucket name is in
+ *             dot-quad notation, i.e. the form of an IP address, which is
+ *             not allowed by Amazon S3.
  **/
 S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
 
@@ -842,7 +1156,7 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  * ACLs from elsewhere in XML format and need to use these ACLs with libs3.
  *
  * @param aclXml is the XML representation of the ACL.  This must be a
- *        zero-terminated character string in ASCII format.
+ *        zero-terminated character string.
  * @param ownerId will be filled in with the Owner ID specified in the XML.
  *        At most MAX_GRANTEE_USER_ID_SIZE bytes will be stored at this
  *        location.
@@ -855,7 +1169,11 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  *        S3_ACL_MAXCOUNT structures, and on return from this function, the
  *        first aclGrantCountReturn structures will be filled in with the ACLs
  *        represented by the input XML.
- * @return S3Status ???
+ * @return One of:
+ *         S3StatusOK on successful conversion of the ACL
+ *         S3StatusInternalError on internal error representing a bug in the
+ *             libs3 library
+ *         S3StatusXmlParseFailure if the XML document was malformed
  **/
 S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
                         int *aclGrantCountReturn, S3AclGrant *aclGrants);
@@ -863,12 +1181,13 @@ S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
 
 /**
  * Returns nonzero if the status indicates that the request should be
- * immediately retried, because the error was of a nature that is likely due
- * to transient conditions on the local system or S3, such as network
- * failures, or internal retryable errors reported by S3.  Returns zero
- * otherwise.
+ * immediately retried, because the status indicates an error of a nature that
+ * is likely due to transient conditions on the local system or S3, such as
+ * network failures, or internal retryable errors reported by S3.  Returns
+ * zero otherwise.
  *
  * @param status is the status to evaluate
+ * @return nonzero if the status indicates a retryable error, 0 otherwise
  **/
 int S3_status_is_retryable(S3Status status);
 
@@ -878,97 +1197,108 @@ int S3_status_is_retryable(S3Status status);
  ************************************************************************** **/
 
 /**
- * Request context - allows multiple S3Requests to be processed at one
- * time.
+ * An S3RequestContext allows muliple requests to be serviced by the same
+ * thread simultaneously.  It is an optional parameter to all libs3 request
+ * functions, and if provided, the request is managed by the S3RequestContext;
+ * if not, the request is handled synchronously and is complete when the libs3
+ * request function has returned.
+ *
+ * @param requestContextReturn returns the newly-created S3RequestContext
+ *        structure, which if successfully returned, must be destroyed via a
+ *        call to S3_destroy_request_context when it is no longer needed.  If
+ *        an error status is returned from this function, then
+ *        requestContextReturn will not have been filled in, and
+ *        S3_destroy_request_context should not be called on it
+ * @return One of:
+ *         S3StatusOK if the request context was successfully created
+ *         S3StatusOutOfMemory if the request context could not be created due
+ *             to an out of memory error
  **/
 S3Status S3_create_request_context(S3RequestContext **requestContextReturn);
 
 
-/*
-// Cancels all live S3Requests in the request context
-*/
+/**
+ * Destroys an S3RequestContext which was created with
+ * S3_create_request_context.  Any requests which are currently being
+ * processed by the S3RequestContext will immediately be aborted and their
+ * request completed callbacks made with the status S3StatusInterrupted.
+ *
+ * @param requestContext is the S3RequestContext to destroy
+ **/
 void S3_destroy_request_context(S3RequestContext *requestContext);
 
 
 /**
- * Some methods for driving a request context:
- * - Run it to completion
- * - Run it "once"
- * - Get its fds so that someone else can select on them before calling
- *   the "run it once" method
+ * Runs the S3RequestContext until all requests within it have completed,
+ * or until an error occurs.
  *
- * As each S3Request within an S3RequestContext completes, it will be
- * automatically removed from the S3RequestContext.  Also if any callback
- * returns a "stop" status then the request will be stopped and removed
- * from the S3RequestContext.  There is thus no way to stop a request from
- * completing without returning a "stop" status.  However, the entire
- * request context can be deinitialized which will stop all requests in it.
+ * @param requestContext is the S3RequestContext to run until all requests
+ *            within it have completed or until an error occurs
+ * @return One of:
+ *         S3Status if all requests were successfully run to completion
+ *         S3StatusInternalError if an internal error prevented the
+ *             S3RequestContext from running one or more requests
+ *         S3StatusOutOfMemory if requests could not be run to completion
+ *             due to an out of memory error
  **/
-/*
-// This will run the request context to completion, not by busy-waiting, but
-// using select
-*/
 S3Status S3_runall_request_context(S3RequestContext *requestContext);
 
 
-/*
-// These allow the application to control when to let libs3 do work on the
-// requests.  Each call will do all the work possible without network blocking
-// on all requests in the request context.
-*/
+/**
+ * Does some processing of requests within the S3RequestContext.  One or more
+ * requests may have callbacks made on them and may complete.  This function
+ * processes any requests which have immediately available I/O, and will not
+ * block waiting for I/O on any request.  This function would normally be used
+ * with S3_get_request_context_fdsets.
+ *
+ * @param requestContext is the S3RequestContext to process
+ * @param requestsRemainingReturn returns the number of requests remaining
+ *            and not yet completed within the S3RequestContext after this
+ *            function returns.
+ * @return One of:
+ *         S3StatusOK if request processing proceeded without error
+ *         S3StatusInternalError if an internal error prevented the
+ *             S3RequestContext from running one or more requests
+ *         S3StatusOutOfMemory if requests could not be processed due to
+ *             an out of memory error
+ **/
 S3Status S3_runonce_request_context(S3RequestContext *requestContext, 
                                     int *requestsRemainingReturn);
 
+
+/**
+ * This function, in conjunction allows callers to manually manage a set of
+ * requests using an S3RequestContext.  This function returns the set of file
+ * descriptors which the caller can watch (typically using select()), along
+ * with any other file descriptors of interest to the caller, and using
+ * whatever timeout (if any) the caller wishes, until one or more file
+ * descriptors in the returned sets become ready for I/O, at which point
+ * S3_runonce_request_context can be called to process requests with available
+ * I/O.
+ *
+ * @param requestContext is the S3RequestContext to get fd_sets from
+ * @param readFdSet is a pointer to an fd_set which will have all file
+ *        descriptors to watch for read events for the requests in the
+ *        S3RequestContext set into it upon return.  Should be zero'd out
+ *        (using FD_ZERO) before being passed into this function.
+ * @param writeFdSet is a pointer to an fd_set which will have all file
+ *        descriptors to watch for write events for the requests in the
+ *        S3RequestContext set into it upon return.  Should be zero'd out
+ *        (using FD_ZERO) before being passed into this function.
+ * @param exceptFdSet is a pointer to an fd_set which will have all file
+ *        descriptors to watch for exception events for the requests in the
+ *        S3RequestContext set into it upon return.  Should be zero'd out
+ *        (using FD_ZERO) before being passed into this function.
+ * @param maxFd returns the highest file descriptor set into any of the
+ *        fd_sets, or -1 if no file descriptors were set
+ * @return One of:
+ *         S3StatusOK if all fd_sets were successfully set
+ *         S3StatusInternalError if an internal error prevented this function
+ *             from completing successfully
+ **/
 S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                                        fd_set *readFdSet, fd_set *writeFdSet,
                                        fd_set *exceptFdSet, int *maxFd);
-
-/*
-// xxx todo the function for getting the fdsets
-*/
-
-typedef struct S3ResponseHandler
-{
-    // Properties callback
-    S3ResponsePropertiesCallback *propertiesCallback;
-    
-    // Request complete callback - always called if the call which initiates
-    // the request doesn't return an error code
-    S3ResponseCompleteCallback *completeCallback;
-} S3ResponseHandler;
-
-
-typedef struct S3ListServiceHandler
-{
-    S3ResponseHandler responseHandler;
-
-    // list buckets callback
-    S3ListServiceCallback *listServiceCallback;
-} S3ListServiceHandler;
-
-
-typedef struct S3ListBucketHandler
-{
-    S3ResponseHandler responseHandler;
-
-    S3ListBucketCallback *listBucketCallback;
-} S3ListBucketHandler;
-
-
-typedef struct S3PutObjectHandler
-{
-    S3ResponseHandler responseHandler;
-
-    S3PutObjectDataCallback *putObjectDataCallback;
-} S3PutObjectHandler;
-
-
-typedef struct S3GetObjectHandler
-{
-    S3ResponseHandler responseHandler;
-
-    S3GetObjectDataCallback *getObjectDataCallback;
-} S3GetObjectHandler;
 
 
 /** **************************************************************************
@@ -976,25 +1306,26 @@ typedef struct S3GetObjectHandler
  ************************************************************************** **/
 
 /**
- * Sets up an S3Request to lists all S3 buckets belonging to the access key
- * id.
+ * Lists all S3 buckets belonging to the access key id.
  *
- * @param requestContext if non-NULL, gives the S3RequestContext to add this
- *        request to, and does not perform the request immediately.  If NULL,
- *        performs the request immediately and synchronously.
+ * @param protocol gives the protocol to use for this request
  * @param accessKeyId gives the Amazon Access Key ID for which to list owned
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
- * @param callback will be called back once for each bucket listed in the
- *        response to this operation
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
- *        callback
+ *        all callbacks for this request
  **/
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey,
                      S3RequestContext *requestContext,
-                     const S3ListServiceHandler *handler, void *callbackData);
+                     const S3ListServiceHandler *handler,
+                     void *callbackData);
                          
                             
 /** **************************************************************************
@@ -1005,13 +1336,12 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  * Tests the existence of an S3 bucket, additionally returning the bucket's
  * location if it exists and is accessible.
  *
- * @param requestContext if non-NULL, gives the S3RequestContext to add this
- *        request to, and does not perform the request immediately.  If NULL,
- *        performs the request immediately and synchronously.
- * @param accessKeyId gives the Amazon Access Key ID for which to test the
- *        exitence and accessibility of the bucket
- * @param secretAccessKey gives the Amazon Secret Access Key for which to test
- *        the exitence and accessibility of the bucket
+ * @param protocol gives the protocol to use for this request
+ * @param uriStyle gives the URI style to use for this request
+ * @param accessKeyId gives the Amazon Access Key ID for which to list owned
+ *        buckets
+ * @param secretAccessKey gives the Amazon Secret Access Key for which to list
+ *        owned buckets
  * @param bucketName is the bucket name to test
  * @param locationConstraintReturnSize gives the number of bytes in the
  *        locationConstraintReturn parameter
@@ -1019,9 +1349,16 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  *        the name of the location constraint naming the geographic location
  *        of the S3 bucket.  This must have at least as many characters in it
  *        as specified by locationConstraintReturn, and should start out
- *        NULL-terminated.  On successful return of this function, this will
- *        be set to the name of the geographic location of S3 bucket, or will
- *        be left as a zero-length string if no location was available.
+ *        NULL-terminated.  On successful completion of this request, this
+ *        will be set to the name of the geographic location of S3 bucket, or
+ *        will be left as a zero-length string if no location was available.
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
@@ -1034,17 +1371,22 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
 /**
  * Creates a new bucket.
  *
+ * @param protocol gives the protocol to use for this request
+ * @param accessKeyId gives the Amazon Access Key ID for which to list owned
+ *        buckets
+ * @param secretAccessKey gives the Amazon Secret Access Key for which to list
+ *        owned buckets
+ * @param bucketName is the name of the bucket to be created
+ * @param cannedAcl gives the "REST canned ACL" to use for the created bucket
+ * @param locationConstraint, if non-NULL, gives the geographic location for
+ *        the bucket to create.
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
- * @param accessKeyId gives the Amazon Access Key ID for the owner of the
- *        bucket which will be created
- * @param secretAccessKey gives the Amazon Secret Access Key for the owner of
- *        the bucket which will be created
- * @param bucketName is the name of the bucket to be created
- * @param locationConstraint, if non-NULL, gives the geographic location for
- *        the bucket to create.
- * @return S3Status ???
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *bucketName, 
@@ -1054,15 +1396,23 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
 
 
 /**
- * Deletes a bucket.  The bucket must be empty.
+ * Deletes a bucket.  The bucket must be empty, or the status
+ * S3StatusErrorBucketNotEmpty will result.
  *
+ * @param protocol gives the protocol to use for this request
+ * @param uriStyle gives the URI style to use for this request
+ * @param accessKeyId gives the Amazon Access Key ID for which to list owned
+ *        buckets
+ * @param secretAccessKey gives the Amazon Secret Access Key for which to list
+ *        owned buckets
+ * @param bucketName is the name of the bucket to be deleted
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
- * @param accessKeyId gives the Amazon Access Key ID for the bucket
- * @param secretAccessKey gives the Amazon Secret Access Key for the bucket
- * @param bucketName is the name of the bucket to be deleted
- * @return S3Status ???
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
@@ -1073,9 +1423,6 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
 /**
  * Lists keys within a bucket.
  *
- * @param requestContext if non-NULL, gives the S3RequestContext to add this
- *        request to, and does not perform the request immediately.  If NULL,
- *        performs the request immediately and synchronously.
  * @param bucketContext gives the bucket and associated parameters for this
  *        request
  * @param prefix if present, gives a prefix for matching keys
@@ -1085,10 +1432,13 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        between the prefix and the first occurrence of the delimiter to be
  *        rolled up into a single result element
  * @param maxkeys is the maximum number of keys to return
- * @param callback is the callback which will be called repeatedly with
- *        resulting keys
- * @param callbackData will be passed into the callback
- * @return S3Status ???
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
 void S3_list_bucket(const S3BucketContext *bucketContext,
                     const char *prefix, const char *marker, 
@@ -1097,17 +1447,30 @@ void S3_list_bucket(const S3BucketContext *bucketContext,
                     const S3ListBucketHandler *handler, void *callbackData);
 
 
-/**
- * xxx todo - document remaining functions
- **/
-
 /** **************************************************************************
  * Object Functions
  ************************************************************************** **/
 
-/*
-// xxx todo - possible Cache-Control
-*/
+/**
+ * Puts object data to S3.  This overwrites any existing object at that key;
+ * note that S3 currently only supports full-object upload.  The data to
+ * upload will be acquired by calling the handler's putObjectDataCallback.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to put to
+ * @param contentLength is required and gives the total number of bytes that
+ *        will be put
+ * @param putProperties optionally provides additional properties to apply to
+ *        the object that is being put to
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
 void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
                    const S3PutProperties *putProperties,
@@ -1115,11 +1478,40 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    const S3PutObjectHandler *handler, void *callbackData);
                         
 
-/*
-// destinationBucket NULL means the same bucket as in pBucketContext
-// destinationKey NULL means the same object key as [key]
-// if putProperties is NULL, existing properties will not be changed
-*/
+/**
+ * Copies an object from one location to another.  The object may be copied
+ * back to itself, which is useful for replacing metadata without changing
+ * the object.
+ *
+ * @param bucketContext gives the source bucket and associated parameters for
+ *        this request
+ * @param key is the source key
+ * @param destinationBucket gives the destination bucket into which to copy
+ *        the object.  If NULL, the source bucket will be used.
+ * @param destinationKey gives the destination key into which to copy the
+ *        object.  If NULL, the source key will be used.
+ * @param putProperties optionally provides properties to apply to the object
+ *        that is being put to.  If not supplied (i.e. NULL is passed in),
+ *        then the copied object will retain the metadata of the copied
+ *        object.
+ * @param lastModifiedReturn returns the last modified date of the copied
+ *        object
+ * @param eTagReturnSize specifies the number of bytes provided in the
+ *        eTagReturn buffer
+ * @param eTagReturn is a buffer into which the resulting eTag of the copied
+ *        object will be written
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
 void S3_copy_object(const S3BucketContext *bucketContext,
                     const char *key, const char *destinationBucket,
                     const char *destinationKey,
@@ -1140,6 +1532,10 @@ void S3_copy_object(const S3BucketContext *bucketContext,
 // In this way, the caller can be sure that they will get exactly what they
 // expect.
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
 */
 void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
@@ -1149,11 +1545,23 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
 
 
 // ifModifiedSince and ifUnmodifiedSince if > 0 will be used
+/**
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+
+ **/
 void S3_head_object(const S3BucketContext *bucketContext, const char *key,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
                          
-
+/**
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
@@ -1167,6 +1575,11 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
 // key is optional, if not present the ACL applies to the bucket
 // aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
 // and does not need to be zero-terminated
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+
 */
 void S3_get_acl(const S3BucketContext *bucketContext, const char *key, 
                 char *ownerId, char *ownerDisplayName,
@@ -1179,6 +1592,11 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
 // key is optional, if not present the ACL applies to the bucket
 // aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
 // and does not need to be zero-terminated
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+
 */
 void S3_set_acl(const S3BucketContext *bucketContext, const char *key, 
                 const char *ownerId, const char *ownerDisplayName,

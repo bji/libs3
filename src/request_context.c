@@ -35,7 +35,7 @@ S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
         (S3RequestContext *) malloc(sizeof(S3RequestContext));
     
     if (!*requestContextReturn) {
-        return S3StatusFailedToCreateRequestContext;
+        return S3StatusOutOfMemory;
     }
     
     if (!((*requestContextReturn)->curlm = curl_multi_init())) {

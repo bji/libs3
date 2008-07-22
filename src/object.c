@@ -175,13 +175,7 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
         return;
     }
 
-    S3Status status = simplexml_initialize
-        (&(data->simpleXml), &copyObjectXmlCallback, data);
-    if (status != S3StatusOK) {
-        free(data);
-        (*(handler->completeCallback))(status, 0, callbackData);
-        return;
-    }
+    simplexml_initialize(&(data->simpleXml), &copyObjectXmlCallback, data);
 
     data->responsePropertiesCallback = handler->propertiesCallback;
     data->responseCompleteCallback = handler->completeCallback;
@@ -202,8 +196,9 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
         HttpRequestTypeCOPY,                          // httpRequestType
         bucketContext->protocol,                      // protocol
         bucketContext->uriStyle,                      // uriStyle
-        destinationBucket,                            // bucketName
-        destinationKey,                               // key
+        destinationBucket ? destinationBucket : 
+        bucketContext->bucketName,                    // bucketName
+        destinationKey ? destinationKey : key,        // key
         0,                                            // queryParams
         0,                                            // subResource
         bucketContext->accessKeyId,                   // accessKeyId

@@ -115,13 +115,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         return;
     }
 
-    S3Status status = simplexml_initialize
-        (&(tbData->simpleXml), &testBucketXmlCallback, tbData);
-    if (status != S3StatusOK) {
-        free(tbData);
-        (*(handler->completeCallback))(status, 0, callbackData);
-        return;
-    }
+    simplexml_initialize(&(tbData->simpleXml), &testBucketXmlCallback, tbData);
 
     tbData->responsePropertiesCallback = handler->propertiesCallback;
     tbData->responseCompleteCallback = handler->completeCallback;
@@ -686,14 +680,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         return;
     }
 
-    S3Status status = simplexml_initialize
-        (&(lbData->simpleXml), &listBucketXmlCallback, lbData);
-    if (status != S3StatusOK) {
-        free(lbData);
-        (*(handler->responseHandler.completeCallback))
-            (status, 0, callbackData);
-        return;
-    }
+    simplexml_initialize(&(lbData->simpleXml), &listBucketXmlCallback, lbData);
     
     lbData->responsePropertiesCallback = 
         handler->responseHandler.propertiesCallback;

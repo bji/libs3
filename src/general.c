@@ -81,6 +81,23 @@ static void dynlock_destroy(struct CRYPTO_dynlock_value *pLock,
 }
 
 
+static void deinitialize_locks()
+{
+    CRYPTO_set_dynlock_destroy_callback(NULL);
+    CRYPTO_set_dynlock_lock_callback(NULL);
+    CRYPTO_set_dynlock_create_callback(NULL);
+    CRYPTO_set_locking_callback(NULL);
+    CRYPTO_set_id_callback(NULL);
+
+    int count = CRYPTO_num_locks();
+    for (int i = 0; i < count; i++) {
+        (*mutexDestroyCallbackG)(pLocksG[i]);
+    }
+
+    free(pLocksG);
+}
+
+
 struct S3Mutex *mutex_create()
 {
     return (*mutexCreateCallbackG)();
@@ -138,7 +155,7 @@ S3Status S3_initialize(const char *userAgentInfo,
 
     S3Status status = request_api_initialize(userAgentInfo);
     if (status != S3StatusOK) {
-        S3_deinitialize();
+        deinitialize_locks();
         return status;
     }
 
@@ -150,20 +167,8 @@ void S3_deinitialize()
 {
     request_api_deinitialize();
 
-    CRYPTO_set_dynlock_destroy_callback(NULL);
-    CRYPTO_set_dynlock_lock_callback(NULL);
-    CRYPTO_set_dynlock_create_callback(NULL);
-    CRYPTO_set_locking_callback(NULL);
-    CRYPTO_set_id_callback(NULL);
-
-    int count = CRYPTO_num_locks();
-    for (int i = 0; i < count; i++) {
-        (*mutexDestroyCallbackG)(pLocksG[i]);
-    }
-
-    free(pLocksG);
+    deinitialize_locks();
 }
-
 
 const char *S3_get_status_name(S3Status status)
 {
@@ -184,9 +189,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(InvalidBucketNameTooShort);
         handlecase(InvalidBucketNameDotQuadNotation);
         handlecase(QueryParamsTooLong);
-        handlecase(FailedToCreateRequest);
         handlecase(FailedToInitializeRequest);
-        handlecase(FailedToCreateRequestContext);
         handlecase(MetaDataHeadersTooLong);
         handlecase(BadMetaData);
         handlecase(BadContentType);
@@ -504,10 +507,10 @@ static S3Status convertAclXmlCallback(const char *elementPath,
                 grant->permission = S3PermissionWrite;
             }
             else if (!strcmp(caData->permission, "READ_ACP")) {
-                grant->permission = S3PermissionReadAcp;
+                grant->permission = S3PermissionReadACP;
             }
             else if (!strcmp(caData->permission, "WRITE_ACP")) {
-                grant->permission = S3PermissionWriteAcp;
+                grant->permission = S3PermissionWriteACP;
             }
             else if (!strcmp(caData->permission, "FULL_CONTROL")) {
                 grant->permission = S3PermissionFullControl;
@@ -552,19 +555,13 @@ S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
 
     // Use a simplexml parser
     SimpleXml simpleXml;
+    simplexml_initialize(&simpleXml, &convertAclXmlCallback, &data);
 
-    S3Status status;
-
-    if (((status = simplexml_initialize
-          (&simpleXml, &convertAclXmlCallback, &data)) != S3StatusOK) ||
-        ((status = simplexml_add
-          (&simpleXml, aclXml, strlen(aclXml))) != S3StatusOK)) {
-        return status;
-    }
+    S3Status status = simplexml_add(&simpleXml, aclXml, strlen(aclXml));
 
     simplexml_deinitialize(&simpleXml);
                                           
-    return S3StatusOK;
+    return status;
 }
 
 

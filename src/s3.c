@@ -547,7 +547,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
         SKIP_SPACE(1);
         
         if (!strncmp(aclXml, "READ_ACP", sizeof("READ_ACP") - 1)) {
-            grant->permission = S3PermissionReadAcp;
+            grant->permission = S3PermissionReadACP;
             aclXml += (sizeof("READ_ACP") - 1);
         }
         else if (!strncmp(aclXml, "READ", sizeof("READ") - 1)) {
@@ -555,7 +555,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
             aclXml += (sizeof("READ") - 1);
         }
         else if (!strncmp(aclXml, "WRITE_ACP", sizeof("WRITE_ACP") - 1)) {
-            grant->permission = S3PermissionWriteAcp;
+            grant->permission = S3PermissionWriteACP;
             aclXml += (sizeof("WRITE_ACP") - 1);
         }
         else if (!strncmp(aclXml, "WRITE", sizeof("WRITE") - 1)) {
@@ -2028,10 +2028,10 @@ void get_acl(int argc, char **argv, int optind)
             case S3PermissionWrite:
                 perm = "WRITE";
                 break;
-            case S3PermissionReadAcp:
+            case S3PermissionReadACP:
                 perm = "READ_ACP";
                 break;
-            case S3PermissionWriteAcp:
+            case S3PermissionWriteACP:
                 perm = "WRITE_ACP";
                 break;
             default:

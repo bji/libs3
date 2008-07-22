@@ -161,16 +161,14 @@ static struct _xmlSAXHandler saxHandlerG =
     0 // xmlStructuredErrorFunc serror;
 };
 
-S3Status simplexml_initialize(SimpleXml *simpleXml, 
-                              SimpleXmlCallback *callback, void *callbackData)
+void simplexml_initialize(SimpleXml *simpleXml, 
+                          SimpleXmlCallback *callback, void *callbackData)
 {
     simpleXml->callback = callback;
     simpleXml->callbackData = callbackData;
     simpleXml->elementPathLen = 0;
     simpleXml->status = S3StatusOK;
     simpleXml->xmlParser = 0;
-
-    return S3StatusOK;
 }
 
 

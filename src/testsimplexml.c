@@ -56,12 +56,7 @@ int main(int argc, char **argv)
 
     SimpleXml simpleXml;
 
-    S3Status status = simplexml_initialize(&simpleXml, &simpleXmlCallback, 0);
-
-    if (status != S3StatusOK) {
-        fprintf(stderr, "ERROR: Failed to initialize: %d\n", status);
-        return -1;
-    }
+    simplexml_initialize(&simpleXml, &simpleXmlCallback, 0);
 
     // Read chunks of 10K from stdin, and then feed them in random chunks
     // to simplexml_add
@@ -72,7 +67,7 @@ int main(int argc, char **argv)
         char *buf = inbuf;
         while (amt_read) {
             int amt = (rand() % amt_read) + 1;
-            status = simplexml_add(&simpleXml, buf, amt);
+            S3Status status = simplexml_add(&simpleXml, buf, amt);
             if (status != S3StatusOK) {
                 fprintf(stderr, "ERROR: Parse failure: %d\n", status);
                 simplexml_deinitialize(&simpleXml);

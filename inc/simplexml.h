@@ -61,8 +61,8 @@ typedef struct SimpleXml
 // ----------------------------------------------------------------------------
 
 // Always call this, even if the simplexml doesn't end up being used
-S3Status simplexml_initialize(SimpleXml *simpleXml, 
-                              SimpleXmlCallback *callback, void *callbackData);
+void simplexml_initialize(SimpleXml *simpleXml, SimpleXmlCallback *callback,
+                          void *callbackData);
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen);
 

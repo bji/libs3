@@ -199,8 +199,8 @@ static S3Status generateAclXmlDocument(const char *ownerId,
         append("</Grantee><Permission>%s</Permission></Grant>",
                ((grant->permission == S3PermissionRead) ? "READ" :
                 (grant->permission == S3PermissionWrite) ? "WRITE" :
-                (grant->permission == S3PermissionReadAcp) ? "READ_ACP" :
-                (grant->permission == S3PermissionWriteAcp) ? "WRITE_ACP" :
+                (grant->permission == S3PermissionReadACP) ? "READ_ACP" :
+                (grant->permission == S3PermissionWriteACP) ? "WRITE_ACP" :
                 "FULL_CONTROL"));
     }
 

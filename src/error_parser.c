@@ -133,11 +133,8 @@ S3Status error_parser_add(ErrorParser *errorParser, char *buffer,
                           int bufferSize)
 {
     if (!errorParser->errorXmlParserInitialized) {
-        S3Status status = simplexml_initialize
-            (&(errorParser->errorXmlParser), &errorXmlCallback, errorParser);
-        if (status != S3StatusOK) {
-            return status;
-        }
+        simplexml_initialize(&(errorParser->errorXmlParser), &errorXmlCallback,
+                             errorParser);
         errorParser->errorXmlParserInitialized = 1;
     }
 

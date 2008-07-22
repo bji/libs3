@@ -147,15 +147,17 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
         string_multibuffer_add(handler->responsePropertyStrings, c, 
                                valuelen, fit);
     }
-    else if (!strncmp(header, "x-amz-meta-", sizeof("x-amz-meta-") - 1)) {
+    else if (!strncmp(header, S3_METADATA_HEADER_NAME_PREFIX, 
+                      sizeof(S3_METADATA_HEADER_NAME_PREFIX) - 1)) {
         // Make sure there is room for another x-amz-meta header
         if (handler->responseProperties.metaDataCount ==
             sizeof(handler->responseMetaData)) {
             return;
         }
         // Copy the name in
-        char *metaName = &(header[sizeof("x-amz-meta-") - 1]);
-        int metaNameLen = (namelen - (sizeof("x-amz-meta-") - 1));
+        char *metaName = &(header[sizeof(S3_METADATA_HEADER_NAME_PREFIX) - 1]);
+        int metaNameLen = 
+            (namelen - (sizeof(S3_METADATA_HEADER_NAME_PREFIX) - 1));
         char *copiedName = 
             string_multibuffer_current(handler->responseMetaDataStrings);
         string_multibuffer_add(handler->responseMetaDataStrings, metaName,

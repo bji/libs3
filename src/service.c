@@ -139,14 +139,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         return;
     }
 
-    S3Status status = simplexml_initialize
-        (&(data->simpleXml), &xmlCallback, data);
-    if (status != S3StatusOK) {
-        free(data);
-        (*(handler->responseHandler.completeCallback))
-            (status, 0, callbackData);
-        return;
-    }
+    simplexml_initialize(&(data->simpleXml), &xmlCallback, data);
 
     data->responsePropertiesCallback =
         handler->responseHandler.propertiesCallback;

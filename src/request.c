@@ -279,7 +279,8 @@ static S3Status compose_amz_headers(const RequestParams *params,
             const S3NameValue *property = &(properties->metaData[i]);
             char headerName[S3_MAX_METADATA_SIZE - sizeof(": v")];
             int l = snprintf(headerName, sizeof(headerName),
-                             "x-amz-meta-%s", property->name);
+                             S3_METADATA_HEADER_NAME_PREFIX "%s",
+                             property->name);
             char *hn = headerName;
             header_name_tolower_copy(hn, l);
             // Copy in the value
@@ -925,7 +926,7 @@ static S3Status request_get(const RequestParams *params,
     // Else there wasn't one available in the request stack, so create one
     else {
         if (!(request = (Request *) malloc(sizeof(Request)))) {
-            return S3StatusFailedToCreateRequest;
+            return S3StatusOutOfMemory;
         }
         if (!(request->curl = curl_easy_init())) {
             free(request);
