@@ -1,6 +1,6 @@
 
 LIBS3_VER_MAJOR := 0
-LIBS3_VER_MINOR := 1
+LIBS3_VER_MINOR := 2
 
 ifndef CURL_LIBS
     CURL_LIBS := $(shell curl-config --libs)

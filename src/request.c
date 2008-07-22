@@ -119,10 +119,23 @@ static void request_headers_done(Request *request)
 
     request->propertiesCallbackMade = 1;
 
+    // Get the http response code
+    request->httpResponseCode = 0;
+    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
+                          &(request->httpResponseCode)) != CURLE_OK) {
+        // Not able to get the HTTP response code - error
+        request->status = S3StatusInternalError;
+        return;
+    }
+
     response_headers_handler_done(&(request->responseHeadersHandler), 
                                   request->curl);
 
-    if (request->propertiesCallback) {
+    // Only make the callback if it was a successful request; otherwise we're
+    // returning information about the error response itself
+    if (request->propertiesCallback &&
+        (request->httpResponseCode >= 200) &&
+        (request->httpResponseCode <= 299)) {
         request->status = (*(request->propertiesCallback))
             (&(request->responseHeadersHandler.responseProperties), 
              request->callbackData);
@@ -187,15 +200,9 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb,
         return 0;
     }
 
-    // Get the http response code
-    int httpResponseCode = 0;
-    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
-                          &(httpResponseCode)) != CURLE_OK) {
-        // Not able to get the HTTP response code - error
-        request->status = S3StatusInternalError;
-    }
     // On HTTP error, we expect to parse an HTTP error response
-    else if ((httpResponseCode < 200) || (httpResponseCode > 299)) {
+    if ((request->httpResponseCode < 200) || 
+        (request->httpResponseCode > 299)) {
         request->status = error_parser_add
             (&(request->errorParser), (char *) ptr, len);
     }
@@ -1149,6 +1156,57 @@ void request_finish(Request *request)
     if (request->status == S3StatusOK) {
         error_parser_convert_status(&(request->errorParser), 
                                     &(request->status));
+        // If there still was no error recorded, then it is possible that
+        // there was in fact an error but that there was no error XML
+        // detailing the error
+        if ((request->status == S3StatusOK) &&
+            ((request->httpResponseCode < 200) ||
+             (request->httpResponseCode > 299))) {
+            switch (request->httpResponseCode) {
+            case 301:
+                request->status = S3StatusErrorPermanentRedirect;
+                break;
+            case 307:
+                request->status = S3StatusHttpErrorMovedTemporarily;
+                break;
+            case 400:
+                request->status = S3StatusHttpErrorBadRequest;
+                break;
+            case 403: 
+                request->status = S3StatusHttpErrorForbidden;
+                break;
+            case 404:
+                request->status = S3StatusHttpErrorNotFound;
+                break;
+            case 405:
+                request->status = S3StatusErrorMethodNotAllowed;
+                break;
+            case 409:
+                request->status = S3StatusHttpErrorConflict;
+                break;
+            case 411:
+                request->status = S3StatusErrorMissingContentLength;
+                break;
+            case 412:
+                request->status = S3StatusErrorPreconditionFailed;
+                break;
+            case 416:
+                request->status = S3StatusErrorInvalidRange;
+                break;
+            case 500:
+                request->status = S3StatusErrorInternalError;
+                break;
+            case 501:
+                request->status = S3StatusErrorNotImplemented;
+                break;
+            case 503:
+                request->status = S3StatusErrorSlowDown;
+                break;
+            default:
+                request->status = S3StatusHttpErrorUnknown;
+                break;
+            }
+        }
     }
 
     (*(request->completeCallback))
@@ -1172,8 +1230,9 @@ S3Status request_curl_code_to_status(CURLcode code)
     case CURLE_WRITE_ERROR:
     case CURLE_OPERATION_TIMEDOUT:
         return S3StatusConnectionFailed;
+    case CURLE_PARTIAL_FILE:
+        return S3StatusOK;
     default:
         return S3StatusInternalError;
     }
 }
-

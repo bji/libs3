@@ -250,7 +250,16 @@ typedef enum
     S3StatusErrorUnexpectedContent                          ,
     S3StatusErrorUnresolvableGrantByEmailAddress            ,
     S3StatusErrorUserKeyMustBeSpecified                     ,
-    S3StatusErrorUnknown
+    S3StatusErrorUnknown                                    ,
+
+    /* The following are HTTP errors returned by S3 without enough detail to
+       distinguish any of the above S3StatusError conditions */
+    S3StatusHttpErrorMovedTemporarily                       ,
+    S3StatusHttpErrorBadRequest                             ,
+    S3StatusHttpErrorForbidden                              ,
+    S3StatusHttpErrorNotFound                               ,
+    S3StatusHttpErrorConflict                               ,
+    S3StatusHttpErrorUnknown
 } S3Status;
 
 
@@ -1521,22 +1530,27 @@ void S3_copy_object(const S3BucketContext *bucketContext,
                     const S3ResponseHandler *handler, void *callbackData);
 
 
-/*
-// NOTE: ensure that if Range is requested, that Range is returned, and if
-// not, fail and close the request.  We expect S3 to be sensible about
-// Range and anything not returned properly must indicate an error in the
-// request.
-// byteRangeCount == 0 means get everything
-// We only allow complete ranges and we enforce this on the request
-// The response has to have the exact same set of ranges, or it is an error.
-// In this way, the caller can be sure that they will get exactly what they
-// expect.
-// ifModifiedSince and ifUnmodifiedSince if > 0 will be used
+/**
+ * Gets an object from S3.  The contents of the object are returned in the
+ * handler's getObjectDataCallback.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to get
+ * @param getConditions, if non-NULL, gives a set of conditions which must be
+ *        met in order for the request to succeed
+ * @param startByte gives the start byte for the byte range of the contents
+ *        to be returned
+ * @param byteCount gives the number of bytes to return; a value of 0
+ *        indicates that the contents up to the end should be returned
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
-*/
+ **/
 void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
@@ -1544,19 +1558,33 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetObjectHandler *handler, void *callbackData);
 
 
-// ifModifiedSince and ifUnmodifiedSince if > 0 will be used
 /**
+ * Gets the response properties for the object, but not the object contents.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to get the properties of
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
-
  **/
 void S3_head_object(const S3BucketContext *bucketContext, const char *key,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
                          
 /**
+ * Deletes an object from S3.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to delete
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1571,16 +1599,32 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
  * Access Control List Functions
  ************************************************************************** **/
 
-/*
-// key is optional, if not present the ACL applies to the bucket
-// aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
-// and does not need to be zero-terminated
+/**
+ * Gets the ACL for the given bucket or object.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to get the ACL of; or NULL to get the
+ *        ACL of the bucket
+ * @param ownerId must be supplied as a buffer of at least
+ *        S3_MAX_GRANTEE_USER_ID_SIZE bytes, and will be filled in with the
+ *        owner ID of the object/bucket
+ * @param ownerDisplayName must be supplied as a buffer of at least
+ *        S3_MAX_GRANTEE_DISPLAY_NAME_SIZE bytes, and will be filled in with
+ *        the display name of the object/bucket
+ * @param aclGrantCountReturn returns the number of S3AclGrant structures
+ *        returned in the aclGrants parameter
+ * @param aclGrants must be passed in as an array of at least
+ *        S3_MAX_ACL_GRANT_COUNT S3AclGrant structures, which will be filled
+ *        in with the grant information for the ACL
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
-
-*/
+ **/
 void S3_get_acl(const S3BucketContext *bucketContext, const char *key, 
                 char *ownerId, char *ownerDisplayName,
                 int *aclGrantCountReturn, S3AclGrant *aclGrants, 
@@ -1588,16 +1632,31 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
-/*
-// key is optional, if not present the ACL applies to the bucket
-// aclBuffer must be less than or equal to S3_ACL_BUFFER_MAXLEN bytes in size,
-// and does not need to be zero-terminated
+/**
+ * Sets the ACL for the given bucket or object.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param key is the key of the object to set the ACL for; or NULL to set the
+ *        ACL for the bucket
+ * @param ownerId is the owner ID of the object/bucket.  Unfortunately, S3
+ *        requires this to be valid and thus it must have been fetched by a
+ *        previous S3 request, such as a list_buckets request.
+ * @param ownerDisplayName is the owner display name of the object/bucket.
+ *        Unfortunately, S3 requires this to be valid and thus it must have
+ *        been fetched by a previous S3 request, such as a list_buckets
+ *        request.
+ * @param aclGrantCount is the number of ACL grants to set for the
+ *        object/bucket
+ * @param aclGrants are the ACL grants to set for the object/bucket
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
-
-*/
+ **/
 void S3_set_acl(const S3BucketContext *bucketContext, const char *key, 
                 const char *ownerId, const char *ownerDisplayName,
                 int aclGrantCount, const S3AclGrant *aclGrants, 
@@ -1605,16 +1664,17 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
-
 /**
  * xxx todo
  * Service Logging ...
  **/
 
+
 /**
  * xxx todo
  * function for generating an HTTP authenticated query string
  **/
+
 
 /**
  * xxx todo

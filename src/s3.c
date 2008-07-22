@@ -182,8 +182,7 @@ static void printError()
         fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(statusG));
     }
     else {
-        fprintf(stderr, "\nERROR: S3 returned an unexpected error:\n");
-        fprintf(stderr, "  %s\n", S3_get_status_name(statusG));
+        fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(statusG));
         fprintf(stderr, "%s\n", errorDetailsG);
     }
 }
@@ -227,7 +226,7 @@ static void usageExit(FILE *out)
 "   head <bucket>/<key> [ifModifiedSince, ifNotmodifiedSince, ifMatch,\n"
 "                       ifNotMatch] (implies -s)\n"
 "   delete <bucket>/<key>\n"
-"   getacl <bucket>/<key> [filename, allDetails]"
+"   getacl <bucket>/<key> [filename, allDetails]\n"
 "   setacl <bucket>/<key> [filename]"
 "\n");
 
@@ -1804,7 +1803,7 @@ static void get_object(int argc, char **argv, int optind)
             ftruncate(fileno(outfile), ftell(outfile));
         }
     }
-    else if (statusG != S3StatusErrorPreconditionFailed) {
+    else {
         printError();
     }
 

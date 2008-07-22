@@ -287,6 +287,12 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorUnresolvableGrantByEmailAddress);
         handlecase(ErrorUserKeyMustBeSpecified);
         handlecase(ErrorUnknown);    
+        handlecase(HttpErrorMovedTemporarily);
+        handlecase(HttpErrorBadRequest);
+        handlecase(HttpErrorForbidden);
+        handlecase(HttpErrorNotFound);
+        handlecase(HttpErrorConflict);
+        handlecase(HttpErrorUnknown);
     }
 
     return "Unknown";

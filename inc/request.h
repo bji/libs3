@@ -126,6 +126,11 @@ typedef struct Request
     // complete callback
     S3Status status;
 
+    // The HTTP code returned by the S3 server, if it is known.  Would rather
+    // not have to keep track of this but S3 doesn't always indicate its
+    // errors the same way
+    int httpResponseCode;
+
     // The HTTP headers to use for the curl request
     struct curl_slist *headers;
 
