@@ -138,8 +138,10 @@ typedef enum
 {
     S3StatusOK                                              ,
 
-    /* Errors that prevent the S3 request from being issued or response from
-       being read */
+    /**
+     * Errors that prevent the S3 request from being issued or response from
+     * being read
+     **/
     S3StatusInternalError                                   ,
     S3StatusOutOfMemory                                     ,
     S3StatusInterrupted                                     ,
@@ -186,7 +188,9 @@ typedef enum
     S3StatusConnectionFailed                                ,
     S3StatusAbortedByCallback                               ,
     
-    /* Errors from the S3 service */
+    /**
+     * Errors from the S3 service
+     **/
     S3StatusErrorAccessDenied                               ,
     S3StatusErrorAccountProblem                             ,
     S3StatusErrorAmbiguousGrantByEmailAddress               ,
@@ -252,8 +256,10 @@ typedef enum
     S3StatusErrorUserKeyMustBeSpecified                     ,
     S3StatusErrorUnknown                                    ,
 
-    /* The following are HTTP errors returned by S3 without enough detail to
-       distinguish any of the above S3StatusError conditions */
+    /**
+     * The following are HTTP errors returned by S3 without enough detail to
+     * distinguish any of the above S3StatusError conditions
+     **/
     S3StatusHttpErrorMovedTemporarily                       ,
     S3StatusHttpErrorBadRequest                             ,
     S3StatusHttpErrorForbidden                              ,
@@ -845,7 +851,7 @@ typedef S3Status (S3ResponsePropertiesCallback)
  *        or failure; use S3_status_is_retryable() as a simple way to detect
  *        whether or not the status indicates that the request failed but may
  *        be retried.
- * @param errorDetails, if non-NULL, gives details as returned by the S3
+ * @param errorDetails if non-NULL, gives details as returned by the S3
  *        service, describing the error
  * @param callbackData is the callback data as specified when the request
  *        was issued.
@@ -1084,6 +1090,16 @@ typedef struct S3GetObjectHandler
  *        NULL or the empty string if you don't care about this.  The value
  *        will not be copied by this function and must remain unaltered by the
  *        caller until S3_deinitialize() is called.
+ * @param threadSelfCallback provides the callback for the S3 library to call
+ *        to identify the calling thread
+ * @param mutexCreateCallback provides the callback for the S3 library to call
+ *        to create a mutex
+ * @param mutexLockCallback provides the callback for the S3 library to call
+ *        to lock a mutex
+ * @param mutexUnlockCallback provides the callback for the S3 library to call
+ *        to unlock a mutex
+ * @param mutexDestroyCallback provides the callback for the S3 library to call
+ *        to destroy a mutex
  * @return One of:
  *         S3StatusOK on success
  *         S3StatusOutOfMemory on failure due to out of memory
@@ -1174,9 +1190,9 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  *        will be stored at this location.
  * @param aclGrantCountReturn returns the number of S3AclGrant structures
  *        returned in the aclGrantsReturned array
- * @param aclGransReturned must be passed in as an array of at least
- *        S3_ACL_MAXCOUNT structures, and on return from this function, the
- *        first aclGrantCountReturn structures will be filled in with the ACLs
+ * @param aclGrants must be passed in as an array of at least S3_ACL_MAXCOUNT
+ *        structures, and on return from this function, the first
+ *        aclGrantCountReturn structures will be filled in with the ACLs
  *        represented by the input XML.
  * @return One of:
  *         S3StatusOK on successful conversion of the ACL
@@ -1387,7 +1403,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        owned buckets
  * @param bucketName is the name of the bucket to be created
  * @param cannedAcl gives the "REST canned ACL" to use for the created bucket
- * @param locationConstraint, if non-NULL, gives the geographic location for
+ * @param locationConstraint if non-NULL, gives the geographic location for
  *        the bucket to create.
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
@@ -1537,7 +1553,7 @@ void S3_copy_object(const S3BucketContext *bucketContext,
  * @param bucketContext gives the bucket and associated parameters for this
  *        request
  * @param key is the key of the object to get
- * @param getConditions, if non-NULL, gives a set of conditions which must be
+ * @param getConditions if non-NULL, gives a set of conditions which must be
  *        met in order for the request to succeed
  * @param startByte gives the start byte for the byte range of the contents
  *        to be returned
