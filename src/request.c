@@ -1163,6 +1163,9 @@ void request_finish(Request *request)
             ((request->httpResponseCode < 200) ||
              (request->httpResponseCode > 299))) {
             switch (request->httpResponseCode) {
+            case 100: // Some versions of libcurl erroneously set HTTP
+                      // status to this
+                break;
             case 301:
                 request->status = S3StatusErrorPermanentRedirect;
                 break;
