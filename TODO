@@ -1,0 +1,11 @@
+* Add GNU autoconf support
+
+* Write test case for request_context
+
+* Implement service logging support
+
+* Implement function for generating an HTTP authenticated query string
+
+* Implement functions for generating form stuff for posting to s3
+
+* Write s3 man page
