@@ -52,6 +52,7 @@ extern int fileno(FILE *);
 static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
+static int retriesG = 0;
 
 
 // Environment variables, saved as globals ----------------------------------
@@ -118,59 +119,14 @@ static char errorDetailsG[4096] = { 0 };
 #define NO_STATUS_PREFIX_LEN (sizeof(NO_STATUS_PREFIX) - 1)
 
 
-// libs3 mutex stuff ---------------------------------------------------------
-
-struct S3Mutex
-{
-    pthread_mutex_t m;
-};
-
-
-static unsigned long threadSelfCallback()
-{
-    return pthread_self();
-}
-
-
-static struct S3Mutex *mutexCreateCallback()
-{
-    struct S3Mutex *mutex = (struct S3Mutex *) malloc(sizeof(struct S3Mutex));
-    
-    pthread_mutex_init(&(mutex->m), NULL);
-
-    return mutex;
-}
-
-
-static void mutexLockCallback(struct S3Mutex *mutex)
-{
-    pthread_mutex_lock(&(mutex->m));
-}
-
-
-static void mutexUnlockCallback(struct S3Mutex *mutex)
-{
-    pthread_mutex_unlock(&(mutex->m));
-}
-
-
-static void mutexDestroyCallback(struct S3Mutex *mutex)
-{
-    pthread_mutex_destroy(&(mutex->m));
-    free(mutex);
-}
-
-
 // util ----------------------------------------------------------------------
 
 static void S3_init()
 {
     S3Status status;
-    if ((status = S3_initialize("s3", &threadSelfCallback, 
-                                &mutexCreateCallback,
-                                &mutexLockCallback, &mutexUnlockCallback,
-                                &mutexDestroyCallback)) != S3StatusOK) {
-        fprintf(stderr, "Failed to initialize libs3: %d\n", status);
+    if ((status = S3_initialize("s3", 0, 0, 0, 0, 0)) != S3StatusOK) {
+        fprintf(stderr, "Failed to initialize libs3: %s\n", 
+                S3_get_status_name(status));
         exit(-1);
     }
 }
@@ -191,42 +147,144 @@ static void printError()
 static void usageExit(FILE *out)
 {
     fprintf(out,
-" Options:\n"
+"\n Options:\n"
 "\n"
 "   Command Line:\n"
 "\n"   
-"   -p : use path-style URIs (--path-style)\n"
-"   -u : unencrypted (use HTTP instead of HTTPS) (--unencrypted)\n"
-"   -s : show response properties (--show-properties)\n"
+"   -p/--path-style      : use path-style URIs (default is "
+                          "virtual-host-style)\n"
+"   -u/--unencrypted     : unencrypted (use HTTP instead of HTTPS)\n"
+"   -s/--show-properties : show response properties on stdout\n"
+"   -r/--retries         : retry retryable failures this number of times\n"
 "\n"
 "   Environment:\n"
 "\n"
-"   S3_ACCESS_KEY_ID : S3 access key ID\n"
-"   S3_SECRET_ACCESS_KEY : S3 secret access key\n"
+"   S3_ACCESS_KEY_ID     : S3 access key ID (required)\n"
+"   S3_SECRET_ACCESS_KEY : S3 secret access key (required)\n"
 "\n" 
-" Commands:\n"
+" Commands (with <required parameters> and [optional parameters]) :\n"
 "\n"
-"   help\n"            
-"   list [allDetails]\n"
-"   test <bucket>\n"
-"   create <bucket> [cannedAcl, location]\n"
-"   delete <bucket>\n"
-"   list <bucket> [prefix, marker, delimiter, maxkeys, allDetails]\n"
-"   getacl <bucket> [filename, allDetails]\n"
-"   setacl <bucket> [filename]\n"
-"   put <bucket>/<key> [filename, contentLength, cacheControl, contentType,\n"
-"       md5, contentDispositionFilename, contentEncoding, expires,\n"
-"       cannedAcl, [x-amz-meta-...]]\n"
-"   copy <sourcebucket>/<sourcekey> <destbucket>/<destkey>\n"
-"       [cacheControl, contentType, contentDispositionFilename,\n"
-"       contentEncoding, expires, cannedAcl, [x-amz-meta-...]]\n"
-"   get <buckey>/<key> [filename (required if -s is used), ifModifiedSince,\n"
-"       ifNotmodifiedSince, ifMatch, ifNotMatch, startByte, byteCount]\n"
-"   head <bucket>/<key> [ifModifiedSince, ifNotmodifiedSince, ifMatch,\n"
-"       ifNotMatch] (implies -s)\n"
-"   delete <bucket>/<key>\n"
-"   getacl <bucket>/<key> [filename, allDetails]\n"
-"   setacl <bucket>/<key> [filename]"
+"   (NOTE: all command parameters take a value and are specified using the\n"
+"          pattern parameter=value)\n"
+"\n"
+"   help                 : Prints this help text\n"
+"\n"
+"   list                 : Lists owned buckets\n"
+"     [allDetails]       : Show full details\n"
+"\n"
+"   test                 : Tests a bucket for existence and accessibility\n"
+"     <bucket>           : Bucket to test\n"
+"\n"
+"   create               : Create a new bucket\n"
+"     <bucket>           : Bucket to create\n"
+"     [cannedAcl]        : Canned ACL for the bucket (see Canned ACLs)\n"
+"     [location]         : Location for bucket (for example, EU)\n"
+"\n"
+"   delete               : Delete a bucket or key\n"
+"     <bucket>[/<key>]   : Bucket or bucket/key to delete\n"
+"\n"
+"   list                 : List bucket contents\n"
+"     <bucket>           : Bucket to list\n"
+"     [prefix]           : Prefix for results set\n"
+"     [marker]           : Where in results set to start listing\n"
+"     [delimiter]        : Delimiter for rolling up results set\n"
+"     [maxkeys]          : Maximum number of keys to return in results set\n"
+"     [allDetails]       : Show full details for each key\n"
+"\n"
+"   getacl               : Get the ACL of a bucket or key\n"
+"     <bucket>[/<key>]   : Bucket or bucket/key to get the ACL of\n"
+"     [filename]         : Output filename for ACL (default is stdout)\n"
+"\n"
+"   setacl               : Set the ACL of a bucket or key\n"
+"     <bucket>[/<key>]   : Bucket or bucket/key to set the ACL of\n"
+"     [filename]         : Input filename for ACL (default is stdin)\n"
+"\n"
+"   put                  : Puts an object\n"
+"     <bucket>/<key>     : Bucket/key to put object to\n"
+"     [filename]         : Filename to read source data from "
+                          "(default is stdin)\n"
+"     [contentLength]    : How many bytes of source data to put (required if\n"
+"                          source file is stdin)\n"
+"     [cacheControl]     : Cache-Control HTTP header string to associate with\n"
+"                          object\n"
+"     [contentType]      : Content-Type HTTP header string to associate with\n"
+"                          object\n"
+"     [md5]              : MD5 for validating source data\n"
+"     [contentDispositionFilename] : Content-Disposition filename string to\n"
+"                          associate with object\n"
+"     [contentEncoding]  : Content-Encoding HTTP header string to associate\n"
+"                          with object\n"
+"     [expires]          : Expiration date to associate with object\n"
+"     [cannedAcl]        : Canned ACL for the object (see Canned ACLs)\n"
+"     [x-amz-meta-...]]  : Metadata headers to associate with the object\n"
+"\n"
+"   copy                 : Copies an object; if any options are set, the "
+                          "entire\n"
+"                          metadata of the object is replaced\n"
+"     <sourcebucket>/<sourcekey> : Source bucket/key\n"
+"     <destbucket>/<destkey> : Destination bucket/key\n"
+"     [cacheControl]     : Cache-Control HTTP header string to associate with\n"
+"                          object\n"
+"     [contentType]      : Content-Type HTTP header string to associate with\n"
+"                          object\n"
+"     [contentDispositionFilename] : Content-Disposition filename string to\n"
+"                          associate with object\n"
+"     [contentEncoding]  : Content-Encoding HTTP header string to associate\n"
+"                          with object\n"
+"     [expires]          : Expiration date to associate with object\n"
+"     [cannedAcl]        : Canned ACL for the object (see Canned ACLs)\n"
+"     [x-amz-meta-...]]  : Metadata headers to associate with the object\n"
+"\n"
+"   get                  : Gets an object\n"
+"     <buckey>/<key>     : Bucket/key of object to get\n"
+"     [filename]         : Filename to write object data to (required if -s\n"
+"                          command line parameter was used)\n"
+"     [ifModifiedSince]  : Only return the object if it has been modified "
+                          "since\n"
+"                          this date\n"
+"     [ifNotmodifiedSince] : Only return the object if it has not been "
+                          "modified\n"
+"                          since this date\n"
+"     [ifMatch]          : Only return the object if its ETag header matches\n"
+"                          this string\n"
+"     [ifNotMatch]       : Only return the object if its ETag header does "
+                          "not\n"
+"                          match this string\n"
+"     [startByte]        : First byte of byte range to return\n"
+"     [byteCount]        : Number of bytes of byte range to return\n"
+"\n"
+"   head                 : Gets only the headers of an object, implies -s\n"
+"     <buckey>/<key>     : Bucket/key of object to get headers of\n"
+"\n"
+" Canned ACLs:\n"
+"\n"
+"  The following canned ACLs are supported:\n"
+"    private (default), public-read, public-read-write, authenticated-read\n"
+"\n"
+" ACL Format:\n"
+"\n"
+"  For the getacl and setacl commands, the format of the ACL list is:\n"
+"  1) An initial line giving the owner id in this format:\n"
+"       OwnerID <Owner ID> <Owner Display Name>\n"
+"  2) Optional header lines, giving column headers, starting with the\n"
+"     word \"Type\", or with some number of dashes\n"
+"  3) Grant lines, of the form:\n"
+"       <Grant Type> (whitespace) <Grantee> (whitespace) <Permission>\n"
+"     where Grant Type is one of: Email, UserID, or Group, and\n"
+"     Grantee is the identification of the grantee based on this type,\n"
+"     and Permission is one of: READ, WRITE, READ_ACP, or FULL_CONTROL.\n"
+"\n"
+"  Note that the easiest way to modify an ACL is to first get it, saving it\n"
+"  into a file, then modifying the file, and then setting the modified file\n"
+"  back as the new ACL for the bucket/object.\n"
+"\n"
+" Date Format:\n"
+"\n"
+"  The format for dates used in parameters is as ISO 8601 dates, i.e.\n"
+"  YYYY-MM-DDTHH:MM:SS[.s...][T/+-dd:dd].  Examples:\n"
+"      2008-07-29T20:36:14.0023T\n"
+"      2008-07-29T20:36:14.0023+06:00\n"
+"      2008-07-29T20:36:14.0023-10:00\n"
 "\n");
 
     exit(-1);
@@ -575,7 +633,8 @@ static struct option longOptionsG[] =
 {
     { "path-style",           no_argument,        0,  'p' },
     { "unencrypted",          no_argument,        0,  'u' },
-    { "show-proerties",         no_argument,      0,  's' },
+    { "show-proerties",       no_argument,        0,  's' },
+    { "retries",              required_argument,  0,  'r' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -635,19 +694,19 @@ static void responseCompleteCallback(S3Status status,
     // Can't just save a pointer to [error] since it's not guaranteed to last
     // beyond this callback
     int len = 0;
-    if (error->message) {
+    if (error && error->message) {
         len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
                         "  Message: %s\n", error->message);
     }
-    if (error->resource) {
+    if (error && error->resource) {
         len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
                         "  Resource: %s\n", error->resource);
     }
-    if (error->furtherDetails) {
+    if (error && error->furtherDetails) {
         len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
                         "  Further Details: %s\n", error->furtherDetails);
     }
-    if (error->extraDetailsCount) {
+    if (error && error->extraDetailsCount) {
         len += snprintf(&(errorDetailsG[len]), sizeof(errorDetailsG) - len,
                         "%s", "  Extra Details:\n");
         int i;
@@ -737,8 +796,10 @@ static void list_service(int allDetails)
         &listServiceCallback
     };
 
-    S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
-                    &listServiceHandler, &data);
+    do {
+        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
+                        &listServiceHandler, &data);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG == S3StatusOK) {
         if (!data.headerPrinted) {
@@ -778,9 +839,11 @@ static void test_bucket(int argc, char **argv, int optind)
     };
 
     char locationConstraint[64];
-    S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                   bucketName, sizeof(locationConstraint), locationConstraint,
-                   0, &responseHandler, 0);
+    do {
+        S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
+                       bucketName, sizeof(locationConstraint),
+                       locationConstraint, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     const char *result;
 
@@ -865,8 +928,11 @@ static void create_bucket(int argc, char **argv, int optind)
         &responsePropertiesCallback, &responseCompleteCallback
     };
 
-    S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, bucketName,
-                     cannedAcl, locationConstraint, 0, &responseHandler, 0);
+    do {
+        S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG,
+                         bucketName, cannedAcl, locationConstraint, 0,
+                         &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG == S3StatusOK) {
         printf("Bucket successfully created.\n");
@@ -902,8 +968,10 @@ static void delete_bucket(int argc, char **argv, int optind)
         &responsePropertiesCallback, &responseCompleteCallback
     };
 
-    S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                     bucketName, 0, &responseHandler, 0);
+    do {
+        S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
+                         bucketName, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG != S3StatusOK) {
         printError();
@@ -1069,8 +1137,10 @@ static void list_bucket(const char *bucketName, const char *prefix,
 
     do {
         data.isTruncated = 0;
-        S3_list_bucket(&bucketContext, prefix, data.nextMarker, delimiter,
-                       maxkeys, 0, &listBucketHandler, &data);
+        do {
+            S3_list_bucket(&bucketContext, prefix, data.nextMarker,
+                           delimiter, maxkeys, 0, &listBucketHandler, &data);
+        } while (retriesG-- && S3_status_is_retryable(statusG));
         if (statusG != S3StatusOK) {
             break;
         }
@@ -1176,7 +1246,9 @@ static void delete_object(int argc, char **argv, int optind)
         &responseCompleteCallback
     };
 
-    S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
+    do {
+        S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if ((statusG != S3StatusOK) &&
         (statusG != S3StatusErrorPreconditionFailed)) {
@@ -1442,8 +1514,10 @@ static void put_object(int argc, char **argv, int optind)
         &putObjectDataCallback
     };
 
-    S3_put_object(&bucketContext, key, contentLength, &putProperties, 0,
-                  &putObjectHandler, &data);
+    do {
+        S3_put_object(&bucketContext, key, contentLength, &putProperties, 0,
+                      &putObjectHandler, &data);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (data.infile) {
         fclose(data.infile);
@@ -1628,9 +1702,12 @@ static void copy_object(int argc, char **argv, int optind)
     time_t lastModified;
     char eTag[256];
 
-    S3_copy_object(&bucketContext, sourceKey, destinationBucketName,
-                   destinationKey, anyPropertiesSet ? &putProperties : 0,
-                   &lastModified, sizeof(eTag), eTag, 0, &responseHandler, 0);
+    do {
+        S3_copy_object(&bucketContext, sourceKey, destinationBucketName,
+                       destinationKey, anyPropertiesSet ? &putProperties : 0,
+                       &lastModified, sizeof(eTag), eTag, 0,
+                       &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG == S3StatusOK) {
         if (lastModified >= 0) {
@@ -1794,8 +1871,10 @@ static void get_object(int argc, char **argv, int optind)
         &getObjectDataCallback
     };
 
-    S3_get_object(&bucketContext, key, &getConditions, startByte, byteCount,
-                  0, &getObjectHandler, outfile);
+    do {
+        S3_get_object(&bucketContext, key, &getConditions, startByte,
+                      byteCount, 0, &getObjectHandler, outfile);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG == S3StatusOK) {
         if (outfile != stdout) {
@@ -1862,7 +1941,9 @@ static void head_object(int argc, char **argv, int optind)
         &responseCompleteCallback
     };
 
-    S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
+    do {
+        S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if ((statusG != S3StatusOK) &&
         (statusG != S3StatusErrorPreconditionFailed)) {
@@ -1899,20 +1980,11 @@ void get_acl(int argc, char **argv, int optind)
     }
 
     const char *filename = 0;
-    int allDetails = 0;
 
     while (optind < argc) {
         char *param = argv[optind++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
-        }
-        else if (!strncmp(param, ALL_DETAILS_PREFIX,
-                          ALL_DETAILS_PREFIX_LEN)) {
-            const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
-            if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
-                !strcmp(ad, "1")) {
-                allDetails = 1;
-            }
         }
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
@@ -1972,18 +2044,19 @@ void get_acl(int argc, char **argv, int optind)
         &responseCompleteCallback
     };
 
-    S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName, 
-               &aclGrantCount, aclGrants, 0, &responseHandler, 0);
+    do {
+        S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName, 
+                   &aclGrantCount, aclGrants, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
 
     if (statusG == S3StatusOK) {
-        if (allDetails) {
-            fprintf(outfile, "OwnerID %s %s\n", ownerId, ownerDisplayName);
-        }
-        fprintf(outfile, "%-6s  %-56s  %-12s\n", " Type", 
-                "                   User Identifier", " Permission");
+        fprintf(outfile, "OwnerID %s %s\n", ownerId, ownerDisplayName);
+        fprintf(outfile, "%-6s  %-90s  %-12s\n", " Type", 
+                "                                   User Identifier",
+                " Permission");
         fprintf(outfile, "------  "
-                "--------------------------------------------------------"
-                "  ------------\n");
+                "------------------------------------------------------------"
+                "------------------------------  ------------\n");
         int i;
         for (i = 0; i < aclGrantCount; i++) {
             S3AclGrant *grant = &(aclGrants[i]);
@@ -1999,15 +2072,10 @@ void get_acl(int argc, char **argv, int optind)
                 break;
             case S3GranteeTypeCanonicalUser:
                 type = "UserID";
-                if (allDetails) {
-                    snprintf(composedId, sizeof(composedId),
-                             "%s (%s)", grant->grantee.canonicalUser.id,
-                             grant->grantee.canonicalUser.displayName);
-                    id = composedId;
-                }
-                else {
-                    id = grant->grantee.canonicalUser.displayName;
-                }
+                snprintf(composedId, sizeof(composedId),
+                         "%s (%s)", grant->grantee.canonicalUser.id,
+                         grant->grantee.canonicalUser.displayName);
+                id = composedId;
                 break;
             case S3GranteeTypeAllAwsUsers:
                 type = "Group";
@@ -2036,7 +2104,7 @@ void get_acl(int argc, char **argv, int optind)
                 perm = "FULL_CONTROL";
                 break;
             }
-            fprintf(outfile, "%-6s  %-56s  %-12s\n", type, id, perm);
+            fprintf(outfile, "%-6s  %-90s  %-12s\n", type, id, perm);
         }
     }
     else {
@@ -2134,8 +2202,10 @@ void set_acl(int argc, char **argv, int optind)
         &responseCompleteCallback
     };
 
-    S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName, aclGrantCount,
-               aclGrants, 0, &responseHandler, 0);
+    do {
+        S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
+                   aclGrantCount, aclGrants, 0, &responseHandler, 0);
+    } while (retriesG-- && S3_status_is_retryable(statusG));
     
     if (statusG != S3StatusOK) {
         printError();
@@ -2154,7 +2224,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int index = 0;
-        int c = getopt_long(argc, argv, "pus", longOptionsG, &index);
+        int c = getopt_long(argc, argv, "pusr:", longOptionsG, &index);
 
         if (c == -1) {
             // End of options
@@ -2171,6 +2241,15 @@ int main(int argc, char **argv)
         case 's':
             showResponsePropertiesG = 1;
             break;
+        case 'r': {
+            const char *v = optarg;
+            while (*v) {
+                retriesG *= 10;
+                retriesG += *v - '0';
+                v++;
+            }
+            break;
+        }
         default:
             fprintf(stderr, "\nERROR: Unknown options: -%c\n", c);
             // Usage exit
@@ -2187,6 +2266,8 @@ int main(int argc, char **argv)
     const char *command = argv[optind++];
     
     if (!strcmp(command, "help")) {
+        fprintf(stdout, "\ns3 is a program for performing single requests "
+                "to Amazon S3.\n");
         usageExit(stdout);
     }
 

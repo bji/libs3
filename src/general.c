@@ -91,7 +91,7 @@ static void deinitialize_locks()
 
     int count = CRYPTO_num_locks();
     for (int i = 0; i < count; i++) {
-        (*mutexDestroyCallbackG)(pLocksG[i]);
+        mutex_destroy(pLocksG[i]);
     }
 
     free(pLocksG);
@@ -100,23 +100,34 @@ static void deinitialize_locks()
 
 struct S3Mutex *mutex_create()
 {
-    return (*mutexCreateCallbackG)();
+    return (mutexCreateCallbackG ? 
+            (*mutexCreateCallbackG)() : (struct S3Mutex *) 1);
 }
+
 
 void mutex_lock(struct S3Mutex *mutex)
 {
-    return (*mutexLockCallbackG)(mutex);
+    if (mutexLockCallbackG) {
+        (*mutexLockCallbackG)(mutex);
+    }
 }
+
 
 void mutex_unlock(struct S3Mutex *mutex)
 {
-    return (*mutexUnlockCallbackG)(mutex);
+    if (mutexUnlockCallbackG) {
+        (*mutexUnlockCallbackG)(mutex);
+    }
 }
+
 
 void mutex_destroy(struct S3Mutex *mutex)
 {
-    return (*mutexDestroyCallbackG)(mutex);
+    if (mutexDestroyCallbackG) {
+        (*mutexDestroyCallbackG)(mutex);
+    }
 }
+
 
 S3Status S3_initialize(const char *userAgentInfo,
                        S3ThreadSelfCallback *threadSelfCallback,
@@ -125,6 +136,11 @@ S3Status S3_initialize(const char *userAgentInfo,
                        S3MutexUnlockCallback *mutexUnlockCallback,
                        S3MutexDestroyCallback *mutexDestroyCallback)
 {
+    mutexCreateCallbackG = mutexCreateCallback;
+    mutexLockCallbackG = mutexLockCallback;
+    mutexUnlockCallbackG = mutexUnlockCallback;
+    mutexDestroyCallbackG = mutexDestroyCallback;
+
     /* As required by the openssl library for thread support */
     int count = CRYPTO_num_locks(), i;
     
@@ -134,18 +150,13 @@ S3Status S3_initialize(const char *userAgentInfo,
     }
 
     for (i = 0; i < count; i++) {
-        if (!(pLocksG[i] = (*mutexCreateCallback)())) {
+        if (!(pLocksG[i] = mutex_create())) {
             while (i-- > 0) {
-                (*mutexDestroyCallback)(pLocksG[i]);
+                mutex_destroy(pLocksG[i]);
             }
             return S3StatusFailedToCreateMutex;
         }
     }
-
-    mutexCreateCallbackG = mutexCreateCallback;
-    mutexLockCallbackG = mutexLockCallback;
-    mutexUnlockCallbackG = mutexUnlockCallback;
-    mutexDestroyCallbackG = mutexDestroyCallback;
 
     CRYPTO_set_id_callback(threadSelfCallback);
     CRYPTO_set_locking_callback(&locking_callback);

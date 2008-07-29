@@ -64,9 +64,10 @@
  *      using file descriptors and a select()/poll() loop
  * - Shut down libs3 at program exit time by calling S3_deinitialize()
  *
- * In order to use libs3, your program must provide threading callbacks to
- * the S3_initialize() function.  For an example of how to do this in a
- * POSIX environment using pthreads, see the s3.c example program.
+ * In order to use libs3 with multiple threads, your program must provide
+ * threading callbacks to the S3_initialize() function (if your program is
+ * single threaded, you can pass NULL for these callback arguments to
+ * S3_initialize()).
  *
  * All functions which send requests to S3 return their results via a set of
  * callback functions which must be supplied to libs3 at the time that the
@@ -1144,15 +1145,20 @@ typedef struct S3GetObjectHandler
  *        will not be copied by this function and must remain unaltered by the
  *        caller until S3_deinitialize() is called.
  * @param threadSelfCallback provides the callback for the S3 library to call
- *        to identify the calling thread
+ *        to identify the calling thread, or NULL if the caller is not a
+ *        multithreaded program.
  * @param mutexCreateCallback provides the callback for the S3 library to call
- *        to create a mutex
+ *        to create a mutex, or NULL if the caller is not a multithreaded
+ *        program.
  * @param mutexLockCallback provides the callback for the S3 library to call
- *        to lock a mutex
+ *        to lock a mutex, or NULL if the caller is not a multithreaded
+ *        program.
  * @param mutexUnlockCallback provides the callback for the S3 library to call
- *        to unlock a mutex
- * @param mutexDestroyCallback provides the callback for the S3 library to call
- *        to destroy a mutex
+ *        to unlock a mutex, or NULL if the caller is not a multithreaded
+ *        program.
+ * @param mutexDestroyCallback provides the callback for the S3 library to
+ *        call to destroy a mutex, or NULL if the caller is not a
+ *        multithreaded program.
  * @return One of:
  *         S3StatusOK on success
  *         S3StatusOutOfMemory on failure due to out of memory
