@@ -796,11 +796,6 @@ static S3Status setup_curl(Request *request,
     // Set read callback, data, and readSize
     curl_easy_setopt_safe(CURLOPT_READFUNCTION, &curl_read_func);
     curl_easy_setopt_safe(CURLOPT_READDATA, request);
-    // xxx the following does not work in some versions of CURL.
-    // CURL is retarded in how it defines large offsets, using only
-    // 32 bits sometimes, when it should always use 64 via int64_t
-    curl_easy_setopt_safe(CURLOPT_INFILESIZE_LARGE,
-                          params->toS3CallbackTotalSize);
     
     // Set write callback and data
     curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
@@ -854,6 +849,16 @@ static S3Status setup_curl(Request *request,
                                              values-> fieldName);       \
     }
 
+    // Would use CURLOPT_INFILESIZE_LARGE, but it is buggy in libcurl
+    if (params->httpRequestType == HttpRequestTypePUT) {
+        char header[256];
+        snprintf(header, sizeof(header), "Content-Length: %llu",
+                 params->toS3CallbackTotalSize);
+        request->headers = curl_slist_append(request->headers, header);
+        request->headers = curl_slist_append(request->headers, 
+                                             "Transfer-Encoding:");
+    }
+    
     append_standard_header(cacheControlHeader);
     append_standard_header(contentTypeHeader);
     append_standard_header(md5Header);

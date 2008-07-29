@@ -33,12 +33,65 @@
  * Overview
  * --------
  *
- * xxx todo
+ * This library provides an API for using Amazon's S3 service (see
+ * http://s3.amazonaws.com).  Its design goals are:
+ *
+ * - To provide a simple and straightforward API for accessing all of S3's
+ *   functionality
+ * - To not require the developer using libs3 to need to know anything about:
+ *   - HTTP
+ *   - XML
+ *   - SSL
+ *   In other words, this API is meant to stand on its own, without requiring
+ *   any implicit knowledge of how S3 services are accessed using HTTP
+ *   protocols.
+ * - To be usable from multithreaded code
+ * - To be usable by code which wants to process multiple S3 requests
+ *   simultaneously from a single thread
+ * - To be usable in the simple, straightforward way using sequentialized
+ *   blocking requests
+ *
+ * The general usage pattern of libs3 is:
+ *
+ * - Initialize libs3 once per program by calling S3_initialize() at program
+ *   start up time
+ * - Make any number of requests to S3 for getting, putting, or listing
+ *   S3 buckets or objects, or modifying the ACLs associated with buckets
+ *   or objects, using one of three general approaches:
+ *   1. Simple blocking requests, one at a time
+ *   2. Multiple threads each making simple blocking requests
+ *   3. From a single thread, managing multiple S3 requests simultaneously
+ *      using file descriptors and a select()/poll() loop
+ * - Shut down libs3 at program exit time by calling S3_deinitialize()
+ *
+ * In order to use libs3, your program must provide threading callbacks to
+ * the S3_initialize() function.  For an example of how to do this in a
+ * POSIX environment using pthreads, see the s3.c example program.
+ *
+ * All functions which send requests to S3 return their results via a set of
+ * callback functions which must be supplied to libs3 at the time that the
+ * request is initiated.  libs3 will call these functions back in the thread
+ * calling the libs3 function if blocking requests are made (i.e., if the
+ * S3RequestContext for the function invocation is passed in as NULL).
+ * If an S3RequestContext is used to drive multiple S3 requests
+ * simultaneously, then the callbacks will be made from the thread which
+ * calls S3_runall_request_context() or S3_runonce_request_context(), or
+ * possibly from the thread which calls S3_destroy_request_context(), if
+ * S3 requests are in progress at the time that this function is called.
+ *
  * NOTE: Response headers from Amazon S3 are limited to 4K (2K of metas is all
  * that Amazon supports, and libs3 allows Amazon an additional 2K of headers).
+ *
+ * NOTE: Because HTTP and the S3 REST protocol are highly under-specified,
+ * libs3 must make some assumptions about the maximum length of certain HTTP
+ * elements (such as headers) that it will accept.  While efforts have been
+ * made to enforce maximums which are beyond that expected to be needed by any
+ * user of S3, it is always possible that these maximums may be too low in
+ * some rare circumstances.  Bug reports should this unlikely situation occur
+ * would be most appreciated.
  * 
- * Threading
- * ---------
+ * Threading Rules
+ * ---------------
  * 
  * 1. All arguments passed to any function must not be modified directly until
  *    the function returns.
@@ -384,7 +437,7 @@ struct S3Mutex;
 
 /**
  * An S3RequestContext manages multiple S3 requests simultaneously; see the
- * S3_xxx_request_context functions below for details
+ * S3_XXX_request_context functions below for details
  **/
 typedef struct S3RequestContext S3RequestContext;
 
