@@ -120,12 +120,16 @@ static void request_headers_done(Request *request)
     request->propertiesCallbackMade = 1;
 
     // Get the http response code
+    long httpResponseCode;
     request->httpResponseCode = 0;
     if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
-                          &(request->httpResponseCode)) != CURLE_OK) {
+                          &httpResponseCode) != CURLE_OK) {
         // Not able to get the HTTP response code - error
         request->status = S3StatusInternalError;
         return;
+    }
+    else {
+        request->httpResponseCode = httpResponseCode;
     }
 
     response_headers_handler_done(&(request->responseHeadersHandler), 
