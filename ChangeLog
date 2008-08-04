@@ -1,0 +1,5 @@
+
+Tue Aug  5 08:52:33 NZST 2008	bryan@ischo.com
+	* Bumped version number to 0.3
+	* Moved Makefile to GNUmakefile, added shared library build
+	* Added a bunch of GNU standard files (README, INSTALL, ChangeLog, etc)

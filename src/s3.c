@@ -1830,7 +1830,7 @@ static void get_object(int argc, char **argv, int optind)
         }
     }
 
-    FILE *outfile;
+    FILE *outfile = 0;
 
     if (filename) {
         // Stat the file, and if it doesn't exist, open it in w mode

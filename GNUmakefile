@@ -1,0 +1,130 @@
+# GNUmakefile
+# 
+# Copyright 2008 Bryan Ischo <bryan@ischo.com>
+# 
+# This file is part of libs3.
+# 
+# libs3 is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, version 3 of the License.
+#
+# libs3 is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License version 3
+# along with libs3, in a file named COPYING.  If not, see
+# <http://www.gnu.org/licenses/>.
+
+# I tried to use the autoconf/automake/autolocal/etc (i.e. autohell) tools
+# but I just couldn't stomach them.  Since this is a Makefile for POSIX
+# systems, I will simply do away with autohell completely and use a GNU
+# Makefile.  GNU make ought to be available pretty much everywhere, so I
+# don't see this being a significant issue for portability.
+
+# All commands assume a GNU compiler.  For systems which do not use a GNU
+# compiler, write scripts with the same names as these commands, and taking
+# the same arguments, and translate the arguments and commands into the
+# appropriate non-POSIX ones as needed.  libs3 assumes a GNU toolchain as
+# the most portable way to build software possible.  Non-POSIX, non-GNU
+# systems can do the work of supporting this build infrastructure.
+
+
+# --------------------------------------------------------------------------
+# Set libs3 version number
+
+LIBS3_VER_MAJOR := 0
+LIBS3_VER_MINOR := 3
+
+
+# --------------------------------------------------------------------------
+# Acquire configuration information for libraries that libs3 depends upon
+
+ifndef CURL_LIBS
+    CURL_LIBS := $(shell curl-config --libs)
+endif
+
+ifndef CURL_CFLAGS
+    CURL_CFLAGS := $(shell curl-config --cflags)
+endif
+
+ifndef LIBXML2_LIBS
+    LIBXML2_LIBS := $(shell xml2-config --libs)
+endif
+
+ifndef LIBXML2_CFLAGS
+    LIBXML2_CFLAGS := $(shell xml2-config --cflags)
+endif
+
+
+# --------------------------------------------------------------------------
+# These CFLAGS assume a GNU compiler.  For other compilers, write a script
+# which converts these arguments into their equivalent for that particular
+# compiler.
+
+CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
+          -DLIBS3_VER_MAJOR=$(LIBS3_VER_MAJOR) \
+          -DLIBS3_VER_MINOR=$(LIBS3_VER_MINOR)
+
+
+# --------------------------------------------------------------------------
+# Default targets are the library and driver program
+
+all: libs3 s3
+
+
+# --------------------------------------------------------------------------
+# Compile target patterns
+
+obj/%.o: src/%.c
+	 gcc $(CFLAGS) -o $@ -c $<
+
+obj/%.do: src/%.c
+	 gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
+
+
+# --------------------------------------------------------------------------
+# libs3 library targets
+
+LIBS3_SHARED = lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
+
+libs3: $(LIBS3_SHARED) lib/libs3.a
+
+LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
+                 src/object.c src/request.c src/request_context.c \
+                 src/response_headers_handler.c src/service.c \
+                 src/simplexml.c src/util.c
+
+$(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=obj/%.do)
+	gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) -o $@ $^
+
+lib/libs3.a: $(LIBS3_SOURCES:src/%.c=obj/%.o)
+	$(AR) cr $@ $^
+
+
+# --------------------------------------------------------------------------
+# Driver program targets
+
+s3: bin/s3
+
+bin/s3: obj/s3.o lib/libs3.a
+	gcc -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread -lssl
+
+
+# --------------------------------------------------------------------------
+# Test targets
+
+test: bin/testsimplexml
+
+bin/testsimplexml: src/testsimplexml.o lib/libs3.a
+	gcc -o $@ $^ $(LIBXML2_LIBS)
+
+
+# --------------------------------------------------------------------------
+# Clean target
+
+.PHONY: clean
+clean:
+	rm -f obj/*.o obj/*.do $(LIBS3_SHARED) lib/libs3.a \
+              bin/s3 bin/testsimplexml
