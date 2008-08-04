@@ -1108,7 +1108,7 @@ typedef struct S3PutObjectHandler
 
 /**
  * An S3GetObjectHandler defines the callbacks which are made for
- * put_object requests.
+ * get_object requests.
  **/
 typedef struct S3GetObjectHandler
 {

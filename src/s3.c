@@ -50,7 +50,7 @@ extern int fileno(FILE *);
 static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
-static int retriesG = 0;
+static int retriesG = 5;
 
 
 // Environment variables, saved as globals ----------------------------------
@@ -154,6 +154,7 @@ static void usageExit(FILE *out)
 "   -u/--unencrypted     : unencrypted (use HTTP instead of HTTPS)\n"
 "   -s/--show-properties : show response properties on stdout\n"
 "   -r/--retries         : retry retryable failures this number of times\n"
+"                          (default is 5)\n"
 "\n"
 "   Environment:\n"
 "\n"
@@ -627,6 +628,21 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
 }
 
 
+static int should_retry()
+{
+    if (retriesG--) {
+        // Sleep before next retry; start out with a 1 second sleep
+        static int retrySleepInterval = 1;
+        sleep(retrySleepInterval);
+        // Next sleep 1 second longer
+        retrySleepInterval++;
+        return 1;
+    }
+
+    return 0;
+}
+
+
 static struct option longOptionsG[] =
 {
     { "path-style",           no_argument,        0,  'p' },
@@ -797,7 +813,7 @@ static void list_service(int allDetails)
     do {
         S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
                         &listServiceHandler, &data);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         if (!data.headerPrinted) {
@@ -841,7 +857,7 @@ static void test_bucket(int argc, char **argv, int optind)
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
                        bucketName, sizeof(locationConstraint),
                        locationConstraint, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     const char *result;
 
@@ -930,7 +946,7 @@ static void create_bucket(int argc, char **argv, int optind)
         S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG,
                          bucketName, cannedAcl, locationConstraint, 0,
                          &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         printf("Bucket successfully created.\n");
@@ -969,7 +985,7 @@ static void delete_bucket(int argc, char **argv, int optind)
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
                          bucketName, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
         printError();
@@ -1138,7 +1154,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
         do {
             S3_list_bucket(&bucketContext, prefix, data.nextMarker,
                            delimiter, maxkeys, 0, &listBucketHandler, &data);
-        } while (retriesG-- && S3_status_is_retryable(statusG));
+        } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             break;
         }
@@ -1246,7 +1262,7 @@ static void delete_object(int argc, char **argv, int optind)
 
     do {
         S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
         (statusG != S3StatusErrorPreconditionFailed)) {
@@ -1515,7 +1531,7 @@ static void put_object(int argc, char **argv, int optind)
     do {
         S3_put_object(&bucketContext, key, contentLength, &putProperties, 0,
                       &putObjectHandler, &data);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (data.infile) {
         fclose(data.infile);
@@ -1705,7 +1721,7 @@ static void copy_object(int argc, char **argv, int optind)
                        destinationKey, anyPropertiesSet ? &putProperties : 0,
                        &lastModified, sizeof(eTag), eTag, 0,
                        &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         if (lastModified >= 0) {
@@ -1872,7 +1888,7 @@ static void get_object(int argc, char **argv, int optind)
     do {
         S3_get_object(&bucketContext, key, &getConditions, startByte,
                       byteCount, 0, &getObjectHandler, outfile);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         if (outfile != stdout) {
@@ -1941,7 +1957,7 @@ static void head_object(int argc, char **argv, int optind)
 
     do {
         S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
         (statusG != S3StatusErrorPreconditionFailed)) {
@@ -2045,7 +2061,7 @@ void get_acl(int argc, char **argv, int optind)
     do {
         S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName, 
                    &aclGrantCount, aclGrants, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         fprintf(outfile, "OwnerID %s %s\n", ownerId, ownerDisplayName);
@@ -2203,7 +2219,7 @@ void set_acl(int argc, char **argv, int optind)
     do {
         S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
                    aclGrantCount, aclGrants, 0, &responseHandler, 0);
-    } while (retriesG-- && S3_status_is_retryable(statusG));
+    } while (S3_status_is_retryable(statusG) && should_retry());
     
     if (statusG != S3StatusOK) {
         printError();
