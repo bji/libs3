@@ -7,11 +7,16 @@ Group: Development/Tools
 URL: http://sourceforge.net/projects/reallibs3
 Source0: libs3-trunk.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
-Buildrequires: curl-devel
+# Want to include curl dependencies, but older Fedora Core uses curl-devel,
+# and newer Fedora Core uses libcurl-devel ... have to figure out how to
+# handle this problem, but for now, just don't check for any curl libraries
+# Buildrequires: curl-devel
 Buildrequires: libxml2-devel
+Buildrequires: openssl-devel
 Buildrequires: make
-Requires: curl
+# Requires: libcurl
 Requires: libxml2
+Requires: openssl
 
 %define debug_package %{nil}
 
