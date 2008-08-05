@@ -2,16 +2,21 @@
 To install libs3 on a POSIX system (except Microsoft Windows):
 --------------------------------------------------------------
 
-* CFLAGS=-O3 make
+*** For RPM-based systems ***
 
-* cp -a bin/s3 /usr/bin
+rpmbuild -ta <libs3 archive>
 
-* cp -a lib/libs3.* /usr/lib
+for example:
 
-* cp -a inc/libs3.h /usr/include
+rpmbuild -ta libs3-0.3.tar.gz
 
-This is currently very primitive; eventually, support for a variety of systems
-via software packaging will be supported.
+*** For all other systems ***
+
+* CFLAGS=-O3 make install
+
+Note that additionally, the installation directory can be specified:
+
+* CFLAGS=-O3 INSTALL=/usr/local make install
 
 
 To install libs3 on a Microsoft Windows system:

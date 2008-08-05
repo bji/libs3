@@ -39,6 +39,20 @@ LIBS3_VER_MINOR := 3
 
 
 # --------------------------------------------------------------------------
+# BUILD directory
+ifndef BUILD
+    BUILD := build
+endif
+
+
+# --------------------------------------------------------------------------
+# INSTALL directory
+ifndef INSTALL
+    INSTALL := /usr
+endif
+
+
+# --------------------------------------------------------------------------
 # Acquire configuration information for libraries that libs3 depends upon
 
 ifndef CURL_LIBS
@@ -71,53 +85,101 @@ CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
 # --------------------------------------------------------------------------
 # Default targets are the library and driver program
 
-all: libs3 s3
+.PHONY: exported
+exported: libs3 s3 headers
+
+
+# --------------------------------------------------------------------------
+# Install target
+
+.PHONY: install
+install: libs3 s3 headers
+	install -Dps -m ugo+rx $(BUILD)/bin/s3 $(INSTALL)/bin/s3
+	install -Dp -m ugo+r $(BUILD)/include/libs3.h $(INSTALL)/include/libs3.h
+	install -Dps -m ugo+r $(BUILD)/lib/libs3.a $(INSTALL)/lib/libs3.a
+	install -Dps -m ugo+r \
+                $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
+                $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
+	ln -sf libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
+               $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+
+
+# --------------------------------------------------------------------------
+# Uninstall target
+
+.PHONY: uninstall
+uninstall:
+	rm -f $(INSTALL)/bin/s3 \
+              $(INSTALL)/include/libs3.h \
+              $(INSTALL)/lib/libs3.a \
+              $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
+              $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR)
 
 
 # --------------------------------------------------------------------------
 # Compile target patterns
 
-obj/%.o: src/%.c
-	 gcc $(CFLAGS) -o $@ -c $<
+$(BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	gcc $(CFLAGS) -o $@ -c $<
 
-obj/%.do: src/%.c
-	 gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
+$(BUILD)/obj/%.do: src/%.c
+	@mkdir -p $(dir $@)
+	gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
 
 
 # --------------------------------------------------------------------------
 # libs3 library targets
 
-LIBS3_SHARED = lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
+LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
-libs3: $(LIBS3_SHARED) lib/libs3.a
+.PHONY: libs3
+libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
 
 LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
                  src/object.c src/request.c src/request_context.c \
                  src/response_headers_handler.c src/service.c \
                  src/simplexml.c src/util.c
 
-$(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=obj/%.do)
+$(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.do)
+	@mkdir -p $(dir $@)
 	gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) -o $@ $^
 
-lib/libs3.a: $(LIBS3_SOURCES:src/%.c=obj/%.o)
+$(BUILD)/lib/libs3.a: $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.o)
+	@mkdir -p $(dir $@)
 	$(AR) cr $@ $^
 
 
 # --------------------------------------------------------------------------
 # Driver program targets
 
-s3: bin/s3
+.PHONY: s3
+s3: $(BUILD)/bin/s3
 
-bin/s3: obj/s3.o lib/libs3.a
+$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(BUILD)/lib/libs3.a
+	@mkdir -p $(dir $@)
 	gcc -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread -lssl
+
+
+# --------------------------------------------------------------------------
+# libs3 header targets
+
+.PHONY: headers
+headers: $(BUILD)/include/libs3.h
+
+$(BUILD)/include/libs3.h: inc/libs3.h
+	@mkdir -p $(dir $@)
+	cp $< $@
 
 
 # --------------------------------------------------------------------------
 # Test targets
 
-test: bin/testsimplexml
+.PHONY: test
+test: $(BUILD)/bin/testsimplexml
 
-bin/testsimplexml: src/testsimplexml.o lib/libs3.a
+$(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(BUILD)/lib/libs3.a
+	@mkdir -p $(dir $@)
 	gcc -o $@ $^ $(LIBXML2_LIBS)
 
 
@@ -126,5 +188,4 @@ bin/testsimplexml: src/testsimplexml.o lib/libs3.a
 
 .PHONY: clean
 clean:
-	rm -f obj/*.o obj/*.do $(LIBS3_SHARED) lib/libs3.a \
-              bin/s3 bin/testsimplexml
+	rm -rf $(BUILD)

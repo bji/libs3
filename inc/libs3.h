@@ -37,9 +37,9 @@
  * - To provide a simple and straightforward API for accessing all of S3's
  *   functionality
  * - To not require the developer using libs3 to need to know anything about:
- *   - HTTP
- *   - XML
- *   - SSL
+ *     - HTTP
+ *     - XML
+ *     - SSL
  *   In other words, this API is meant to stand on its own, without requiring
  *   any implicit knowledge of how S3 services are accessed using HTTP
  *   protocols.
