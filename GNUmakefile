@@ -82,6 +82,10 @@ endif
 # which converts these arguments into their equivalent for that particular
 # compiler.
 
+ifndef CFLAGS
+    CFLAGS = -O3
+endif
+
 CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=$(LIBS3_VER_MAJOR) \
           -DLIBS3_VER_MINOR=$(LIBS3_VER_MINOR)
@@ -125,12 +129,13 @@ uninstall:
 # --------------------------------------------------------------------------
 # Debian package target
 
-DEBARCH = $(shell dpkg-architecture | grep ^DEB_BUILD_ARCH= | cut -d '=' -f 2)
-DEBPKG = $(BUILD)/pkg/libs3_$(LIBS3_VER)_$(DEBARCH).deb
+DEBPKG = $(BUILD)/pkg/libs3_$(LIBS3_VER).deb
 
 .PHONY: deb
 deb: $(DEBPKG)
 
+$(DEBPKG): DEBARCH = $(shell dpkg-architecture | grep ^DEB_BUILD_ARCH= | \
+                       cut -d '=' -f 2)
 $(DEBPKG): exported $(BUILD)/deb/DEBIAN/control $(BUILD)/deb/DEBIAN/shlibs \
            $(BUILD)/deb/DEBIAN/postinst \
            $(BUILD)/deb/usr/share/doc/libs3/changelog.gz \
@@ -139,6 +144,7 @@ $(DEBPKG): exported $(BUILD)/deb/DEBIAN/control $(BUILD)/deb/DEBIAN/shlibs \
 	DESTDIR=$(BUILD)/deb/usr $(MAKE) install
 	@mkdir -p $(dir $@)
 	fakeroot dpkg-deb -b $(BUILD)/deb $@
+	mv $@ $(BUILD)/pkg/libs3_$(LIBS3_VER)_$(DEBARCH).deb
 
 $(BUILD)/deb/DEBIAN/control: debian/control
 	@mkdir -p $(dir $@)

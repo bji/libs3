@@ -13,18 +13,19 @@ rpmbuild -ta libs3-0.3.tar.gz
 
 *** For dpkg-based systems (Debian, Ubuntu, etc) ***
 
-* CFLAGS=-O3 make deb
+* make deb
 
 This will produce a Debian package in the build/pkg directory.
 
 
 *** For all other systems ***
 
-* CFLAGS=-O3 make install
+* make install
 
-Note that additionally, the installation directory can be specified:
+Note that additionally, the installation directory can be specified (it
+defaults to /usr):
 
-* CFLAGS=-O3 DESTDIR=/usr/local make install
+* DESTDIR=/usr/local make install
 
 
 To install libs3 on a Microsoft Windows system:

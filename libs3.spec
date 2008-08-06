@@ -24,30 +24,29 @@ Requires: openssl
 This library provides an API for using Amazon's S3 service (see
 http://s3.amazonaws.com).  Its design goals are:
 
-- To provide a simple and straightforward API for accessing all of S3's
-  functionality
-- To not require the developer using libs3 to need to know anything about:
-    - HTTP
-    - XML
-    - SSL
-  In other words, this API is meant to stand on its own, without requiring
-  any implicit knowledge of how S3 services are accessed using HTTP
-  protocols.
-- To be usable from multithreaded code
-- To be usable by code which wants to process multiple S3 requests
-  simultaneously from a single thread
-- To be usable in the simple, straightforward way using sequentialized
-  blocking requests
+ - To provide a simple and straightforward API for accessing all of S3's
+   functionality
+ - To not require the developer using libs3 to need to know anything about:
+     - HTTP
+     - XML
+     - SSL
+   In other words, this API is meant to stand on its own, without requiring
+   any implicit knowledge of how S3 services are accessed using HTTP
+   protocols.
+ - To be usable from multithreaded code
+ - To be usable by code which wants to process multiple S3 requests
+   simultaneously from a single thread
+ - To be usable in the simple, straightforward way using sequentialized
+   blocking requests
 
 %prep
 %setup -q
 
 %build
-CFLAGS=-O3 BUILD=$RPM_BUILD_ROOT/build make exported
+BUILD=$RPM_BUILD_ROOT/build make exported
 
 %install
 BUILD=$RPM_BUILD_ROOT/build DESTDIR=$RPM_BUILD_ROOT/usr make install
-rm -rf $RPM_BUILD_ROOT/build
 
 %clean
 rm -rf $RPM_BUILD_ROOT
