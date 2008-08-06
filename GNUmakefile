@@ -8,6 +8,10 @@
 # terms of the GNU General Public License as published by the Free Software
 # Foundation, version 3 of the License.
 #
+# In addition, as a special exception, the copyright holders give
+# permission to link the code of this library and its programs with the
+# OpenSSL library, and distribute linked combinations including the two.
+#
 # libs3 is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 # FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
@@ -36,6 +40,7 @@
 
 LIBS3_VER_MAJOR := 0
 LIBS3_VER_MINOR := 3
+LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
 # --------------------------------------------------------------------------
@@ -46,9 +51,9 @@ endif
 
 
 # --------------------------------------------------------------------------
-# INSTALL directory
-ifndef INSTALL
-    INSTALL := /usr
+# DESTDIR directory
+ifndef DESTDIR
+    DESTDIR := /usr
 endif
 
 
@@ -94,14 +99,14 @@ exported: libs3 s3 headers
 
 .PHONY: install
 install: libs3 s3 headers
-	install -Dps -m ugo+rx $(BUILD)/bin/s3 $(INSTALL)/bin/s3
-	install -Dp -m ugo+r $(BUILD)/include/libs3.h $(INSTALL)/include/libs3.h
-	install -Dps -m ugo+r $(BUILD)/lib/libs3.a $(INSTALL)/lib/libs3.a
-	install -Dps -m ugo+r \
-                $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
-                $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
-	ln -sf libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
-               $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 $(DESTDIR)/bin/s3
+	install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h $(DESTDIR)/include/libs3.h
+	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.a $(DESTDIR)/lib/libs3.a
+	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so \
+               $(DESTDIR)/lib/libs3.so
+	ln -sf libs3.so $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	ln -sf libs3.so.$(LIBS3_VER_MAJOR) \
+               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
 
 
 # --------------------------------------------------------------------------
@@ -109,11 +114,63 @@ install: libs3 s3 headers
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(INSTALL)/bin/s3 \
-              $(INSTALL)/include/libs3.h \
-              $(INSTALL)/lib/libs3.a \
-              $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR) \
-              $(INSTALL)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	rm -f $(DESTDIR)/bin/s3 \
+              $(DESTDIR)/include/libs3.h \
+              $(DESTDIR)/lib/libs3.a \
+              $(DESTDIR)/lib/libs3.so \
+              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
+              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER) \
+
+
+# --------------------------------------------------------------------------
+# Debian package target
+
+DEBARCH = $(shell dpkg-architecture | grep ^DEB_BUILD_ARCH= | cut -d '=' -f 2)
+DEBPKG = $(BUILD)/pkg/libs3_$(LIBS3_VER)_$(DEBARCH).deb
+
+.PHONY: deb
+deb: $(DEBPKG)
+
+$(DEBPKG): exported $(BUILD)/deb/DEBIAN/control $(BUILD)/deb/DEBIAN/shlibs \
+           $(BUILD)/deb/DEBIAN/postinst \
+           $(BUILD)/deb/usr/share/doc/libs3/changelog.gz \
+           $(BUILD)/deb/usr/share/doc/libs3/changelog.Debian.gz \
+           $(BUILD)/deb/usr/share/doc/libs3/copyright
+	DESTDIR=$(BUILD)/deb/usr $(MAKE) install
+	@mkdir -p $(dir $@)
+	fakeroot dpkg-deb -b $(BUILD)/deb $@
+
+$(BUILD)/deb/DEBIAN/control: debian/control
+	@mkdir -p $(dir $@)
+	echo -n "Depends: " > $@
+	dpkg-shlibdeps -O $(BUILD)/bin/s3 | cut -d '=' -f 2- >> $@
+	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
+            < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' | \
+            grep -v ^Source: >> $@
+
+$(BUILD)/deb/DEBIAN/shlibs: $(BUILD)/bin/s3
+	echo -n "libs3 $(LIBS3_VER_MAJOR) libs3 " > $@
+	echo "(>= $(LIBS3_VER))" >> $@
+
+$(BUILD)/deb/DEBIAN/postinst: debian/postinst
+	@mkdir -p $(dir $@)
+	cp $< $@
+
+$(BUILD)/deb/usr/share/doc/libs3/copyright: LICENSE
+	@mkdir -p $(dir $@)
+	cp $< $@
+	@echo >> $@
+	@echo -n "An alternate location for the GNU General Public " >> $@
+	@echo "License version 3 on Debian" >> $@
+	@echo "systems is /usr/share/common-licenses/GPL-3." >> $@
+
+$(BUILD)/deb/usr/share/doc/libs3/changelog.gz: debian/changelog
+	@mkdir -p $(dir $@)
+	gzip --best -c $< > $@
+
+$(BUILD)/deb/usr/share/doc/libs3/changelog.Debian.gz: debian/changelog.Debian
+	@mkdir -p $(dir $@)
+	gzip --best -c $< > $@
 
 
 # --------------------------------------------------------------------------
@@ -131,7 +188,7 @@ $(BUILD)/obj/%.do: src/%.c
 # --------------------------------------------------------------------------
 # libs3 library targets
 
-LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
+LIBS3_SHARED = $(BUILD)/lib/libs3.so
 
 .PHONY: libs3
 libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
@@ -158,7 +215,7 @@ s3: $(BUILD)/bin/s3
 
 $(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(BUILD)/lib/libs3.a
 	@mkdir -p $(dir $@)
-	gcc -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread -lssl
+	gcc -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS)
 
 
 # --------------------------------------------------------------------------

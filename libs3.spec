@@ -46,7 +46,7 @@ http://s3.amazonaws.com).  Its design goals are:
 CFLAGS=-O3 BUILD=$RPM_BUILD_ROOT/build make exported
 
 %install
-BUILD=$RPM_BUILD_ROOT/build INSTALL=$RPM_BUILD_ROOT/usr make install
+BUILD=$RPM_BUILD_ROOT/build DESTDIR=$RPM_BUILD_ROOT/usr make install
 rm -rf $RPM_BUILD_ROOT/build
 
 %clean
