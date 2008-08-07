@@ -29,8 +29,8 @@
  * calls to libs3 functions, and prints the results.
  **/
 
+#include <ctype.h>
 #include <getopt.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1206,7 +1206,8 @@ static void list(int argc, char **argv, int optind)
         else if (!strncmp(param, ALL_DETAILS_PREFIX,
                           ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
-            if (!strcasecmp(ad, "true") || !strcasecmp(ad, "yes") ||
+            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") || 
+                !strcmp(ad, "yes") || !strcmp(ad, "YES") ||
                 !strcmp(ad, "1")) {
                 allDetails = 1;
             }
@@ -1436,7 +1437,8 @@ static void put_object(int argc, char **argv, int optind)
         }
         else if (!strncmp(param, NO_STATUS_PREFIX, NO_STATUS_PREFIX_LEN)) {
             const char *ns = &(param[NO_STATUS_PREFIX_LEN]);
-            if (!strcasecmp(ns, "true") || !strcasecmp(ns, "yes") ||
+            if (!strcmp(ns, "true") || !strcmp(ns, "TRUE") || 
+                !strcmp(ns, "yes") || !strcmp(ns, "YES") ||
                 !strcmp(ns, "1")) {
                 noStatus = 1;
             }

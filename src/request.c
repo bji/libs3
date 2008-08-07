@@ -832,6 +832,11 @@ static S3Status setup_curl(Request *request,
     // Don't use Curl's 'netrc' feature
     curl_easy_setopt_safe(CURLOPT_NETRC, CURL_NETRC_IGNORED);
 
+    // Don't verify S3's certificate, there are known to be issues with
+    // them sometimes
+    // xxx todo - support an option for verifying the S3 CA (default false)
+    curl_easy_setopt_safe(CURLOPT_SSL_VERIFYPEER, 0);
+
     // Follow any redirection directives that S3 sends
     curl_easy_setopt_safe(CURLOPT_FOLLOWLOCATION, 1);
 
@@ -1081,7 +1086,7 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
 
     // These will hold the computed values
     RequestComputedValues computed;
-    
+
     // Validate the bucket name
     if (params->bucketName && 
         ((status = S3_validate_bucket_name
@@ -1246,6 +1251,9 @@ S3Status request_curl_code_to_status(CURLcode code)
         return S3StatusConnectionFailed;
     case CURLE_PARTIAL_FILE:
         return S3StatusOK;
+    case CURLE_PEER_FAILED_VERIFICATION:
+    case CURLE_SSL_CACERT:
+        return S3StatusServerFailedVerification;
     default:
         return S3StatusInternalError;
     }

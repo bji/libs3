@@ -31,7 +31,6 @@
 #ifndef OPENSSL_THREADS
 #error "Threading support required in OpenSSL library, but not provided"
 #endif
-#include <pthread.h>
 #include <string.h>
 #include "request.h"
 #include "simplexml.h"
@@ -234,6 +233,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(AclXmlDocumentTooLarge);
         handlecase(NameLookupError);
         handlecase(FailedToConnect);
+        handlecase(ServerFailedVerification);
         handlecase(ConnectionFailed);
         handlecase(AbortedByCallback);
         handlecase(ErrorAccessDenied);

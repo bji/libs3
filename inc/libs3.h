@@ -241,6 +241,7 @@ typedef enum
     S3StatusAclXmlDocumentTooLarge                          ,
     S3StatusNameLookupError                                 ,
     S3StatusFailedToConnect                                 ,
+    S3StatusServerFailedVerification                        ,
     S3StatusConnectionFailed                                ,
     S3StatusAbortedByCallback                               ,
     
