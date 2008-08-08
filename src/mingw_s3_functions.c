@@ -1,5 +1,5 @@
 /** **************************************************************************
- * mingw_functions.c
+ * mingw_s3_functions.c
  * 
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
  * 
@@ -24,55 +24,12 @@
  *
  ************************************************************************** **/
 
-#include <sys/utsname.h>
-
-int uname(struct utsname *u)
+int setenv(const char *a, const char *b, int c)
 {
-    OSVERSIONINFO info;
-    info.dwOSVersionInfoSize = sizeof(info);
+    return SetEnvironmentVariable(a, b);
+}
 
-    if (!GetVersionEx(&info)) {
-        return -1;
-    }
-
-    u->machine = "";
-
-    switch (info.dwMajorVersion) {
-    case 4:
-        switch (info.dwMinorVersion) {
-        case 0:
-            u->sysname = "Microsoft Windows NT 4.0";
-            break;
-        case 10:
-            u->sysname = "Microsoft Windows 98";
-            break;
-        case 90:
-            u->sysname = "Microsoft Windows Me";
-            break;
-        default:
-            return -1;
-        }
-        break;
-
-    case 5:
-        switch (info.dwMinorVersion) {
-        case 0:
-            u->sysname = "Microsoft Windows 2000";
-            break;
-        case 1:
-            u->sysname = "Microsoft Windows XP";
-            break;
-        case 2:
-            u->sysname = "Microsoft Server 2003";
-            break;
-        default:
-            return -1;
-        }
-        break;
-
-    default:
-        return -1;
-    }
-
-    return 0;
+int unsetenv(const char *a)
+{
+    return SetEnvironmentVariable(a, 0);
 }

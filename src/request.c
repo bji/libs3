@@ -1053,12 +1053,12 @@ S3Status request_api_initialize(const char *userAgentInfo)
         platform[sizeof(platform) - 1] = 0;
     }
     else {
-        snprintf(platform, sizeof(platform), "%s %s", utsn.sysname, 
-                 utsn.machine);
+        snprintf(platform, sizeof(platform), "%s%s%s", utsn.sysname, 
+                 utsn.machine[0] ? " " : "", utsn.machine);
     }
 
     snprintf(userAgentG, sizeof(userAgentG), 
-             "Mozilla/4.0 (Compatible; %s; libs3 %d.%d; %s)",
+             "Mozilla/4.0 (Compatible; %s; libs3 %s.%s; %s)",
              userAgentInfo, LIBS3_VER_MAJOR, LIBS3_VER_MINOR, platform);
     
     return S3StatusOK;

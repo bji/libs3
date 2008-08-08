@@ -41,6 +41,11 @@
 #include <unistd.h>
 #include "libs3.h"
 
+// Some Windows stuff
+#ifndef FOPEN_EXTRA_FLAGS
+#define FOPEN_EXTRA_FLAGS ""
+#endif
+
 
 // Something is weird with glibc ... setenv/unsetenv/ftruncate are not defined
 // in stdlib.h as they should be.  And fileno is not in stdio.h
@@ -1312,8 +1317,10 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     data->contentLength -= ret;
 
     if (data->contentLength && !data->noStatus) {
-        printf("%llu bytes remaining (%d%% complete) ...\n", 
-               data->contentLength,
+        // Avoid a weird bug in MingW, which won't print the second integer
+        // value properly when it's in the same call, so print separately
+        printf("%llu bytes remaining ", data->contentLength);
+        printf("(%d%% complete) ...\n",
                (int) (((data->originalContentLength - 
                         data->contentLength) * 100) /
                       data->originalContentLength));
@@ -1469,7 +1476,7 @@ static void put_object(int argc, char **argv, int optind)
             contentLength = statbuf.st_size;
         }
         // Open the file
-        if (!(data.infile = fopen(filename, "r"))) {
+        if (!(data.infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
             fprintf(stderr, "\nERROR: Failed to open input file %s: ",
                     filename);
             perror(0);
@@ -1843,13 +1850,13 @@ static void get_object(int argc, char **argv, int optind)
         // Stat the file, and if it doesn't exist, open it in w mode
         struct stat buf;
         if (stat(filename, &buf) == -1) {
-            outfile = fopen(filename, "w");
+            outfile = fopen(filename, "w" FOPEN_EXTRA_FLAGS);
         }
         else {
             // Open in r+ so that we don't truncate the file, just in case
             // there is an error and we write no bytes, we leave the file
             // unmodified
-            outfile = fopen(filename, "r+");
+            outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
         }
         
         if (!outfile) {
@@ -2019,13 +2026,13 @@ void get_acl(int argc, char **argv, int optind)
         // Stat the file, and if it doesn't exist, open it in w mode
         struct stat buf;
         if (stat(filename, &buf) == -1) {
-            outfile = fopen(filename, "w");
+            outfile = fopen(filename, "w" FOPEN_EXTRA_FLAGS);
         }
         else {
             // Open in r+ so that we don't truncate the file, just in case
             // there is an error and we write no bytes, we leave the file
             // unmodified
-            outfile = fopen(filename, "r+");
+            outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
         }
         
         if (!outfile) {
@@ -2179,7 +2186,7 @@ void set_acl(int argc, char **argv, int optind)
     FILE *infile;
 
     if (filename) {
-        if (!(infile = fopen(filename, "r"))) {
+        if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
             fprintf(stderr, "\nERROR: Failed to open input file %s: ",
                     filename);
             perror(0);
