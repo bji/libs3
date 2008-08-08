@@ -47,6 +47,7 @@ BUILD=$RPM_BUILD_ROOT/build make exported
 
 %install
 BUILD=$RPM_BUILD_ROOT/build DESTDIR=$RPM_BUILD_ROOT/usr make install
+rm -rf $RPM_BUILD_ROOT/build
 
 %clean
 rm -rf $RPM_BUILD_ROOT
