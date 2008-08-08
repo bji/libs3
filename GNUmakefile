@@ -154,7 +154,7 @@ $(BUILD)/deb/DEBIAN/control: debian/control
             < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' | \
             grep -v ^Source: >> $@
 
-$(BUILD)/deb/DEBIAN/shlibs: $(BUILD)/bin/s3
+$(BUILD)/deb/DEBIAN/shlibs:
 	echo -n "libs3 $(LIBS3_VER_MAJOR) libs3 " > $@
 	echo "(>= $(LIBS3_VER))" >> $@
 

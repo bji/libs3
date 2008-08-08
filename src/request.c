@@ -1251,7 +1251,6 @@ S3Status request_curl_code_to_status(CURLcode code)
         return S3StatusConnectionFailed;
     case CURLE_PARTIAL_FILE:
         return S3StatusOK;
-    case CURLE_PEER_FAILED_VERIFICATION:
     case CURLE_SSL_CACERT:
         return S3StatusServerFailedVerification;
     default:
