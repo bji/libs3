@@ -143,17 +143,23 @@ $(DEBPKG): exported $(BUILD)/deb/DEBIAN/control $(BUILD)/deb/DEBIAN/shlibs \
            $(BUILD)/deb/usr/share/doc/libs3/changelog.Debian.gz \
            $(BUILD)/deb/usr/share/doc/libs3/copyright
 	DESTDIR=$(BUILD)/deb/usr $(MAKE) install
+	rm -rf $(BUILD)/deb/usr/include
+	rm -f $(BUILD)/deb/usr/lib/libs3.a
 	@mkdir -p $(dir $@)
 	fakeroot dpkg-deb -b $(BUILD)/deb $@
 	mv $@ $(BUILD)/pkg/libs3_$(LIBS3_VER)_$(DEBARCH).deb
 
+$(DEBDEVPKG): DEBARCH = $(shell dpkg-architecture | grep ^DEB_BUILD_ARCH= | \
+                          cut -d '=' -f 2)
 $(DEBDEVPKG): exported $(BUILD)/deb-dev/DEBIAN/control \
-           $(BUILD)/deb-dev/usr/share/doc/libs3/changelog.gz \
-           $(BUILD)/deb-dev/usr/share/doc/libs3/changelog.Debian.gz \
-           $(BUILD)/deb-dev/usr/share/doc/libs3/copyright
+           $(BUILD)/deb-dev/usr/share/doc/libs3-dev/changelog.gz \
+           $(BUILD)/deb-dev/usr/share/doc/libs3-dev/changelog.Debian.gz \
+           $(BUILD)/deb-dev/usr/share/doc/libs3-dev/copyright
 	DESTDIR=$(BUILD)/deb-dev/usr $(MAKE) install
+	rm -rf $(BUILD)/deb-dev/usr/bin
+	rm -f $(BUILD)/deb-dev/usr/lib/libs3.so*
 	@mkdir -p $(dir $@)
-	fakeroot dpkg-deb -b $(BUILD)/deb $@
+	fakeroot dpkg-deb -b $(BUILD)/deb-dev $@
 	mv $@ $(BUILD)/pkg/libs3-dev_$(LIBS3_VER)_$(DEBARCH).deb
 
 $(BUILD)/deb/DEBIAN/control: debian/control
@@ -166,8 +172,6 @@ $(BUILD)/deb/DEBIAN/control: debian/control
 
 $(BUILD)/deb-dev/DEBIAN/control: debian/control.dev
 	@mkdir -p $(dir $@)
-	echo -n "Depends: " > $@
-	dpkg-shlibdeps -O $(BUILD)/bin/s3 | cut -d '=' -f 2- >> $@
 	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
             < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' >> $@
 
@@ -187,7 +191,7 @@ $(BUILD)/deb/usr/share/doc/libs3/copyright: LICENSE
 	@echo "License version 3 on Debian" >> $@
 	@echo "systems is /usr/share/common-licenses/GPL-3." >> $@
 
-$(BUILD)/deb-dev/usr/share/doc/libs3/copyright: LICENSE
+$(BUILD)/deb-dev/usr/share/doc/libs3-dev/copyright: LICENSE
 	@mkdir -p $(dir $@)
 	cp $< $@
 	@echo >> $@
@@ -199,7 +203,7 @@ $(BUILD)/deb/usr/share/doc/libs3/changelog.gz: debian/changelog
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@
 
-$(BUILD)/deb-dev/usr/share/doc/libs3/changelog.gz: debian/changelog
+$(BUILD)/deb-dev/usr/share/doc/libs3-dev/changelog.gz: debian/changelog
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@
 
@@ -207,7 +211,7 @@ $(BUILD)/deb/usr/share/doc/libs3/changelog.Debian.gz: debian/changelog.Debian
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@
 
-$(BUILD)/deb-dev/usr/share/doc/libs3/changelog.Debian.gz: \
+$(BUILD)/deb-dev/usr/share/doc/libs3-dev/changelog.Debian.gz: \
     debian/changelog.Debian
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@

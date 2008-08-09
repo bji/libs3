@@ -7,6 +7,6 @@ Priority: extra
 Maintainer: Bryan Ischo <bryan@ischo.com>
 Homepage: http://reallibs3.svn.sourceforge.net
 Description: C Library and Tools for Amazon S3 Access
-This package includes the libs3 shared object library, needed to run
-applications compiled against libs3, and additionally contains the s3
-utility for accessing Amazon S3.
+ This package includes the libs3 shared object library, needed to run
+ applications compiled against libs3, and additionally contains the s3
+ utility for accessing Amazon S3.

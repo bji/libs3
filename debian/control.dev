@@ -1,9 +1,9 @@
 Package: libs3-dev
 Version: LIBS3_VERSION
 Architecture: DEBIAN_ARCHITECTURE
-Section: devel
+Section: libdevel
 Priority: extra
-Requires: libs3 (>= LIBS3_VERSION)
+Depends: libs3 (>= LIBS3_VERSION)
 Maintainer: Bryan Ischo <bryan@ischo.com>
 Homepage: http://reallibs3.svn.sourceforge.net
 Description: C Development Library for Amazon S3 Access
