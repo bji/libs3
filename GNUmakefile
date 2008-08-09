@@ -130,9 +130,10 @@ uninstall:
 # Debian package target
 
 DEBPKG = $(BUILD)/pkg/libs3_$(LIBS3_VER).deb
+DEBDEVPKG = $(BUILD)/pkg/libs3-dev_$(LIBS3_VER).deb
 
 .PHONY: deb
-deb: $(DEBPKG)
+deb: $(DEBPKG) $(DEBDEVPKG)
 
 $(DEBPKG): DEBARCH = $(shell dpkg-architecture | grep ^DEB_BUILD_ARCH= | \
                        cut -d '=' -f 2)
@@ -146,6 +147,15 @@ $(DEBPKG): exported $(BUILD)/deb/DEBIAN/control $(BUILD)/deb/DEBIAN/shlibs \
 	fakeroot dpkg-deb -b $(BUILD)/deb $@
 	mv $@ $(BUILD)/pkg/libs3_$(LIBS3_VER)_$(DEBARCH).deb
 
+$(DEBDEVPKG): exported $(BUILD)/deb-dev/DEBIAN/control \
+           $(BUILD)/deb-dev/usr/share/doc/libs3/changelog.gz \
+           $(BUILD)/deb-dev/usr/share/doc/libs3/changelog.Debian.gz \
+           $(BUILD)/deb-dev/usr/share/doc/libs3/copyright
+	DESTDIR=$(BUILD)/deb-dev/usr $(MAKE) install
+	@mkdir -p $(dir $@)
+	fakeroot dpkg-deb -b $(BUILD)/deb $@
+	mv $@ $(BUILD)/pkg/libs3-dev_$(LIBS3_VER)_$(DEBARCH).deb
+
 $(BUILD)/deb/DEBIAN/control: debian/control
 	@mkdir -p $(dir $@)
 	echo -n "Depends: " > $@
@@ -153,6 +163,13 @@ $(BUILD)/deb/DEBIAN/control: debian/control
 	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
             < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' | \
             grep -v ^Source: >> $@
+
+$(BUILD)/deb-dev/DEBIAN/control: debian/control.dev
+	@mkdir -p $(dir $@)
+	echo -n "Depends: " > $@
+	dpkg-shlibdeps -O $(BUILD)/bin/s3 | cut -d '=' -f 2- >> $@
+	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
+            < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' >> $@
 
 $(BUILD)/deb/DEBIAN/shlibs:
 	echo -n "libs3 $(LIBS3_VER_MAJOR) libs3 " > $@
@@ -170,11 +187,28 @@ $(BUILD)/deb/usr/share/doc/libs3/copyright: LICENSE
 	@echo "License version 3 on Debian" >> $@
 	@echo "systems is /usr/share/common-licenses/GPL-3." >> $@
 
+$(BUILD)/deb-dev/usr/share/doc/libs3/copyright: LICENSE
+	@mkdir -p $(dir $@)
+	cp $< $@
+	@echo >> $@
+	@echo -n "An alternate location for the GNU General Public " >> $@
+	@echo "License version 3 on Debian" >> $@
+	@echo "systems is /usr/share/common-licenses/GPL-3." >> $@
+
 $(BUILD)/deb/usr/share/doc/libs3/changelog.gz: debian/changelog
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@
 
+$(BUILD)/deb-dev/usr/share/doc/libs3/changelog.gz: debian/changelog
+	@mkdir -p $(dir $@)
+	gzip --best -c $< > $@
+
 $(BUILD)/deb/usr/share/doc/libs3/changelog.Debian.gz: debian/changelog.Debian
+	@mkdir -p $(dir $@)
+	gzip --best -c $< > $@
+
+$(BUILD)/deb-dev/usr/share/doc/libs3/changelog.Debian.gz: \
+    debian/changelog.Debian
 	@mkdir -p $(dir $@)
 	gzip --best -c $< > $@
 

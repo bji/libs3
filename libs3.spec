@@ -1,9 +1,9 @@
-Summary: C Library for Amazon S3 Access
+Summary: C Library and Tools for Amazon S3 Access
 Name: libs3
 Version: trunk
 Release: 1
 License: GPL
-Group: Development/Tools
+Group: Networking/Utilities
 URL: http://sourceforge.net/projects/reallibs3
 Source0: libs3-trunk.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -21,6 +21,16 @@ Requires: openssl
 %define debug_package %{nil}
 
 %description
+This package includes the libs3 shared object library, needed to run
+applications compiled against libs3, and additionally contains the s3
+utility for accessing Amazon S3.
+
+%package devel
+Summary: Headers and documentation for libs3
+Group: Development/Libraries
+Requires: %{name} = %{version}-%{release}
+
+%description devel
 This library provides an API for using Amazon's S3 service (see
 http://s3.amazonaws.com).  Its design goals are:
 
@@ -39,6 +49,7 @@ http://s3.amazonaws.com).  Its design goals are:
  - To be usable in the simple, straightforward way using sequentialized
    blocking requests
 
+
 %prep
 %setup -q
 
@@ -54,10 +65,17 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
-/usr/bin/*
-/usr/include/*
-/usr/lib/*
+/usr/bin/s3
+/usr/lib/libs3.so*
+
+%files devel
+%defattr(-,root,root,-)
+/usr/include/libs3.h
+/usr/lib/libs3.a
 
 %changelog
+* Sat Aug 09 2008  <bryan@ischo,com> Bryan Ischo
+- Split into regular and devel packages.
+
 * Tue Aug 05 2008  <bryan@ischo,com> Bryan Ischo
 - Initial build.

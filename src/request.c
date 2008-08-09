@@ -730,7 +730,8 @@ static S3Status compose_auth_header(const RequestParams *params,
 
 
 // Compose the URI to use for the request given the request parameters
-static S3Status compose_uri(const RequestParams *params, Request *request)
+static S3Status compose_uri(Request *request, const RequestParams *params, 
+                            const RequestComputedValues *values)
 {
     int len = 0;
 
@@ -761,7 +762,7 @@ static S3Status compose_uri(const RequestParams *params, Request *request)
     uri_append("%s", "/");
 
     if (params->key && params->key[0]) {
-        uri_append("%s", params->key);
+        uri_append("%s", values->urlEncodedKey);
     }
 
     if (params->subResource && params->subResource[0]) {
@@ -970,7 +971,7 @@ static S3Status request_get(const RequestParams *params,
     request->headers = 0;
 
     // Compute the URL
-    if ((status = compose_uri(params, request)) != S3StatusOK) {
+    if ((status = compose_uri(request, params, values)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
         free(request);
         return status;
