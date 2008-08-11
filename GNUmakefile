@@ -90,9 +90,18 @@ CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\"
 
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS)
+
 
 # --------------------------------------------------------------------------
-# Default targets are the library and driver program
+# Default targets are everything
+
+.PHONY: all
+all: exported test
+
+
+# --------------------------------------------------------------------------
+# Exported targets are the library and driver program
 
 .PHONY: exported
 exported: libs3 s3 headers
@@ -104,13 +113,12 @@ exported: libs3 s3 headers
 .PHONY: install
 install: libs3 s3 headers
 	install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 $(DESTDIR)/bin/s3
-	install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h $(DESTDIR)/include/libs3.h
+	install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
+               $(DESTDIR)/include/libs3.h
 	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.a $(DESTDIR)/lib/libs3.a
-	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so \
-               $(DESTDIR)/lib/libs3.so
-	ln -sf libs3.so $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
-	ln -sf libs3.so.$(LIBS3_VER_MAJOR) \
+	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
                $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
+	ln -sf libs3.so.$(LIBS3_VER) $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
 
 
 # --------------------------------------------------------------------------
@@ -121,7 +129,6 @@ uninstall:
 	rm -f $(DESTDIR)/bin/s3 \
               $(DESTDIR)/include/libs3.h \
               $(DESTDIR)/lib/libs3.a \
-              $(DESTDIR)/lib/libs3.so \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER) \
 
@@ -232,10 +239,10 @@ $(BUILD)/obj/%.do: src/%.c
 # --------------------------------------------------------------------------
 # libs3 library targets
 
-LIBS3_SHARED = $(BUILD)/lib/libs3.so
+LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR)
 
 .PHONY: libs3
-libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
+libs3: $(LIBS3_SHARED) $(LIBS3_SHARED_MAJOR) $(BUILD)/lib/libs3.a
 
 LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
                  src/object.c src/request.c src/request_context.c \
@@ -244,7 +251,8 @@ LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.do)
 	@mkdir -p $(dir $@)
-	gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) -o $@ $^
+	gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) -o $@ $^ \
+            $(S3_LIBS) $(LDFLAGS)
 
 $(BUILD)/lib/libs3.a: $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.o)
 	@mkdir -p $(dir $@)
@@ -257,9 +265,9 @@ $(BUILD)/lib/libs3.a: $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.o)
 .PHONY: s3
 s3: $(BUILD)/bin/s3
 
-$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(BUILD)/lib/libs3.a
+$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(LIBS3_SHARED)
 	@mkdir -p $(dir $@)
-	gcc -o $@ $^ $(CURL_LIBS) $(LIBXML2_LIBS)
+	gcc -o $@ $^ $(LDFLAGS)
 
 
 # --------------------------------------------------------------------------

@@ -102,7 +102,8 @@
  *    not be passed to any other libs3 function by any other thread until the
  *    function returns.
  * 3. All functions may be called simultaneously by multiple threads as long
- *    as (1) and (2) are observed.
+ *    as (1) and (2) are observed, EXCEPT for S3_initialize(), which must be
+ *    called from one thread at a time only.
  * 4. All callbacks will be made in the thread of the caller of the function
  *    which invoked them, so the caller of all libs3 functions should not hold
  *    locks that it would try to re-acquire in a callback, as this may
@@ -179,6 +180,20 @@
  * libs3 supports in an ACL grantee user display name.
  **/
 #define S3_MAX_GRANTEE_DISPLAY_NAME_SIZE   128
+
+
+/**
+ * This constant is used by the S3_initialize() function, to specify that
+ * the winsock library should be initialized by libs3; only relevent on 
+ * Microsoft Windows platforms.
+ **/
+#define S3_INIT_WINSOCK                    1
+
+/**
+ * This convenience constant is used by the S3_initialize() function to
+ * indicate that alllibraries required by libs3 should be initialized.
+ **/
+#define S3_INIT_ALL                        (S3_INIT_WINSOCK)
 
 
 /** **************************************************************************
@@ -1139,8 +1154,10 @@ typedef struct S3GetObjectHandler
 
 /**
  * Initializes libs3 for use.  This function must be called before any other
- * libs3 function is called.  It must be called once and only once before
- * S3_deinitialize() is called.
+ * libs3 function is called.  It may be called multiple times, with the same
+ * effect as calling it once, as long as S3_deinitialize() is called an
+ * equal number of times when the program has finished.  This function is NOT
+ * thread-safe and must only be called by one thread at a time.
  *
  * @param userAgentInfo is a string that will be included in the User-Agent
  *        header of every request made to the S3 service.  You may provide
@@ -1162,8 +1179,24 @@ typedef struct S3GetObjectHandler
  * @param mutexDestroyCallback provides the callback for the S3 library to
  *        call to destroy a mutex, or NULL if the caller is not a
  *        multithreaded program.
+ * @param flags is a bitmask of some combination of S3_INIT_XXX flag, or
+ *        S3_INIT_ALL, indicating which of the libraries that libs3 depends
+ *        upon should be initialized by S3_initialize().  Only if your program
+ *        initializes one of these dependency libraries itself should anything
+ *        other than S3_INIT_ALL be passed in for this bitmask.
+ *
+ *        You should pass S3_INIT_WINSOCK if and only if your application does
+ *        not initialize winsock elsewhere.  On non-Microsoft Windows
+ *        platforms it has no effect.
+ *
+ *        As a convenience, the macro S3_INIT_ALL is provided, which will do
+ *        all necessary initialization; however, be warned that things may
+ *        break if your application re-initializes the dependent libraries
+ *        later.
  * @return One of:
  *         S3StatusOK on success
+ *         S3StatusInternalError if dependent libraries could not be
+ *             initialized
  *         S3StatusOutOfMemory on failure due to out of memory
  *         S3StatusFailedToCreateMutex if the mutex creation function returned
  *             NULL for one of the mutexes that are created during the
@@ -1174,7 +1207,8 @@ S3Status S3_initialize(const char *userAgentInfo,
                        S3MutexCreateCallback *mutexCreateCallback,
                        S3MutexLockCallback *mutexLockCallback,
                        S3MutexUnlockCallback *mutexUnlockCallback,
-                       S3MutexDestroyCallback *mutexDestroyCallback);
+                       S3MutexDestroyCallback *mutexDestroyCallback,
+                       int flags);
 
 
 /**

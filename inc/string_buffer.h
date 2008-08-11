@@ -49,7 +49,7 @@
 #define string_buffer_append(sb, str, len, all_fit)                     \
     do {                                                                \
         sb##Len += snprintf(&(sb[sb##Len]), sizeof(sb) - sb##Len - 1,   \
-                           "%.*s", len, str);                           \
+                            "%.*s", (int) (len), str);                  \
         if (sb##Len > (sizeof(sb) - 1)) {                               \
             sb##Len = sizeof(sb) - 1;                                   \
             all_fit = 0;                                                \
@@ -83,7 +83,7 @@
     do {                                                                \
         smb##Size += (snprintf(&(smb[smb##Size]),                       \
                                sizeof(smb) - smb##Size,                 \
-                               "%.*s", len, str) + 1);                  \
+                               "%.*s", (int) (len), str) + 1);          \
         if (smb##Size > sizeof(smb)) {                                  \
             smb##Size = sizeof(smb);                                    \
             all_fit = 0;                                                \

@@ -36,6 +36,8 @@
 #include "simplexml.h"
 #include "util.h"
 
+static int initializeCountG = 0;
+
 typedef struct S3Mutex CRYPTO_dynlock_value;
 
 static struct S3Mutex **pLocksG;
@@ -135,8 +137,13 @@ S3Status S3_initialize(const char *userAgentInfo,
                        S3MutexCreateCallback *mutexCreateCallback,
                        S3MutexLockCallback *mutexLockCallback,
                        S3MutexUnlockCallback *mutexUnlockCallback,
-                       S3MutexDestroyCallback *mutexDestroyCallback)
+                       S3MutexDestroyCallback *mutexDestroyCallback,
+                       int flags)
 {
+    if (initializeCountG++) {
+        return S3StatusOK;
+    }
+
     mutexCreateCallbackG = mutexCreateCallback;
     mutexLockCallbackG = mutexLockCallback;
     mutexUnlockCallbackG = mutexUnlockCallback;
@@ -165,7 +172,7 @@ S3Status S3_initialize(const char *userAgentInfo,
     CRYPTO_set_dynlock_lock_callback(dynlock_lock);
     CRYPTO_set_dynlock_destroy_callback(dynlock_destroy);
 
-    S3Status status = request_api_initialize(userAgentInfo);
+    S3Status status = request_api_initialize(userAgentInfo, flags);
     if (status != S3StatusOK) {
         deinitialize_locks();
         return status;
@@ -177,6 +184,10 @@ S3Status S3_initialize(const char *userAgentInfo,
 
 void S3_deinitialize()
 {
+    if (--initializeCountG) {
+        return;
+    }
+
     request_api_deinitialize();
 
     deinitialize_locks();

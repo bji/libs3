@@ -177,7 +177,7 @@ typedef struct Request
 // ----------------------------------------------------------------------------
 
 // Initialize the API
-S3Status request_api_initialize(const char *userAgentInfo);
+S3Status request_api_initialize(const char *userAgentInfo, int flags);
 
 // Deinitialize the API
 void request_api_deinitialize();

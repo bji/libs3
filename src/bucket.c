@@ -646,6 +646,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         if (!urlEncode(encoded, value, 1024)) {                         \
             (*(handler->responseHandler.completeCallback))              \
                 (S3StatusQueryParamsTooLong, 0, callbackData);          \
+            return;                                                     \
         }                                                               \
         string_buffer_append(queryParams, encoded, strlen(encoded),     \
                              fit);                                      \

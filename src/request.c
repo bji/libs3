@@ -480,12 +480,15 @@ static S3Status compose_standard_headers(const RequestParams *params,
     if (params->getConditions && (params->startByte || params->byteCount)) {
         if (params->byteCount) {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-%llu", params->startByte,
-                     (params->startByte + params->byteCount - 1));
+                     "Range: bytes=%llu-%llu", 
+                     (unsigned long long) params->startByte,
+                     (unsigned long long) (params->startByte + 
+                                           params->byteCount - 1));
         }
         else {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-", params->startByte);
+                     "Range: bytes=%llu-", 
+                     (unsigned long long) params->startByte);
         }
     }
     else {
@@ -865,7 +868,7 @@ static S3Status setup_curl(Request *request,
     if (params->httpRequestType == HttpRequestTypePUT) {
         char header[256];
         snprintf(header, sizeof(header), "Content-Length: %llu",
-                 params->toS3CallbackTotalSize);
+                 (unsigned long long) params->toS3CallbackTotalSize);
         request->headers = curl_slist_append(request->headers, header);
         request->headers = curl_slist_append(request->headers, 
                                              "Transfer-Encoding:");
@@ -1034,8 +1037,14 @@ static void request_release(Request *request)
 }
 
 
-S3Status request_api_initialize(const char *userAgentInfo)
+S3Status request_api_initialize(const char *userAgentInfo, int flags)
 {
+    if (curl_global_init(CURL_GLOBAL_ALL & 
+                         ~((flags & S3_INIT_WINSOCK) ? 0 : CURL_GLOBAL_WIN32))
+        != CURLE_OK) {
+        return S3StatusInternalError;
+    }
+
     if (!(requestStackMutexG = mutex_create())) {
         return S3StatusFailedToCreateMutex;
     }

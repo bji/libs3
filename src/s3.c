@@ -57,9 +57,10 @@ extern int fileno(FILE *);
 
 // Command-line options, saved as globals ------------------------------------
 
+static int forceG = 0;
 static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
-static S3UriStyle uriStyleG = S3UriStyleVirtualHost;
+static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
 
 
@@ -132,7 +133,8 @@ static char errorDetailsG[4096] = { 0 };
 static void S3_init()
 {
     S3Status status;
-    if ((status = S3_initialize("s3", 0, 0, 0, 0, 0)) != S3StatusOK) {
+    if ((status = S3_initialize("s3", 0, 0, 0, 0, 0, S3_INIT_ALL))
+        != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
                 S3_get_status_name(status));
         exit(-1);
@@ -158,9 +160,10 @@ static void usageExit(FILE *out)
 "\n Options:\n"
 "\n"
 "   Command Line:\n"
-"\n"   
-"   -p/--path-style      : use path-style URIs (default is "
-                          "virtual-host-style)\n"
+"\n"
+"   -f/--force           : force operation despite warnings\n"
+"   -h/--vhost-style     : use virtual-host-style URIs (default is "
+                          "path-style)\n"
 "   -u/--unencrypted     : unencrypted (use HTTP instead of HTTPS)\n"
 "   -s/--show-properties : show response properties on stdout\n"
 "   -r/--retries         : retry retryable failures this number of times\n"
@@ -655,7 +658,8 @@ static int should_retry()
 
 static struct option longOptionsG[] =
 {
-    { "path-style",           no_argument,        0,  'p' },
+    { "force",                no_argument,        0,  'f' },
+    { "vhost-style",          no_argument,        0,  'h' },
     { "unencrypted",          no_argument,        0,  'u' },
     { "show-proerties",       no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
@@ -684,7 +688,8 @@ static S3Status responsePropertiesCallback
     print_nonnull("Request-Id", requestId);
     print_nonnull("Request-Id-2", requestId2);
     if (properties->contentLength > 0) {
-        printf("Content-Length: %lld\n", properties->contentLength);
+        printf("Content-Length: %lld\n", 
+               (unsigned long long) properties->contentLength);
     }
     print_nonnull("Server", server);
     print_nonnull("ETag", eTag);
@@ -913,6 +918,16 @@ static void create_bucket(int argc, char **argv, int optind)
 
     const char *bucketName = argv[optind++];
 
+    if (!forceG && (S3_validate_bucket_name
+                    (bucketName, S3UriStyleVirtualHost) != S3StatusOK)) {
+        fprintf(stderr, "\nWARNING: Bucket name is not valid for "
+                "virtual-host style URI access.\n");
+        fprintf(stderr, "Bucket not created.  Use -f option to force the "
+                "bucket to be created despite\n");
+        fprintf(stderr, "this warning.\n\n");
+        exit(-1);
+    }
+
     const char *locationConstraint = 0;
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
     while (optind < argc) {
@@ -1079,7 +1094,7 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
             printf("\nKey: %s\n", content->key);
             printf("Last Modified: %s\n", timebuf);
             printf("ETag: %s\n", content->eTag);
-            printf("Size: %llu\n", content->size);
+            printf("Size: %llu\n", (unsigned long long) content->size);
             if (content->ownerId) {
                 printf("Owner ID: %s\n", content->ownerId);
             }
@@ -1092,10 +1107,11 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                      gmtime(&(content->lastModified)));
             char sizebuf[16];
             if (content->size < 100000) {
-                sprintf(sizebuf, "%5lld", content->size);
+                sprintf(sizebuf, "%5llu", (unsigned long long) content->size);
             }
             else if (content->size < (1024 * 1024)) {
-                sprintf(sizebuf, "%4lldK", content->size / 1024);
+                sprintf(sizebuf, "%4lluK", 
+                        ((unsigned long long) content->size) / 1024ULL);
             }
             else if (content->size < (10 * 1024 * 1024)) {
                 float f = content->size;
@@ -1103,7 +1119,9 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                 sprintf(sizebuf, "%1.2fM", f);
             }
             else if (content->size < (1024 * 1024 * 1024)) {
-                sprintf(sizebuf, "%4lldM", content->size / (1024 * 1024));
+                sprintf(sizebuf, "%4lluM", 
+                        ((unsigned long long) content->size) / 
+                        (1024ULL * 1024ULL));
             }
             else {
                 float f = (content->size / 1024);
@@ -1319,7 +1337,8 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     if (data->contentLength && !data->noStatus) {
         // Avoid a weird bug in MingW, which won't print the second integer
         // value properly when it's in the same call, so print separately
-        printf("%llu bytes remaining ", data->contentLength);
+        printf("%llu bytes remaining ", 
+               (unsigned long long) data->contentLength);
         printf("(%d%% complete) ...\n",
                (int) (((data->originalContentLength - 
                         data->contentLength) * 100) /
@@ -1408,7 +1427,8 @@ static void put_object(int argc, char **argv, int optind)
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
                 fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
-                        "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
+                        "limit %lu: %s\n", 
+                        (unsigned long) S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
             char *name = &(param[X_AMZ_META_PREFIX_LEN]);
@@ -1559,7 +1579,7 @@ static void put_object(int argc, char **argv, int optind)
     }
     else if (data.contentLength) {
         fprintf(stderr, "\nERROR: Failed to read remaining %llu bytes from "
-                "input\n", data.contentLength);
+                "input\n", (unsigned long long) data.contentLength);
     }
 
     S3_deinitialize();
@@ -1654,7 +1674,8 @@ static void copy_object(int argc, char **argv, int optind)
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
                 fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
-                        "limit %d: %s\n", S3_MAX_METADATA_COUNT, param);
+                        "limit %lu: %s\n", 
+                        (unsigned long) S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
             char *name = &(param[X_AMZ_META_PREFIX_LEN]);
@@ -2252,7 +2273,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int index = 0;
-        int c = getopt_long(argc, argv, "pusr:", longOptionsG, &index);
+        int c = getopt_long(argc, argv, "fhusr:", longOptionsG, &index);
 
         if (c == -1) {
             // End of options
@@ -2260,8 +2281,11 @@ int main(int argc, char **argv)
         }
 
         switch (c) {
-        case 'p':
-            uriStyleG = S3UriStylePath;
+        case 'f':
+            forceG = 1;
+            break;
+        case 'h':
+            uriStyleG = S3UriStyleVirtualHost;
             break;
         case 'u':
             protocolG = S3ProtocolHTTP;
