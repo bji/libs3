@@ -24,7 +24,38 @@
  *
  ************************************************************************** **/
 
+#include <pthread.h>
 #include <sys/utsname.h>
+
+unsigned long pthread_self()
+{
+    return (unsigned long) GetCurrentThreadId();
+}
+
+
+void pthread_mutex_init(pthread_mutex_t *mutex, void *v)
+{
+    InitializeCriticalSection(&(mutex->criticalSection));
+}
+
+
+void pthread_mutex_lock(pthread_mutex_t *mutex)
+{
+    EnterCriticalSection(&(mutex->criticalSection));
+}
+
+
+void pthread_mutex_unlock(pthread_mutex_t *mutex)
+{
+    LeaveCriticalSection(&(mutex->criticalSection));
+}
+
+
+void pthread_mutex_destroy(pthread_mutex_t *mutex)
+{
+    DeleteCriticalSection(&(mutex->criticalSection));
+}
+
 
 int uname(struct utsname *u)
 {

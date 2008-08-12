@@ -103,7 +103,14 @@ CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
 
 
 # --------------------------------------------------------------------------
-# Default targets are the library and driver program
+# Default targets are everything
+
+.PHONY: all
+all: exported test
+
+
+# --------------------------------------------------------------------------
+# Exported targets are the library and driver program
 
 .PHONY: exported
 exported: libs3 s3 headers
@@ -186,7 +193,8 @@ $(BUILD)\include\libs3.h: inc\libs3.h
 .PHONY: test
 test: $(BUILD)/bin/testsimplexml
 
-$(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(BUILD)/lib/libs3.a
+$(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o \
+                            $(BUILD)/obj/simplexml.o
 	-@mkdir $(subst /,\,$(dir $@))
 	gcc -o $@ $^ $(LIBXML2_LIBS)
 
