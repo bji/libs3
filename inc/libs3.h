@@ -216,7 +216,6 @@ typedef enum
     S3StatusInternalError                                   ,
     S3StatusOutOfMemory                                     ,
     S3StatusInterrupted                                     ,
-    S3StatusFailedToCreateMutex                             ,
     S3StatusInvalidBucketNameTooLong                        ,
     S3StatusInvalidBucketNameFirstCharacter                 ,
     S3StatusInvalidBucketNameCharacter                      ,
@@ -446,13 +445,6 @@ typedef enum
 /** **************************************************************************
  * Data Types
  ************************************************************************** **/
-
-/**
- * This is a type which must be defined by the user of the S3 library.  It
- * defines a Mutex type with standard Mutex semantics.
- **/
-struct S3Mutex;
-
 
 /**
  * An S3RequestContext manages multiple S3 requests simultaneously; see the
@@ -844,58 +836,6 @@ typedef struct S3ErrorDetails
  ************************************************************************** **/
 
 /**
- * This is the signature of a "thread self" callback, that must be provided to
- * the S3_initialize() method, and implemented by the user of the libs3
- * library.  This function returns the thread id of the thread which calls it.
- *
- * @return the thread id of the thread which calls it
- **/
-typedef unsigned long (S3ThreadSelfCallback)();
-
-
-/**
- * This is the signature of a "mutex create" callback, that must be provided
- * to the S3_initialize() method, and implemented by the user of the libs3
- * library.  This function returns a newly-created and initialized S3Mutex
- * structure (itself defined by the libs3 user).
- *
- * @return a newly-created and initialized S3Mutex structure
- **/
-typedef struct S3Mutex *(S3MutexCreateCallback)();
-
-
-/**
- * This is the signature of a "mutex lock" callback, that must be provided to
- * the S3_initialize() method, and implemented by the user of the libs3
- * library.  This function locks a mutex.
- *
- * @param mutex is the S3Mutex to lock
- **/ 
-typedef void (S3MutexLockCallback)(struct S3Mutex *mutex);
-
-
-/**
- * This is the signature of a "mutex unlock" callback, that must be provided
- * to the S3_initialize() method, and implemented by the user of the libs3
- * library.  This function unlocks a mutex.
- *
- * @param mutex is the S3Mutex to unlock
- **/ 
-typedef void (S3MutexUnlockCallback)(struct S3Mutex *mutex);
-
-
-/**
- * This is the signature of a "mutex destroy" callback, that must be provided
- * to the S3_initialize() method, and implemented by the user of the libs3
- * library.  This function destroys a mutex previously created by a call to
- * S3MutexCreateCallback().
- *
- * @param mutex is the S3Mutex to destroy
- **/ 
-typedef void (S3MutexDestroyCallback)(struct S3Mutex *mutex);
-
-
-/**
  * This callback is made whenever the response properties become available for
  * any request.
  *
@@ -1164,21 +1104,6 @@ typedef struct S3GetObjectHandler
  *        NULL or the empty string if you don't care about this.  The value
  *        will not be copied by this function and must remain unaltered by the
  *        caller until S3_deinitialize() is called.
- * @param threadSelfCallback provides the callback for the S3 library to call
- *        to identify the calling thread, or NULL if the caller is not a
- *        multithreaded program.
- * @param mutexCreateCallback provides the callback for the S3 library to call
- *        to create a mutex, or NULL if the caller is not a multithreaded
- *        program.
- * @param mutexLockCallback provides the callback for the S3 library to call
- *        to lock a mutex, or NULL if the caller is not a multithreaded
- *        program.
- * @param mutexUnlockCallback provides the callback for the S3 library to call
- *        to unlock a mutex, or NULL if the caller is not a multithreaded
- *        program.
- * @param mutexDestroyCallback provides the callback for the S3 library to
- *        call to destroy a mutex, or NULL if the caller is not a
- *        multithreaded program.
  * @param flags is a bitmask of some combination of S3_INIT_XXX flag, or
  *        S3_INIT_ALL, indicating which of the libraries that libs3 depends
  *        upon should be initialized by S3_initialize().  Only if your program
@@ -1198,17 +1123,8 @@ typedef struct S3GetObjectHandler
  *         S3StatusInternalError if dependent libraries could not be
  *             initialized
  *         S3StatusOutOfMemory on failure due to out of memory
- *         S3StatusFailedToCreateMutex if the mutex creation function returned
- *             NULL for one of the mutexes that are created during the
- *             initialization process 
  **/
-S3Status S3_initialize(const char *userAgentInfo,
-                       S3ThreadSelfCallback *threadSelfCallback,
-                       S3MutexCreateCallback *mutexCreateCallback,
-                       S3MutexLockCallback *mutexLockCallback,
-                       S3MutexUnlockCallback *mutexUnlockCallback,
-                       S3MutexDestroyCallback *mutexDestroyCallback,
-                       int flags);
+S3Status S3_initialize(const char *userAgentInfo, int flags);
 
 
 /**

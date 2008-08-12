@@ -133,7 +133,7 @@ static char errorDetailsG[4096] = { 0 };
 static void S3_init()
 {
     S3Status status;
-    if ((status = S3_initialize("s3", 0, 0, 0, 0, 0, S3_INIT_ALL))
+    if ((status = S3_initialize("s3", S3_INIT_ALL))
         != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
                 S3_get_status_name(status));

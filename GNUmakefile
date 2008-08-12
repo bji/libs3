@@ -90,7 +90,7 @@ CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\"
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS)
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread
 
 
 # --------------------------------------------------------------------------

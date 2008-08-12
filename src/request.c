@@ -29,6 +29,7 @@
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
@@ -43,7 +44,7 @@
 
 static char userAgentG[USER_AGENT_SIZE];
 
-static struct S3Mutex *requestStackMutexG;
+static pthread_mutex_t requestStackMutexG;
 
 static Request *requestStackG[REQUEST_STACK_SIZE];
 
@@ -938,13 +939,13 @@ static S3Status request_get(const RequestParams *params,
     
     // Try to get one from the request stack.  We hold the lock for the
     // shortest time possible here.
-    mutex_lock(requestStackMutexG);
+    pthread_mutex_lock(&requestStackMutexG);
 
     if (requestStackCountG) {
         request = requestStackG[--requestStackCountG];
     }
     
-    mutex_unlock(requestStackMutexG);
+    pthread_mutex_unlock(&requestStackMutexG);
 
     // If we got one, deinitialize it for re-use
     if (request) {
@@ -1019,11 +1020,11 @@ static void request_destroy(Request *request)
 
 static void request_release(Request *request)
 {
-    mutex_lock(requestStackMutexG);
+    pthread_mutex_lock(&requestStackMutexG);
 
     // If the request stack is full, destroy this one
     if (requestStackCountG == REQUEST_STACK_SIZE) {
-        mutex_unlock(requestStackMutexG);
+        pthread_mutex_unlock(&requestStackMutexG);
         request_destroy(request);
     }
     // Else put this one at the front of the request stack; we do this because
@@ -1032,7 +1033,7 @@ static void request_release(Request *request)
     // times out
     else {
         requestStackG[requestStackCountG++] = request;
-        mutex_unlock(requestStackMutexG);
+        pthread_mutex_unlock(&requestStackMutexG);
     }
 }
 
@@ -1045,9 +1046,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags)
         return S3StatusInternalError;
     }
 
-    if (!(requestStackMutexG = mutex_create())) {
-        return S3StatusFailedToCreateMutex;
-    }
+    pthread_mutex_init(&requestStackMutexG, 0);
 
     requestStackCountG = 0;
 
@@ -1077,7 +1076,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags)
 
 void request_api_deinitialize()
 {
-    mutex_destroy(requestStackMutexG);
+    pthread_mutex_destroy(&requestStackMutexG);
 
     while (requestStackCountG--) {
         request_destroy(requestStackG[requestStackCountG]);

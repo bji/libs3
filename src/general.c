@@ -31,6 +31,7 @@
 #ifndef OPENSSL_THREADS
 #error "Threading support required in OpenSSL library, but not provided"
 #endif
+#include <pthread.h>
 #include <string.h>
 #include "request.h"
 #include "simplexml.h"
@@ -38,30 +39,33 @@
 
 static int initializeCountG = 0;
 
-typedef struct S3Mutex CRYPTO_dynlock_value;
+typedef pthread_mutex_t CRYPTO_dynlock_value;
 
-static struct S3Mutex **pLocksG;
+static pthread_mutex_t *pLocksG;
 
-static S3MutexCreateCallback *mutexCreateCallbackG;
-static S3MutexLockCallback *mutexLockCallbackG;
-static S3MutexUnlockCallback *mutexUnlockCallbackG;
-static S3MutexDestroyCallback *mutexDestroyCallbackG;
+
+static unsigned long id_callback()
+{
+    return (unsigned long) pthread_self();
+}
 
 
 static void locking_callback(int mode, int index, const char *file, int line)
 {
     if (mode & CRYPTO_LOCK) {
-        mutex_lock(pLocksG[index]);
+        pthread_mutex_lock(&(pLocksG[index]));
     }
     else {
-        mutex_unlock(pLocksG[index]);
+        pthread_mutex_unlock(&(pLocksG[index]));
     }
 }
 
 
 static struct CRYPTO_dynlock_value *dynlock_create(const char *file, int line)
 {
-    return (struct CRYPTO_dynlock_value *) mutex_create();
+    pthread_mutex_t *ret = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(ret, 0);
+    return (struct CRYPTO_dynlock_value *) ret;
 }
 
 
@@ -69,10 +73,10 @@ static void dynlock_lock(int mode, struct CRYPTO_dynlock_value *pLock,
                          const char *file, int line)
 {
     if (mode & CRYPTO_LOCK) {
-        mutex_lock((struct S3Mutex *) pLock);
+        pthread_mutex_lock((pthread_mutex_t *) pLock);
     }
     else {
-        mutex_unlock((struct S3Mutex *) pLock);
+        pthread_mutex_unlock((pthread_mutex_t *) pLock);
     }
 }
 
@@ -80,7 +84,8 @@ static void dynlock_lock(int mode, struct CRYPTO_dynlock_value *pLock,
 static void dynlock_destroy(struct CRYPTO_dynlock_value *pLock,
                             const char *file, int line)
 {
-    mutex_destroy((struct S3Mutex *) pLock);
+    pthread_mutex_destroy((pthread_mutex_t *) pLock);
+    free(pLock);
 }
 
 
@@ -94,79 +99,32 @@ static void deinitialize_locks()
 
     int count = CRYPTO_num_locks();
     for (int i = 0; i < count; i++) {
-        mutex_destroy(pLocksG[i]);
+        pthread_mutex_destroy(&(pLocksG[i]));
     }
 
     free(pLocksG);
 }
 
 
-struct S3Mutex *mutex_create()
-{
-    return (mutexCreateCallbackG ? 
-            (*mutexCreateCallbackG)() : (struct S3Mutex *) 1);
-}
-
-
-void mutex_lock(struct S3Mutex *mutex)
-{
-    if (mutexLockCallbackG) {
-        (*mutexLockCallbackG)(mutex);
-    }
-}
-
-
-void mutex_unlock(struct S3Mutex *mutex)
-{
-    if (mutexUnlockCallbackG) {
-        (*mutexUnlockCallbackG)(mutex);
-    }
-}
-
-
-void mutex_destroy(struct S3Mutex *mutex)
-{
-    if (mutexDestroyCallbackG) {
-        (*mutexDestroyCallbackG)(mutex);
-    }
-}
-
-
-S3Status S3_initialize(const char *userAgentInfo,
-                       S3ThreadSelfCallback *threadSelfCallback,
-                       S3MutexCreateCallback *mutexCreateCallback,
-                       S3MutexLockCallback *mutexLockCallback,
-                       S3MutexUnlockCallback *mutexUnlockCallback,
-                       S3MutexDestroyCallback *mutexDestroyCallback,
-                       int flags)
+S3Status S3_initialize(const char *userAgentInfo, int flags)
 {
     if (initializeCountG++) {
         return S3StatusOK;
     }
 
-    mutexCreateCallbackG = mutexCreateCallback;
-    mutexLockCallbackG = mutexLockCallback;
-    mutexUnlockCallbackG = mutexUnlockCallback;
-    mutexDestroyCallbackG = mutexDestroyCallback;
-
     /* As required by the openssl library for thread support */
     int count = CRYPTO_num_locks(), i;
     
     if (!(pLocksG = 
-          (struct S3Mutex **) malloc(count * sizeof(struct S3Mutex *)))) {
+          (pthread_mutex_t *) malloc(count * sizeof(pthread_mutex_t)))) {
         return S3StatusOutOfMemory;
     }
 
     for (i = 0; i < count; i++) {
-        if (!(pLocksG[i] = mutex_create())) {
-            while (i-- > 0) {
-                mutex_destroy(pLocksG[i]);
-            }
-            return S3StatusFailedToCreateMutex;
-        }
+        pthread_mutex_init(&(pLocksG[i]), 0);
     }
 
-    CRYPTO_set_id_callback(threadSelfCallback);
+    CRYPTO_set_id_callback(&id_callback);
     CRYPTO_set_locking_callback(&locking_callback);
     CRYPTO_set_dynlock_create_callback(dynlock_create);
     CRYPTO_set_dynlock_lock_callback(dynlock_lock);
@@ -204,7 +162,6 @@ const char *S3_get_status_name(S3Status status)
         handlecase(InternalError);
         handlecase(OutOfMemory);
         handlecase(Interrupted);
-        handlecase(FailedToCreateMutex);
         handlecase(InvalidBucketNameTooLong);
         handlecase(InvalidBucketNameFirstCharacter);
         handlecase(InvalidBucketNameCharacter);
