@@ -56,21 +56,6 @@
     (1 + 255 + 1 + MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent") - 1) + 1)
 
 
-// Mutex functions -----------------------------------------------------------
-
-// Create a mutex.  Returns 0 if none could be created.
-struct S3Mutex *mutex_create();
-
-// Lock a mutex
-void mutex_lock(struct S3Mutex *mutex);
-
-// Unlock a mutex
-void mutex_unlock(struct S3Mutex *mutex);
-
-// Destroy a mutex
-void mutex_destroy(struct S3Mutex *mutex);
-
-
 // Utilities -----------------------------------------------------------------
 
 // URL-encodes a string from [src] into [dest].  [dest] must have at least
@@ -83,6 +68,11 @@ int urlEncode(char *dest, const char *src, int maxSrcSize);
 time_t parseIso8601Time(const char *str);
 
 uint64_t parseUnsignedInt(const char *str);
+
+// base64 encode bytes.  The output buffer must have at least
+// ((4 * (inLen + 1)) / 3) bytes in it.  Returns the number of bytes written
+// to [out].
+int base64Encode(const unsigned char *in, int inLen, unsigned char *out);
 
 
 #endif /* UTIL_H */

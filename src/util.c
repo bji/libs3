@@ -171,3 +171,41 @@ uint64_t parseUnsignedInt(const char *str)
 
     return ret;
 }
+
+
+int base64Encode(const unsigned char *in, int inLen, unsigned char *out)
+{
+    static const char *ENC = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    unsigned char *original_out = out;
+
+    while (inLen) {
+        // first 6 bits of char 1
+        *out++ = ENC[*in >> 2];
+        if (!--inLen) {
+            // last 2 bits of char 1, 4 bits of 0
+            *out++ = ENC[(*in & 0x3) << 4];
+            *out++ = '=';
+            *out++ = '=';
+            break;
+        }
+        // last 2 bits of char 1, first 4 bits of char 2
+        *out++ = ENC[((*in & 0x3) << 4) | (*(in + 1) >> 4)];
+        in++;
+        if (!--inLen) {
+            // last 4 bits of char 2, 2 bits of 0
+            *out++ = ENC[(*in & 0xF) << 2];
+            *out++ = '=';
+            break;
+        }
+        // last 4 bits of char 2, first 2 bits of char 3
+        *out++ = ENC[((*in & 0xF) << 2) | (*(in + 1) >> 6)];
+        in++;
+        // last 6 bits of char 3
+        *out++ = ENC[*in & 0x3F];
+        in++, inLen--;
+    }
+
+    return (out - original_out);
+}
