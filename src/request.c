@@ -705,21 +705,6 @@ static S3Status compose_auth_header(const RequestParams *params,
 
     signbuf_append("%s", values->canonicalizedResource);
 
-//    unsigned int md_len;
-//    unsigned char md[EVP_MAX_MD_SIZE];
-//	
-//    HMAC(EVP_sha1(), params->secretAccessKey, strlen(params->secretAccessKey),
-//         (unsigned char *) signbuf, len, md, &md_len);
-//
-//    BIO *base64 = BIO_push(BIO_new(BIO_f_base64()), BIO_new(BIO_s_mem()));
-//    BIO_write(base64, md, md_len);
-//    if (BIO_flush(base64) != 1) {
-//        BIO_free_all(base64);
-//        return S3StatusInternalError;
-//    }
-//    BUF_MEM *base64mem;
-//    BIO_get_mem_ptr(base64, &base64mem);
-
     // Generate a SHA-1 of the signbuf
 
     // Message Digest handle
@@ -822,7 +807,7 @@ static S3Status setup_curl(Request *request,
     }
 
     // Debugging only
-    // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
+    curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
     
     // Set private data to request for the benefit of S3RequestContext
     curl_easy_setopt_safe(CURLOPT_PRIVATE, request);

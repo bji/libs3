@@ -77,15 +77,15 @@ ifndef LIBXML2_CFLAGS
 endif
 
 ifndef GCRYPT_CFLAGS
-	GCRYPT_CFLAGS := $(shell libgcrypt-config --cflags)
+    GCRYPT_CFLAGS := $(shell libgcrypt-config --cflags)
 endif
 
 ifndef GCRYPT_LIBS
-	GCRYPT_LIBS := $(shell libgcrypt-config --libs)
+    GCRYPT_LIBS := $(shell libgcrypt-config --libs)
 endif
 
 ifndef GNUTLS_LIBS
-	GNUTLS_LIBS := $(shell pkg-config gnutls --libs)
+    GNUTLS_LIBS := $(shell pkg-config gnutls --libs)
 endif
 
 

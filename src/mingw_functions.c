@@ -33,27 +33,35 @@ unsigned long pthread_self()
 }
 
 
-void pthread_mutex_init(pthread_mutex_t *mutex, void *v)
+int pthread_mutex_init(pthread_mutex_t *mutex, void *v)
 {
     InitializeCriticalSection(&(mutex->criticalSection));
+
+    return 0;
 }
 
 
-void pthread_mutex_lock(pthread_mutex_t *mutex)
+int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
     EnterCriticalSection(&(mutex->criticalSection));
+
+    return 0;
 }
 
 
-void pthread_mutex_unlock(pthread_mutex_t *mutex)
+int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
     LeaveCriticalSection(&(mutex->criticalSection));
+
+    return 0;
 }
 
 
-void pthread_mutex_destroy(pthread_mutex_t *mutex)
+int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
     DeleteCriticalSection(&(mutex->criticalSection));
+
+    return 0;
 }
 
 
