@@ -807,7 +807,7 @@ static S3Status setup_curl(Request *request,
     }
 
     // Debugging only
-    curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
+    // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
     
     // Set private data to request for the benefit of S3RequestContext
     curl_easy_setopt_safe(CURLOPT_PRIVATE, request);
