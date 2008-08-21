@@ -40,10 +40,10 @@
                                        block->l[(i + 2) & 15] ^         \
                                        block->l[i & 15], 1))
 
-#define RL(v, w, x, y, z, i)                                            \
+#define R0_L(v, w, x, y, z, i)                                          \
     z += ((w & (x ^ y)) ^ y) + blk0L(i) + 0x5A827999 + rol(v, 5);       \
     w = rol(w, 30);
-#define RB(v, w, x, y, z, i)                                            \
+#define R0_B(v, w, x, y, z, i)                                          \
     z += ((w & (x ^ y)) ^ y) + blk0B(i) + 0x5A827999 + rol(v, 5);       \
     w = rol(w, 30);
 #define R1(v, w, x, y, z, i)                                            \
@@ -59,17 +59,17 @@
     z += (w ^ x ^ y) + blk(i) + 0xCA62C1D6 + rol(v, 5);                 \
     w = rol(w, 30);
 
-#define RLA(i) RL(a, b, c, d, e, i)
-#define RLB(i) RL(b, c, d, e, a, i)
-#define RLC(i) RL(c, d, e, a, b, i)
-#define RLD(i) RL(d, e, a, b, c, i)
-#define RLE(i) RL(e, a, b, c, d, i)
+#define R0A_L(i) R0_L(a, b, c, d, e, i)
+#define R0B_L(i) R0_L(b, c, d, e, a, i)
+#define R0C_L(i) R0_L(c, d, e, a, b, i)
+#define R0D_L(i) R0_L(d, e, a, b, c, i)
+#define R0E_L(i) R0_L(e, a, b, c, d, i)
 
-#define RBA(i) RB(a, b, c, d, e, i)
-#define RBB(i) RB(b, c, d, e, a, i)
-#define RBC(i) RB(c, d, e, a, b, i)
-#define RBD(i) RB(d, e, a, b, c, i)
-#define RBE(i) RB(e, a, b, c, d, i)
+#define R0A_B(i) R0_B(a, b, c, d, e, i)
+#define R0B_B(i) R0_B(b, c, d, e, a, i)
+#define R0C_B(i) R0_B(c, d, e, a, b, i)
+#define R0D_B(i) R0_B(d, e, a, b, c, i)
+#define R0E_B(i) R0_B(e, a, b, c, d, i)
 
 #define R1A(i) R1(a, b, c, d, e, i)
 #define R1B(i) R1(b, c, d, e, a, i)
@@ -106,7 +106,7 @@ static void SHA1_Transform(uint32_t state[5], const unsigned char buffer[64])
         uint32_t l[16];
     } u;
 
-    static unsigned char w[64];
+    unsigned char w[64];
     u *block = (u *) w;
 
     memcpy(block, buffer, 64);
@@ -119,14 +119,14 @@ static void SHA1_Transform(uint32_t state[5], const unsigned char buffer[64])
 
     static unsigned int endianness_indicator = 0x1;
     if (((unsigned char *) &endianness_indicator)[0]) {
-        RLA( 0); RLE( 1); RLD( 2); RLC( 3); RLB( 4);
-        RLA( 5); RLE( 6); RLD( 7); RLC( 8); RLB( 9);
-        RLA(10); RLE(11); RLD(12); RLC(13); RLB(14); RLA(15);
+        R0A_L( 0); R0E_L( 1); R0D_L( 2); R0C_L( 3); R0B_L( 4);
+        R0A_L( 5); R0E_L( 6); R0D_L( 7); R0C_L( 8); R0B_L( 9);
+        R0A_L(10); R0E_L(11); R0D_L(12); R0C_L(13); R0B_L(14); R0A_L(15);
     }
     else {
-        RBA( 0); RBE( 1); RBD( 2); RBC( 3); RBB( 4);
-        RBA( 5); RBE( 6); RBD( 7); RBC( 8); RBB( 9);
-        RBA(10); RBE(11); RBD(12); RBC(13); RBB(14); RBA(15);
+        R0A_B( 0); R0E_B( 1); R0D_B( 2); R0C_B( 3); R0B_B( 4);
+        R0A_B( 5); R0E_B( 6); R0D_B( 7); R0C_B( 8); R0B_B( 9);
+        R0A_B(10); R0E_B(11); R0D_B(12); R0C_B(13); R0B_B(14); R0A_B(15);
     }
     R1E(16); R1D(17); R1C(18); R1B(19); R2A(20);
     R2E(21); R2D(22); R2C(23); R2B(24); R2A(25);
