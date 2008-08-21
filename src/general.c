@@ -25,13 +25,6 @@
  ************************************************************************** **/
 
 #include <ctype.h>
-#include <openssl/crypto.h>
-#define OPENSSL_THREAD_DEFINES
-#include <openssl/opensslconf.h>
-#ifndef OPENSSL_THREADS
-#error "Threading support required in OpenSSL library, but not provided"
-#endif
-#include <pthread.h>
 #include <string.h>
 #include "request.h"
 #include "simplexml.h"
@@ -39,104 +32,13 @@
 
 static int initializeCountG = 0;
 
-typedef pthread_mutex_t CRYPTO_dynlock_value;
-
-static pthread_mutex_t *pLocksG;
-
-
-static unsigned long id_callback()
-{
-    return (unsigned long) pthread_self();
-}
-
-
-static void locking_callback(int mode, int index, const char *file, int line)
-{
-    if (mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(&(pLocksG[index]));
-    }
-    else {
-        pthread_mutex_unlock(&(pLocksG[index]));
-    }
-}
-
-
-static struct CRYPTO_dynlock_value *dynlock_create(const char *file, int line)
-{
-    pthread_mutex_t *ret = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
-    pthread_mutex_init(ret, 0);
-    return (struct CRYPTO_dynlock_value *) ret;
-}
-
-
-static void dynlock_lock(int mode, struct CRYPTO_dynlock_value *pLock,
-                         const char *file, int line)
-{
-    if (mode & CRYPTO_LOCK) {
-        pthread_mutex_lock((pthread_mutex_t *) pLock);
-    }
-    else {
-        pthread_mutex_unlock((pthread_mutex_t *) pLock);
-    }
-}
-
-
-static void dynlock_destroy(struct CRYPTO_dynlock_value *pLock,
-                            const char *file, int line)
-{
-    pthread_mutex_destroy((pthread_mutex_t *) pLock);
-    free(pLock);
-}
-
-
-static void deinitialize_locks()
-{
-    CRYPTO_set_dynlock_destroy_callback(NULL);
-    CRYPTO_set_dynlock_lock_callback(NULL);
-    CRYPTO_set_dynlock_create_callback(NULL);
-    CRYPTO_set_locking_callback(NULL);
-    CRYPTO_set_id_callback(NULL);
-
-    int count = CRYPTO_num_locks();
-    for (int i = 0; i < count; i++) {
-        pthread_mutex_destroy(&(pLocksG[i]));
-    }
-
-    free(pLocksG);
-}
-
-
 S3Status S3_initialize(const char *userAgentInfo, int flags)
 {
     if (initializeCountG++) {
         return S3StatusOK;
     }
 
-    /* As required by the openssl library for thread support */
-    int count = CRYPTO_num_locks(), i;
-    
-    if (!(pLocksG = 
-          (pthread_mutex_t *) malloc(count * sizeof(pthread_mutex_t)))) {
-        return S3StatusOutOfMemory;
-    }
-
-    for (i = 0; i < count; i++) {
-        pthread_mutex_init(&(pLocksG[i]), 0);
-    }
-
-    CRYPTO_set_id_callback(&id_callback);
-    CRYPTO_set_locking_callback(&locking_callback);
-    CRYPTO_set_dynlock_create_callback(dynlock_create);
-    CRYPTO_set_dynlock_lock_callback(dynlock_lock);
-    CRYPTO_set_dynlock_destroy_callback(dynlock_destroy);
-
-    S3Status status = request_api_initialize(userAgentInfo, flags);
-    if (status != S3StatusOK) {
-        deinitialize_locks();
-        return status;
-    }
-
-    return S3StatusOK;
+    return request_api_initialize(userAgentInfo, flags);
 }
 
 
@@ -147,8 +49,6 @@ void S3_deinitialize()
     }
 
     request_api_deinitialize();
-
-    deinitialize_locks();
 }
 
 const char *S3_get_status_name(S3Status status)

@@ -25,11 +25,11 @@
  ************************************************************************** **/
 
 #include <ctype.h>
-#include <openssl/hmac.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include "crypt.h"
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
@@ -706,17 +706,16 @@ static S3Status compose_auth_header(const RequestParams *params,
     signbuf_append("%s", values->canonicalizedResource);
 
     // Generate an HMAC-SHA-1 of the signbuf
+    unsigned char hmac[20];
 
-    unsigned int md_len;
-    unsigned char md[EVP_MAX_MD_SIZE];
-
-    HMAC(EVP_sha1(), params->secretAccessKey, strlen(params->secretAccessKey),
-         (unsigned char *) signbuf, len, md, &md_len);
+    HMAC_SHA1(hmac, (unsigned char *) params->secretAccessKey,
+              strlen(params->secretAccessKey),
+              (unsigned char *) signbuf, len);
 
     // Now base-64 encode the results
-    unsigned char b64[((md_len + 1) * 4) / 3];
-    int b64Len = base64Encode(md, md_len, b64);
-
+    unsigned char b64[((20 + 1) * 4) / 3];
+    int b64Len = base64Encode(hmac, 20, b64);
+    
     snprintf(values->authorizationHeader, sizeof(values->authorizationHeader),
              "Authorization: AWS %s:%.*s", params->accessKeyId, b64Len, b64);
 

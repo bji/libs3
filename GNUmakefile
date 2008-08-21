@@ -245,10 +245,10 @@ LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR)
 .PHONY: libs3
 libs3: $(LIBS3_SHARED) $(LIBS3_SHARED_MAJOR) $(BUILD)/lib/libs3.a
 
-LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
-                 src/object.c src/request.c src/request_context.c \
-                 src/response_headers_handler.c src/service.c \
-                 src/simplexml.c src/util.c
+LIBS3_SOURCES := src/acl.c src/bucket.c src/crypt.c src/error_parser.c \
+                 src/general.c src/object.c src/request.c \
+                 src/request_context.c src/response_headers_handler.c \
+                 src/service.c src/simplexml.c src/util.c
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.do)
 	@mkdir -p $(dir $@)
