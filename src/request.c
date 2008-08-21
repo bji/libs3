@@ -25,7 +25,7 @@
  ************************************************************************** **/
 
 #include <ctype.h>
-#include <gcrypt.h>
+#include <openssl/hmac.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -705,38 +705,17 @@ static S3Status compose_auth_header(const RequestParams *params,
 
     signbuf_append("%s", values->canonicalizedResource);
 
-    // Generate a SHA-1 of the signbuf
+    // Generate an HMAC-SHA-1 of the signbuf
 
-    // Message Digest handle
-    gcry_md_hd_t mdh;
+    unsigned int md_len;
+    unsigned char md[EVP_MAX_MD_SIZE];
 
-    // "Open" the Message Digest Handle - SHA-1 with HMAC feature
-    if (gcry_md_open
-        (&mdh, GCRY_MD_SHA1, GCRY_MD_FLAG_HMAC) != GPG_ERR_NO_ERROR) {
-        return S3StatusInternalError;
-    }
-
-    // Set the key that will be used with the HMAC feature
-    if (gcry_md_setkey
-        (mdh, params->secretAccessKey, 
-         strlen(params->secretAccessKey)) != GPG_ERR_NO_ERROR) {
-        gcry_md_close(mdh);
-        return S3StatusInternalError;
-    }
-
-    // Specify the signbuf data to compute SHA-1 of
-    gcry_md_write(mdh, signbuf, len);
-
-    // Get the results
-    unsigned int md_len = gcry_md_get_algo_dlen(GCRY_MD_SHA1);
-    unsigned char *md = gcry_md_read(mdh, GCRY_MD_SHA1);
+    HMAC(EVP_sha1(), params->secretAccessKey, strlen(params->secretAccessKey),
+         (unsigned char *) signbuf, len, md, &md_len);
 
     // Now base-64 encode the results
     unsigned char b64[((md_len + 1) * 4) / 3];
     int b64Len = base64Encode(md, md_len, b64);
-
-    // Be sure to release the Message Digest handle
-    gcry_md_close(mdh);
 
     snprintf(values->authorizationHeader, sizeof(values->authorizationHeader),
              "Authorization: AWS %s:%.*s", params->accessKeyId, b64Len, b64);

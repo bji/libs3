@@ -191,19 +191,10 @@
 
 
 /**
- * This constant is used by the S3_initialize() function, to specify that
- * the gcrypt library should be initialized by libs3; should always be
- * specified by the caller unless the caller specifically initializes the
- * gcrypt library elsewhere.
- **/
-#define S3_INIT_GCRYPT                     2
-
-
-/**
  * This convenience constant is used by the S3_initialize() function to
  * indicate that all libraries required by libs3 should be initialized.
  **/
-#define S3_INIT_ALL                        (S3_INIT_WINSOCK | S3_INIT_GCRYPT)
+#define S3_INIT_ALL                        (S3_INIT_WINSOCK)
 
 
 /** **************************************************************************

@@ -76,16 +76,12 @@ ifndef LIBXML2_CFLAGS
     LIBXML2_CFLAGS := -Ic:\libs3-libs\include
 endif
 
-ifndef GCRYPT_CFLAGS
-    GCRYPT_CFLAGS := -Ic:\libs3-libs\include
+ifndef OPENSSL_LIBS
+    OPENSSL_LIBS := -Lc:\openssl -lssl32 -leay32
 endif
 
-ifndef GCRYPT_LIBS
-    GCRYPT_LIBS := -Lc:\libs3-libs\bin -lgcrypt-11
-endif
-
-ifndef GNUTLS_LIBS
-    GNUTLS_LIBS := -Lc:\libs3-libs\bin -lgnutls-26
+ifndef OPENSSL_CFLAGS
+    OPENSSL_CFLAGS := -Ic:\openssl\include
 endif
 
 
@@ -99,12 +95,13 @@ ifndef CFLAGS
 endif
 
 CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
+          $(OPENSSL_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\" \
 	  -Dsleep=Sleep -DFOPEN_EXTRA_FLAGS=\"b\" \
 	  -Iinc/mingw -include windows.h
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(GCRYPT_LIBS) $(GNUTLS_LIBS)
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(OPENSSL_LIBS)
 
 # --------------------------------------------------------------------------
 # Default targets are everything

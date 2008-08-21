@@ -76,18 +76,6 @@ ifndef LIBXML2_CFLAGS
     LIBXML2_CFLAGS := $(shell xml2-config --cflags)
 endif
 
-ifndef GCRYPT_CFLAGS
-    GCRYPT_CFLAGS := $(shell libgcrypt-config --cflags)
-endif
-
-ifndef GCRYPT_LIBS
-    GCRYPT_LIBS := $(shell libgcrypt-config --libs)
-endif
-
-ifndef GNUTLS_LIBS
-    GNUTLS_LIBS := $(shell pkg-config gnutls --libs)
-endif
-
 
 # --------------------------------------------------------------------------
 # These CFLAGS assume a GNU compiler.  For other compilers, write a script
@@ -99,11 +87,11 @@ ifndef CFLAGS
 endif
 
 CFLAGS += -Wall -Werror -std=c99 -Iinc \
-          $(CURL_CFLAGS) $(LIBXML2_CFLAGS) $(GCRYPT_CFLAGS) \
+          $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\"
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(GCRYPT_LIBS) $(GNUTLS_LIBS) -lpthread
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread
 
 
 # --------------------------------------------------------------------------
