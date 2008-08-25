@@ -29,6 +29,7 @@
 
 #include <curl/curl.h>
 #include <curl/multi.h>
+#include <stdint.h>
 #include "libs3.h"
 
 
@@ -73,6 +74,14 @@ uint64_t parseUnsignedInt(const char *str);
 // ((4 * (inLen + 1)) / 3) bytes in it.  Returns the number of bytes written
 // to [out].
 int base64Encode(const unsigned char *in, int inLen, unsigned char *out);
+
+// Compute HMAC-SHA-1 with key [key] and message [message], storing result
+// in [hmac]
+void HMAC_SHA1(unsigned char hmac[20], const unsigned char *key, int key_len,
+               const unsigned char *message, int message_len);
+
+// Compute a 64-bit hash values given a set of bytes
+uint64_t hash(const unsigned char *k, int length);
 
 
 #endif /* UTIL_H */

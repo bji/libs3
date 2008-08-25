@@ -29,7 +29,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
-#include "crypt.h"
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
