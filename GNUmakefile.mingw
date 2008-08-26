@@ -76,10 +76,6 @@ ifndef LIBXML2_CFLAGS
     LIBXML2_CFLAGS := -Ic:\libs3-libs\include
 endif
 
-ifndef OPENSSL_LIBS
-    OPENSSL_LIBS := -Lc:\openssl -lssl32 -leay32
-endif
-
 
 # --------------------------------------------------------------------------
 # These CFLAGS assume a GNU compiler.  For other compilers, write a script
@@ -96,7 +92,7 @@ CFLAGS += -Wall -Werror -std=c99 -Iinc $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
 	  -Dsleep=Sleep -DFOPEN_EXTRA_FLAGS=\"b\" \
 	  -Iinc/mingw -include windows.h
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(OPENSSL_LIBS)
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS)
 
 # --------------------------------------------------------------------------
 # Default targets are everything
