@@ -39,21 +39,18 @@ To install libs3 on a Microsoft Windows system:
   is needed.  However, the following libraries are needed to build libs3:
 
   - curl development libraries
-  - libxml2 development libraries
-  - openssl development libraries
+  - libxml2 development libraries, and the libraries that it requires:
+    - iconv
+    - zlib
 
   These projects are independent of libs3, and their release schedule and
   means of distribution would make it very difficult to provide links to
   the files to download and keep them up-to-date in this file, so no attempt
   is made here.
 
-  curl and libxml2 libraries and their associated files can be placed in:
+  Development libraries and other files can be placed in:
   c:\libs3-libs\bin
   c:\libs3-libs\include
-
-  The openssl libraries and associated files can be placed in:
-  c:\openssl
-  c:\openssl\include
 
   If the above locations are used, then the GNUmakefile.mingw will work with
   no special caveats.  If the above locations are not used, then the following
@@ -66,10 +63,6 @@ To install libs3 on a Microsoft Windows system:
       link in the libxml2 libraries
   LIBXML2_CFLAGS should be set to the MingW compiler flags needed to locate and
       include the libxml2 headers
-  OPENSSL_LIBS should be set to the MingW compiler flags needed to locate and
-      link in the openssl libraries
-  OPENSSL_CFLAGS should be set to the MingW compiler flags needed to locate and
-      include the openssl headers
 
 * mingw32-make [DESTDIR=destination] -f GNUmakefile.mingw install
 

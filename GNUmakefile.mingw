@@ -38,8 +38,8 @@
 # --------------------------------------------------------------------------
 # Set libs3 version number
 
-LIBS3_VER_MAJOR := trunk
-LIBS3_VER_MINOR := trunk
+LIBS3_VER_MAJOR := 0
+LIBS3_VER_MINOR := 6
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
@@ -117,7 +117,7 @@ install: libs3 s3 headers
 	-@mkdir $(DESTDIR)\include
 	-@mkdir $(DESTDIR)\lib
 	copy $(BUILD)\bin\s3.exe $(DESTDIR)\bin
-	copy $(BUILD)\lib\libs3.dll $(DESTDIR)\bin
+	copy $(BUILD)\bin\libs3.dll $(DESTDIR)\bin
 	copy $(BUILD)\lib\libs3.a $(DESTDIR)\lib
 	copy mswin\libs3.def $(DESTDIR)\lib
 	copy $(BUILD)\include\libs3.h $(DESTDIR)\include
