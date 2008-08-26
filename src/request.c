@@ -184,8 +184,7 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
         }
     }
     else {
-        request->status = S3StatusInternalError;
-        return CURL_READFUNC_ABORT;
+        return 0;
     }
 }
 
@@ -860,6 +859,10 @@ static S3Status setup_curl(Request *request,
         snprintf(header, sizeof(header), "Content-Length: %llu",
                  (unsigned long long) params->toS3CallbackTotalSize);
         request->headers = curl_slist_append(request->headers, header);
+        request->headers = curl_slist_append(request->headers, 
+                                             "Transfer-Encoding:");
+    }
+    else if (params->httpRequestType == HttpRequestTypeCOPY) {
         request->headers = curl_slist_append(request->headers, 
                                              "Transfer-Encoding:");
     }

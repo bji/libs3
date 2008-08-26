@@ -503,8 +503,7 @@ uint64_t hash(const unsigned char *k, int length)
         case 4 : a += ((uint32_t) k[3]) << 24;
         case 3 : a += ((uint32_t) k[2]) << 16;
         case 2 : a += ((uint32_t) k[1]) << 8;
-        case 1 : a += k[0];
-            break;
+        case 1 : a += k[0]; break;
         case 0 : goto end;
         }
     }
@@ -544,8 +543,7 @@ uint64_t hash(const unsigned char *k, int length)
         case 4 : a += k[3];
         case 3 : a += ((uint32_t) k[2]) << 8;
         case 2 : a += ((uint32_t) k[1]) << 16;
-        case 1 : a += ((uint32_t) k[0]) << 24;
-            break;
+        case 1 : a += ((uint32_t) k[0]) << 24; break;
         case 0 : goto end;
         }
     }
