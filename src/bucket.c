@@ -524,7 +524,7 @@ static S3Status listBucketXmlCallback(const char *elementPath,
                 (contents->ownerDisplayName, data, dataLen, fit);
         }
         else if (!strcmp(elementPath, 
-                         "ListBucketResult/CommonPrefix/Prefix")) {
+                         "ListBucketResult/CommonPrefixes/Prefix")) {
             int which = lbData->commonPrefixesCount;
             lbData->commonPrefixLens[which] +=
                 snprintf(lbData->commonPrefixes[which],
@@ -556,7 +556,7 @@ static S3Status listBucketXmlCallback(const char *elementPath,
             }
         }
         else if (!strcmp(elementPath,
-                         "ListBucketResult/CommonPrefix/Prefix")) {
+                         "ListBucketResult/CommonPrefixes/Prefix")) {
             // Finished a Prefix
             lbData->commonPrefixesCount++;
             if (lbData->commonPrefixesCount == MAX_COMMON_PREFIXES) {

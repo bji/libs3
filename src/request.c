@@ -893,7 +893,7 @@ static S3Status setup_curl(Request *request,
     // Set URI
     curl_easy_setopt_safe(CURLOPT_URL, request->uri);
 
-    // Set request type
+    // Set request type.
     switch (params->httpRequestType) {
     case HttpRequestTypeHEAD:
 	curl_easy_setopt_safe(CURLOPT_NOBODY, 1);
@@ -920,6 +920,12 @@ static void request_deinitialize(Request *request)
     }
     
     error_parser_deinitialize(&(request->errorParser));
+
+    // curl_easy_reset prevents connections from being re-used for some
+    // reason.  This makes HTTP Keep-Alive meaningless and is very bad for
+    // performance.  But it is necessary to allow curl to work properly.
+    // xxx todo figure out why
+    curl_easy_reset(request->curl);
 }
 
 

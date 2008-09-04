@@ -661,7 +661,7 @@ static struct option longOptionsG[] =
     { "force",                no_argument,        0,  'f' },
     { "vhost-style",          no_argument,        0,  'h' },
     { "unencrypted",          no_argument,        0,  'u' },
-    { "show-proerties",       no_argument,        0,  's' },
+    { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
     { 0,                      0,                  0,   0  }
 };

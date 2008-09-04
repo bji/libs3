@@ -28,9 +28,6 @@
 #include <string.h>
 #include "util.h"
 
-static const char *urlSafeG = "-_.!~*'()/";
-static const char *hexG = "0123456789ABCDEF";
-
 
 // Convenience utility for making the code look nicer.  Tests a string
 // against a format; only the characters specified in the format are
@@ -59,13 +56,16 @@ static int checkString(const char *str, const char *format)
 
 int urlEncode(char *dest, const char *src, int maxSrcSize)
 {
+    static const char *urlSafe = "-_.!~*'()/";
+    static const char *hex = "0123456789ABCDEF";
+
     int len = 0;
 
     if (src) while (*src) {
         if (++len > maxSrcSize) {
             return 0;
         }
-        const char *urlsafe = urlSafeG;
+        const char *urlsafe = urlSafe;
         int isurlsafe = 0;
         while (*urlsafe) {
             if (*urlsafe == *src) {
@@ -83,8 +83,8 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
         }
         else {
             *dest++ = '%';
-            *dest++ = hexG[*src / 16];
-            *dest++ = hexG[*src % 16];
+            *dest++ = hex[*src / 16];
+            *dest++ = hex[*src % 16];
             src++;
         }
     }

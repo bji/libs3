@@ -31,6 +31,11 @@
 #include <sys/time.h>
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 /** **************************************************************************
  * Overview
  * --------
@@ -1710,5 +1715,9 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
  * functions for generating form stuff for posting to s3
  **/
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LIBS3_H */
