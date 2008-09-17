@@ -281,7 +281,7 @@ int base64Encode(const unsigned char *in, int inLen, unsigned char *out)
 
 static void SHA1_transform(uint32_t state[5], const unsigned char buffer[64])
 {
-    unsigned long a, b, c, d, e;
+    uint32_t a, b, c, d, e;
 
     typedef union {
         unsigned char c[64];
@@ -299,7 +299,7 @@ static void SHA1_transform(uint32_t state[5], const unsigned char buffer[64])
     d = state[3];
     e = state[4];
 
-    static unsigned int endianness_indicator = 0x1;
+    static uint32_t endianness_indicator = 0x1;
     if (((unsigned char *) &endianness_indicator)[0]) {
         R0A_L( 0);
         R0E_L( 1); R0D_L( 2); R0C_L( 3); R0B_L( 4); R0A_L( 5);
@@ -356,7 +356,7 @@ static void SHA1_init(SHA1Context *context)
 static void SHA1_update(SHA1Context *context, const unsigned char *data,
                         unsigned int len)
 {
-    unsigned int i, j;
+    uint32_t i, j;
 
     j = (context->count[0] >> 3) & 63;
 
@@ -384,7 +384,7 @@ static void SHA1_update(SHA1Context *context, const unsigned char *data,
 
 static void SHA1_final(unsigned char digest[20], SHA1Context *context)
 {
-    unsigned long i;
+    uint32_t i;
     unsigned char finalcount[8];
 
     for (i = 0; i < 8; i++) {
@@ -466,7 +466,7 @@ uint64_t hash(const unsigned char *k, int length)
 
     a = b = c = 0xdeadbeef + ((uint32_t) length);
 
-    static unsigned int endianness_indicator = 0x1;
+    static uint32_t endianness_indicator = 0x1;
     if (((unsigned char *) &endianness_indicator)[0]) {
         while (length > 12) {
             a += k[0];

@@ -473,7 +473,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
                   S3StatusIfNotMatchETagTooLong);
     
     // Range header
-    if (params->getConditions && (params->startByte || params->byteCount)) {
+    if (params->startByte || params->byteCount) {
         if (params->byteCount) {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
                      "Range: bytes=%llu-%llu", 

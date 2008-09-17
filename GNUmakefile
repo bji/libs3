@@ -174,7 +174,8 @@ $(DEBDEVPKG): exported $(BUILD)/deb-dev/DEBIAN/control \
 $(BUILD)/deb/DEBIAN/control: debian/control
 	@mkdir -p $(dir $@)
 	echo -n "Depends: " > $@
-	dpkg-shlibdeps -O $(BUILD)/bin/s3 | cut -d '=' -f 2- >> $@
+	dpkg-shlibdeps -Sbuild -O $(BUILD)/lib/libs3.so.0 | \
+            cut -d '=' -f 2- >> $@
 	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
             < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' | \
             grep -v ^Source: >> $@

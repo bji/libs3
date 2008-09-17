@@ -685,6 +685,7 @@ static S3Status responsePropertiesCallback
         }                                                          \
     } while (0)
     
+    print_nonnull("Content-Type", contentType);
     print_nonnull("Request-Id", requestId);
     print_nonnull("Request-Id-2", requestId2);
     if (properties->contentLength > 0) {
