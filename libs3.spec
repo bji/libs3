@@ -1,11 +1,11 @@
 Summary: C Library and Tools for Amazon S3 Access
 Name: libs3
-Version: trunk
+Version: 0.7
 Release: 1
 License: GPL
 Group: Networking/Utilities
 URL: http://sourceforge.net/projects/reallibs3
-Source0: libs3-trunk.tar.gz
+Source0: libs3-0.7.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
 # Want to include curl dependencies, but older Fedora Core uses curl-devel,
 # and newer Fedora Core uses libcurl-devel ... have to figure out how to

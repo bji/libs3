@@ -1,3 +1,6 @@
+Thu Sep 18 10:03:02 NZST 2008   bryan@ischo.com
+	* This file is no longer maintained, sorry
+
 Sat Aug  9 13:44:21 NZST 2008   bryan@ischo.com
 	* Fixed bug wherein keys with non-URI-safe characters did not work
 	  correctly because they were not being URI-encoded in the request UR
