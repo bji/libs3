@@ -66,7 +66,7 @@
 int urlEncode(char *dest, const char *src, int maxSrcSize);
 
 // Returns < 0 on failure >= 0 on success
-time_t parseIso8601Time(const char *str);
+int64_t parseIso8601Time(const char *str);
 
 uint64_t parseUnsignedInt(const char *str);
 

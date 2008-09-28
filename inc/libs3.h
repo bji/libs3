@@ -534,7 +534,7 @@ typedef struct S3ResponseProperties
      * of seconds since the UNIX epoch.
      * 
      **/
-    time_t lastModified;
+    int64_t lastModified;
 
     /**
      * This is the number of user-provided meta data associated with the
@@ -662,7 +662,7 @@ typedef struct S3ListBucketContent
      * This is the number of seconds since UNIX epoch of the last modified
      * date of the object identified by the key. 
      **/
-    time_t lastModified;
+    int64_t lastModified;
 
     /**
      * This gives a tag which gives a signature of the contents of the object,
@@ -736,7 +736,7 @@ typedef struct S3PutProperties
      * information is typically only delivered to users who download the
      * content via a web browser.
      **/
-    time_t expires;
+    int64_t expires;
 
     /**
      * This identifies the "canned ACL" that should be used for this object.
@@ -770,7 +770,7 @@ typedef struct S3GetConditions
      * seconds since Unix epoch.  If this value is less than zero, it will not
      * be used in the conditional.
      **/
-    time_t ifModifiedSince;
+    int64_t ifModifiedSince;
 
     /**
      * The request will be processed if the Last-Modification header of the
@@ -778,7 +778,7 @@ typedef struct S3GetConditions
      * Unix epoch.  If this value is less than zero, it will not be used in
      * the conditional.
      **/
-    time_t ifNotModifiedSince;
+    int64_t ifNotModifiedSince;
 
     /**
      * If non-NULL, this gives an eTag header value which the object must
@@ -900,7 +900,7 @@ typedef void (S3ResponseCompleteCallback)(S3Status status,
 typedef S3Status (S3ListServiceCallback)(const char *ownerId, 
                                          const char *ownerDisplayName,
                                          const char *bucketName,
-                                         time_t creationDateSeconds,
+                                         int64_t creationDateSeconds,
                                          void *callbackData);
 
 
@@ -1344,6 +1344,23 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                                        fd_set *exceptFdSet, int *maxFd);
 
 
+/**
+ * This function returns the maximum number of milliseconds that the caller of
+ * S3_runonce_request_context should wait on the fdsets obtained via a call to
+ * S3_get_request_context_fdsets.  In other words, this is essentially the
+ * select() timeout that needs to be used (shorter values are OK, but no
+ * longer than this) to ensure that internal timeout code of libs3 can work
+ * properly.  This function should be called right before select() each time
+ * select() on the request_context fdsets are to be performed by the libs3
+ * user.
+ *
+ * @param requestContext is the S3RequestContext to get the timeout from
+ * @return the maximum number of milliseconds to select() on fdsets.  Callers
+ *         could wait a shorter time if they wish, but not longer.
+ **/
+int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
+
+
 /** **************************************************************************
  * Service Functions
  ************************************************************************** **/
@@ -1559,7 +1576,7 @@ void S3_copy_object(const S3BucketContext *bucketContext,
                     const char *key, const char *destinationBucket,
                     const char *destinationKey,
                     const S3PutProperties *putProperties,
-                    time_t *lastModifiedReturn, int eTagReturnSize,
+                    int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
 

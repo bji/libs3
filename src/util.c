@@ -95,7 +95,7 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
 }
 
 
-time_t parseIso8601Time(const char *str)
+int64_t parseIso8601Time(const char *str)
 {
     // Check to make sure that it has a valid format
     if (!checkString(str, "dddd-dd-ddTdd:dd:dd")) {
@@ -130,7 +130,7 @@ time_t parseIso8601Time(const char *str)
 
     stm.tm_isdst = -1;
     
-    time_t ret = mktime(&stm);
+    int64_t ret = mktime(&stm);
 
     // Skip the millis
 

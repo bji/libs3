@@ -80,7 +80,7 @@ typedef struct CopyObjectData
     S3ResponseCompleteCallback *responseCompleteCallback;
     void *callbackData;
 
-    time_t *lastModifiedReturn;
+    int64_t *lastModifiedReturn;
     int eTagReturnSize;
     char *eTagReturn;
     int eTagReturnLen;
@@ -165,7 +165,7 @@ static void copyObjectCompleteCallback(S3Status requestStatus,
 void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
                     const char *destinationBucket, const char *destinationKey,
                     const S3PutProperties *putProperties,
-                    time_t *lastModifiedReturn, int eTagReturnSize,
+                    int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData)
 {

@@ -696,9 +696,9 @@ static S3Status responsePropertiesCallback
     print_nonnull("ETag", eTag);
     if (properties->lastModified > 0) {
         char timebuf[256];
+        time_t t = (time_t) properties->lastModified;
         // gmtime is not thread-safe but we don't care here.
-        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
-                 gmtime(&(properties->lastModified)));
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
         printf("Last-Modified: %s\n", timebuf);
     }
     int i;
@@ -782,7 +782,7 @@ static void printListServiceHeader(int allDetails)
 static S3Status listServiceCallback(const char *ownerId, 
                                     const char *ownerDisplayName,
                                     const char *bucketName,
-                                    time_t creationDate, void *callbackData)
+                                    int64_t creationDate, void *callbackData)
 {
     list_service_data *data = (list_service_data *) callbackData;
 
@@ -793,8 +793,8 @@ static S3Status listServiceCallback(const char *ownerId,
 
     char timebuf[256];
     if (creationDate >= 0) {
-        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
-                 gmtime(&creationDate));
+        time_t t = (time_t) creationDate;
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
     }
     else {
         timebuf[0] = 0;
@@ -1090,8 +1090,9 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
         const S3ListBucketContent *content = &(contents[i]);
         char timebuf[256];
         if (0) {
+            time_t t = (time_t) content->lastModified;
             strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
-                     gmtime(&(content->lastModified)));
+                     gmtime(&t));
             printf("\nKey: %s\n", content->key);
             printf("Last Modified: %s\n", timebuf);
             printf("ETag: %s\n", content->eTag);
@@ -1104,8 +1105,9 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
             }
         }
         else {
-            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
-                     gmtime(&(content->lastModified)));
+            time_t t = (time_t) content->lastModified;
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", 
+                     gmtime(&t));
             char sizebuf[16];
             if (content->size < 100000) {
                 sprintf(sizebuf, "%5llu", (unsigned long long) content->size);
@@ -1749,7 +1751,7 @@ static void copy_object(int argc, char **argv, int optind)
         &responseCompleteCallback
     };
 
-    time_t lastModified;
+    int64_t lastModified;
     char eTag[256];
 
     do {
@@ -1762,8 +1764,9 @@ static void copy_object(int argc, char **argv, int optind)
     if (statusG == S3StatusOK) {
         if (lastModified >= 0) {
             char timebuf[256];
+            time_t t = (time_t) lastModified;
             strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
-                     gmtime(&lastModified));
+                     gmtime(&t));
             printf("Last-Modified: %s\n", timebuf);
         }
         if (eTag[0]) {

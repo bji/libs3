@@ -431,9 +431,9 @@ static S3Status compose_standard_headers(const RequestParams *params,
     
     // Expires
     if (params->putProperties && (params->putProperties->expires >= 0)) {
+        time_t t = (time_t) params->putProperties->expires;
         strftime(values->expiresHeader, sizeof(values->expiresHeader),
-                 "Expires: %a, %d %b %Y %H:%M:%S UTC", 
-                 gmtime(&(params->putProperties->expires)));
+                 "Expires: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
     }
     else {
         values->expiresHeader[0] = 0;
@@ -442,10 +442,10 @@ static S3Status compose_standard_headers(const RequestParams *params,
     // If-Modified-Since
     if (params->getConditions &&
         (params->getConditions->ifModifiedSince >= 0)) {
+        time_t t = (time_t) params->getConditions->ifModifiedSince;
         strftime(values->ifModifiedSinceHeader,
                  sizeof(values->ifModifiedSinceHeader),
-                 "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", 
-                 gmtime(&(params->getConditions->ifModifiedSince)));
+                 "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
     }
     else {
         values->ifModifiedSinceHeader[0] = 0;
@@ -454,10 +454,10 @@ static S3Status compose_standard_headers(const RequestParams *params,
     // If-Unmodified-Since header
     if (params->getConditions &&
         (params->getConditions->ifNotModifiedSince >= 0)) {
+        time_t t = (time_t) params->getConditions->ifNotModifiedSince;
         strftime(values->ifUnmodifiedSinceHeader,
                  sizeof(values->ifUnmodifiedSinceHeader),
-                 "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", 
-                 gmtime(&(params->getConditions->ifNotModifiedSince)));
+                 "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
     }
     else {
         values->ifUnmodifiedSinceHeader[0] = 0;
