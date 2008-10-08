@@ -1,3 +1,39 @@
+Version 1.1 - 2008.10.09
+------------------------
+
+	* Added extra compiler warnings and updated code to make it pass
+	  these tests
+	* Fixed a bug introduced in version 1.0 (not in version 0.7) that
+	  caused the last modified date property to not be returned
+	* Alter the semantics of the S3PutObjectDataCallback.  Now it is
+	  only called enough times to get all of the data that is needed to
+	  satisfy the contentLength specified in the S3_put_object call, and
+	  only being called with buffers big enough to hold this data.  In
+	  other words, the S3PutObjectDataCallback is now only called with
+	  "just enough" buffer space to hold the number of bytes that need
+	  to be written, as specified by the contentLength parameter of
+	  S3_put_object.  Previously, S3PutObjectDataCallback would be
+	  called indefinitely until the callback itself returned 0.  This is
+	  no longer necessary.
+	* Changed the error status code returned when the connection is
+	  established but fails before a valid HTTP response header can be
+	  received from S3, to S3StatusConnectionFailed; it used to be
+	  S3StatusHttpErrorUnknown, but that is more properly reserved for
+	  valid HTTP responses that include unknown response codes.
+	* S3_runonce_request_context now properly runs until there is no
+	  more immediate work to be done on any requests in the context.
+	  Previously, it would stop if a callback initiated a new request,
+	  and there was no other request with immediate work to do, but it
+	  should continue in this case because the new request thus added
+	  has immediate work to do.  This allows S3_runall_request_context
+	  to function properly and not stop when a request added by a
+	  callback has more stuff to do.
+	* Some minor documentation updates, and libs3.h now includes
+ 	  sys/select.h instead of sys/time.h, which is more specific now that
+	  time_t is no longer used (as of version 1.0).
+
+[No consistent ChangeLog was kept for previous versions]
+	
 Sat Aug  9 13:44:21 NZST 2008   bryan@ischo.com
 	* Fixed bug wherein keys with non-URI-safe characters did not work
 	  correctly because they were not being URI-encoded in the request UR
