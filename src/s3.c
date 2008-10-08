@@ -546,7 +546,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
     } while (0)
 
 #define COPY_STRING(field)                              \
-    COPY_STRING_MAXLEN(field, (sizeof(field) - 1))
+    COPY_STRING_MAXLEN(field, (int) (sizeof(field) - 1))
 
     while (1) {
         SKIP_SPACE(0);
@@ -674,6 +674,8 @@ static struct option longOptionsG[] =
 static S3Status responsePropertiesCallback
     (const S3ResponseProperties *properties, void *callbackData)
 {
+    (void) callbackData;
+
     if (!showResponsePropertiesG) {
         return S3StatusOK;
     }
@@ -719,6 +721,8 @@ static void responseCompleteCallback(S3Status status,
                                      const S3ErrorDetails *error, 
                                      void *callbackData)
 {
+    (void) callbackData;
+
     statusG = status;
     // Compose the error details message now, although we might not use it.
     // Can't just save a pointer to [error] since it's not guaranteed to last
@@ -846,18 +850,18 @@ static void list_service(int allDetails)
 
 // test bucket ---------------------------------------------------------------
 
-static void test_bucket(int argc, char **argv, int optind)
+static void test_bucket(int argc, char **argv, int optindex)
 {
     // test bucket
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
 
-    if (optind != argc) {
-        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
+    if (optindex != argc) {
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optindex]);
         usageExit(stderr);
     }
 
@@ -910,14 +914,14 @@ static void test_bucket(int argc, char **argv, int optind)
 
 // create bucket -------------------------------------------------------------
 
-static void create_bucket(int argc, char **argv, int optind)
+static void create_bucket(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
 
     if (!forceG && (S3_validate_bucket_name
                     (bucketName, S3UriStyleVirtualHost) != S3StatusOK)) {
@@ -931,8 +935,8 @@ static void create_bucket(int argc, char **argv, int optind)
 
     const char *locationConstraint = 0;
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, LOCATION_PREFIX, LOCATION_PREFIX_LEN)) {
             locationConstraint = &(param[LOCATION_PREFIX_LEN]);
         }
@@ -987,17 +991,17 @@ static void create_bucket(int argc, char **argv, int optind)
 
 // delete bucket -------------------------------------------------------------
 
-static void delete_bucket(int argc, char **argv, int optind)
+static void delete_bucket(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
         usageExit(stderr);
     }
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
 
-    if (optind != argc) {
-        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
+    if (optindex != argc) {
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optindex]);
         usageExit(stderr);
     }
 
@@ -1205,9 +1209,9 @@ static void list_bucket(const char *bucketName, const char *prefix,
 }
 
 
-static void list(int argc, char **argv, int optind)
+static void list(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         list_service(0);
         return;
     }
@@ -1216,8 +1220,8 @@ static void list(int argc, char **argv, int optind)
 
     const char *prefix = 0, *marker = 0, *delimiter = 0;
     int maxkeys = 0, allDetails = 0;
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
             prefix = &(param[PREFIX_PREFIX_LEN]);
         }
@@ -1261,10 +1265,12 @@ static void list(int argc, char **argv, int optind)
 
 // delete object -------------------------------------------------------------
 
-static void delete_object(int argc, char **argv, int optind)
+static void delete_object(int argc, char **argv, int optindex)
 {
+    (void) argc;
+
     // Split bucket/key
-    char *slash = argv[optind];
+    char *slash = argv[optindex];
 
     // We know there is a slash in there, put_object is only called if so
     while (*slash && (*slash != '/')) {
@@ -1272,7 +1278,7 @@ static void delete_object(int argc, char **argv, int optind)
     }
     *slash++ = 0;
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
     const char *key = slash;
 
     S3_init();
@@ -1325,8 +1331,8 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     int ret = 0;
 
     if (data->contentLength) {
-        int toRead = ((data->contentLength > bufferSize) ?
-                      bufferSize : data->contentLength);
+        int toRead = ((data->contentLength > (unsigned) bufferSize) ?
+                      (unsigned) bufferSize : data->contentLength);
         if (data->gb) {
             growbuffer_read(&(data->gb), toRead, &ret, buffer);
         }
@@ -1352,26 +1358,26 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
 }
 
 
-static void put_object(int argc, char **argv, int optind)
+static void put_object(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
 
     // Split bucket/key
-    char *slash = argv[optind];
+    char *slash = argv[optindex];
     while (*slash && (*slash != '/')) {
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
         fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
-                argv[optind]);
+                argv[optindex]);
         usageExit(stderr);
     }
     *slash++ = 0;
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
     const char *key = slash;
 
     const char *filename = 0;
@@ -1384,8 +1390,8 @@ static void put_object(int argc, char **argv, int optind)
     S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
     int noStatus = 0;
 
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
@@ -1523,7 +1529,7 @@ static void put_object(int argc, char **argv, int optind)
                     exit(-1);
                 }
                 contentLength += amtRead;
-                if (amtRead < sizeof(buffer)) {
+                if (amtRead < (int) sizeof(buffer)) {
                     break;
                 }
             }
@@ -1591,47 +1597,47 @@ static void put_object(int argc, char **argv, int optind)
 
 // copy object ---------------------------------------------------------------
 
-static void copy_object(int argc, char **argv, int optind)
+static void copy_object(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: source bucket/key\n");
         usageExit(stderr);
     }
 
     // Split bucket/key
-    char *slash = argv[optind];
+    char *slash = argv[optindex];
     while (*slash && (*slash != '/')) {
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
         fprintf(stderr, "\nERROR: Invalid source bucket/key name: %s\n",
-                argv[optind]);
+                argv[optindex]);
         usageExit(stderr);
     }
     *slash++ = 0;
 
-    const char *sourceBucketName = argv[optind++];
+    const char *sourceBucketName = argv[optindex++];
     const char *sourceKey = slash;
 
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: "
                 "destination bucket/key\n");
         usageExit(stderr);
     }
 
     // Split bucket/key
-    slash = argv[optind];
+    slash = argv[optindex];
     while (*slash && (*slash != '/')) {
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
         fprintf(stderr, "\nERROR: Invalid destination bucket/key name: %s\n",
-                argv[optind]);
+                argv[optindex]);
         usageExit(stderr);
     }
     *slash++ = 0;
 
-    const char *destinationBucketName = argv[optind++];
+    const char *destinationBucketName = argv[optindex++];
     const char *destinationKey = slash;
 
     const char *cacheControl = 0, *contentType = 0;
@@ -1642,8 +1648,8 @@ static void copy_object(int argc, char **argv, int optind)
     S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
     int anyPropertiesSet = 0;
 
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, CACHE_CONTROL_PREFIX, 
                           CACHE_CONTROL_PREFIX_LEN)) {
             cacheControl = &(param[CACHE_CONTROL_PREFIX_LEN]);
@@ -1790,30 +1796,31 @@ static S3Status getObjectDataCallback(int bufferSize, const char *buffer,
 
     size_t wrote = fwrite(buffer, 1, bufferSize, outfile);
     
-    return (wrote < bufferSize) ? S3StatusAbortedByCallback : S3StatusOK;
+    return ((wrote < (size_t) bufferSize) ? 
+            S3StatusAbortedByCallback : S3StatusOK);
 }
 
 
-static void get_object(int argc, char **argv, int optind)
+static void get_object(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
 
     // Split bucket/key
-    char *slash = argv[optind];
+    char *slash = argv[optindex];
     while (*slash && (*slash != '/')) {
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
         fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
-                argv[optind]);
+                argv[optindex]);
         usageExit(stderr);
     }
     *slash++ = 0;
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
     const char *key = slash;
 
     const char *filename = 0;
@@ -1821,8 +1828,8 @@ static void get_object(int argc, char **argv, int optind)
     const char *ifMatch = 0, *ifNotMatch = 0;
     uint64_t startByte = 0, byteCount = 0;
 
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
@@ -1946,9 +1953,9 @@ static void get_object(int argc, char **argv, int optind)
 
 // head object ---------------------------------------------------------------
 
-static void head_object(int argc, char **argv, int optind)
+static void head_object(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
@@ -1957,23 +1964,23 @@ static void head_object(int argc, char **argv, int optind)
     showResponsePropertiesG = 1;
 
     // Split bucket/key
-    char *slash = argv[optind];
+    char *slash = argv[optindex];
 
     while (*slash && (*slash != '/')) {
         slash++;
     }
     if (!*slash || !*(slash + 1)) {
         fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
-                argv[optind]);
+                argv[optindex]);
         usageExit(stderr);
     }
     *slash++ = 0;
 
-    const char *bucketName = argv[optind++];
+    const char *bucketName = argv[optindex++];
     const char *key = slash;
 
-    if (optind != argc) {
-        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optind]);
+    if (optindex != argc) {
+        fprintf(stderr, "\nERROR: Extraneous parameter: %s\n", argv[optindex]);
         usageExit(stderr);
     }
 
@@ -2009,18 +2016,18 @@ static void head_object(int argc, char **argv, int optind)
 
 // get acl -------------------------------------------------------------------
 
-void get_acl(int argc, char **argv, int optind)
+void get_acl(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket[/key]\n");
         usageExit(stderr);
     }
 
-    const char *bucketName = argv[optind];
+    const char *bucketName = argv[optindex];
     const char *key = 0;
 
     // Split bucket/key
-    char *slash = argv[optind++];
+    char *slash = argv[optindex++];
     while (*slash && (*slash != '/')) {
         slash++;
     }
@@ -2034,8 +2041,8 @@ void get_acl(int argc, char **argv, int optind)
 
     const char *filename = 0;
 
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
@@ -2172,18 +2179,18 @@ void get_acl(int argc, char **argv, int optind)
 
 // set acl -------------------------------------------------------------------
 
-void set_acl(int argc, char **argv, int optind)
+void set_acl(int argc, char **argv, int optindex)
 {
-    if (optind == argc) {
+    if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket[/key]\n");
         usageExit(stderr);
     }
 
-    const char *bucketName = argv[optind];
+    const char *bucketName = argv[optindex];
     const char *key = 0;
 
     // Split bucket/key
-    char *slash = argv[optind++];
+    char *slash = argv[optindex++];
     while (*slash && (*slash != '/')) {
         slash++;
     }
@@ -2197,8 +2204,8 @@ void set_acl(int argc, char **argv, int optind)
 
     const char *filename = 0;
 
-    while (optind < argc) {
-        char *param = argv[optind++];
+    while (optindex < argc) {
+        char *param = argv[optindex++];
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
@@ -2276,8 +2283,8 @@ int main(int argc, char **argv)
 {
     // Parse args
     while (1) {
-        int index = 0;
-        int c = getopt_long(argc, argv, "fhusr:", longOptionsG, &index);
+        int idx = 0;
+        int c = getopt_long(argc, argv, "fhusr:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options

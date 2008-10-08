@@ -148,8 +148,8 @@ typedef struct Request
     // Callback to be made to supply data to send to S3.  Might not be called.
     S3PutObjectDataCallback *toS3Callback;
 
-    // Number of bytes total that readCallback will supply
-    int64_t toS3CallbackTotalSize;
+    // Number of bytes total that readCallback has left to supply
+    int64_t toS3CallbackBytesRemaining;
 
     // Callback to be made that supplies data read from S3.
     // Might not be called.

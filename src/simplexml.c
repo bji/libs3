@@ -47,6 +47,8 @@
 
 static xmlEntityPtr saxGetEntity(void *user_data, const xmlChar *name)
 {
+    (void) user_data;
+
     return xmlGetPredefinedEntity(name);
 }
 
@@ -54,6 +56,8 @@ static xmlEntityPtr saxGetEntity(void *user_data, const xmlChar *name)
 static void saxStartElement(void *user_data, const xmlChar *nameUtf8,
                             const xmlChar **attr)
 {
+    (void) attr;
+
     SimpleXml *simpleXml = (SimpleXml *) user_data;
 
     if (simpleXml->status != S3StatusOK) {
@@ -67,7 +71,7 @@ static void saxStartElement(void *user_data, const xmlChar *nameUtf8,
     int len = strlen(name);
 
     if ((simpleXml->elementPathLen + len + 1) >= 
-        sizeof(simpleXml->elementPath)) {
+        (int) sizeof(simpleXml->elementPath)) {
         // Cannot handle this element, stop!
         simpleXml->status = S3StatusXmlParseFailure;
         return;
@@ -83,6 +87,8 @@ static void saxStartElement(void *user_data, const xmlChar *nameUtf8,
 
 static void saxEndElement(void *user_data, const xmlChar *name)
 {
+    (void) name;
+
     SimpleXml *simpleXml = (SimpleXml *) user_data;
 
     if (simpleXml->status != S3StatusOK) {
@@ -117,6 +123,8 @@ static void saxCharacters(void *user_data, const xmlChar *ch, int len)
 
 static void saxError(void *user_data, const char *msg, ...)
 {
+    (void) msg;
+
     SimpleXml *simpleXml = (SimpleXml *) user_data;
 
     if (simpleXml->status != S3StatusOK) {

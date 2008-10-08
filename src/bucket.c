@@ -532,7 +532,7 @@ static S3Status listBucketXmlCallback(const char *elementPath,
                          lbData->commonPrefixLens[which] - 1,
                          "%.*s", dataLen, data);
             if (lbData->commonPrefixLens[which] >=
-                sizeof(lbData->commonPrefixes[which])) {
+                (int) sizeof(lbData->commonPrefixes[which])) {
                 return S3StatusXmlParseFailure;
             }
         }

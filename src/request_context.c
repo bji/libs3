@@ -160,6 +160,9 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
             // Finish the request, ensuring that all callbacks have been made,
             // and also releases the request
             request_finish(request);
+            // Now, since a callback was made, there may be new requests 
+            // queued up to be performed immediately, so do so
+            status = CURLM_CALL_MULTI_PERFORM;
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 

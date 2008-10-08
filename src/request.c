@@ -172,19 +172,31 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
         return CURL_READFUNC_ABORT;
     }
 
-    if (request->toS3Callback) {
-        int ret = (*(request->toS3Callback))
-            (len, (char *) ptr, request->callbackData);
-        if (ret < 0) {
-            request->status = S3StatusAbortedByCallback;
-            return CURL_READFUNC_ABORT;
-        }
-        else {
-            return ret;
-        }
+    // If there is no data callback, or the data callback has already returned
+    // contentLength bytes, return 0;
+    if (!request->toS3Callback || !request->toS3CallbackBytesRemaining) {
+        return 0;
+    }
+    
+    // Don't tell the callback that we are willing to accept more data than we
+    // really are
+    if (len > request->toS3CallbackBytesRemaining) {
+        len = request->toS3CallbackBytesRemaining;
+    }
+
+    // Otherwise, make the data callback
+    int ret = (*(request->toS3Callback))
+        (len, (char *) ptr, request->callbackData);
+    if (ret < 0) {
+        request->status = S3StatusAbortedByCallback;
+        return CURL_READFUNC_ABORT;
     }
     else {
-        return 0;
+        if (ret > request->toS3CallbackBytesRemaining) {
+            ret = request->toS3CallbackBytesRemaining;
+        }
+        request->toS3CallbackBytesRemaining -= ret;
+        return ret;
     }
 }
 
@@ -253,7 +265,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
         len += snprintf(&(values->amzHeadersRaw[len]),                  \
                         sizeof(values->amzHeadersRaw) - len,            \
                         format, __VA_ARGS__);                           \
-        if (len >= sizeof(values->amzHeadersRaw)) {                     \
+        if (len >= (int) sizeof(values->amzHeadersRaw)) {               \
             return S3StatusMetaDataHeadersTooLong;                      \
         }                                                               \
         while ((len > 0) && (values->amzHeadersRaw[len - 1] == ' ')) {  \
@@ -266,7 +278,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
     do {                                                                \
         values->amzHeaders[values->amzHeadersCount++] =                 \
             &(values->amzHeadersRaw[len]);                              \
-        if ((len + l) >= sizeof(values->amzHeadersRaw)) {               \
+        if ((len + l) >= (int) sizeof(values->amzHeadersRaw)) {         \
             return S3StatusMetaDataHeadersTooLong;                      \
         }                                                               \
         int todo = l;                                                   \
@@ -362,7 +374,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
             /* Compose header, make sure it all fit */                      \
             int len = snprintf(values-> destField,                          \
                                sizeof(values-> destField), fmt, val);       \
-            if (len >= sizeof(values-> destField)) {                        \
+            if (len >= (int) sizeof(values-> destField)) {                  \
                 return tooLongError;                                        \
             }                                                               \
             /* Now remove the whitespace at the end */                      \
@@ -392,7 +404,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
             /* Compose header, make sure it all fit */                      \
             int len = snprintf(values-> destField,                          \
                                sizeof(values-> destField), fmt, val);       \
-            if (len >= sizeof(values-> destField)) {                        \
+            if (len >= (int) sizeof(values-> destField)) {                  \
                 return tooLongError;                                        \
             }                                                               \
             /* Now remove the whitespace at the end */                      \
@@ -732,7 +744,7 @@ static S3Status compose_uri(Request *request, const RequestParams *params,
         len += snprintf(&(request->uri[len]),           \
                         sizeof(request->uri) - len,     \
                         fmt, __VA_ARGS__);              \
-        if (len >= sizeof(request->uri)) {              \
+        if (len >= (int) sizeof(request->uri)) {        \
             return S3StatusUriTooLong;                  \
         }                                               \
     } while (0)
@@ -990,6 +1002,8 @@ static S3Status request_get(const RequestParams *params,
 
     request->toS3Callback = params->toS3Callback;
 
+    request->toS3CallbackBytesRemaining = params->toS3CallbackTotalSize;
+
     request->fromS3Callback = params->fromS3Callback;
 
     request->completeCallback = params->completeCallback;
@@ -1186,6 +1200,11 @@ void request_finish(Request *request)
             ((request->httpResponseCode < 200) ||
              (request->httpResponseCode > 299))) {
             switch (request->httpResponseCode) {
+            case 0:
+                // This happens if the request never got any HTTP response
+                // headers at all, we call this a ConnectionFailed error
+                request->status = S3StatusConnectionFailed;
+                break;
             case 100: // Some versions of libcurl erroneously set HTTP
                       // status to this
                 break;

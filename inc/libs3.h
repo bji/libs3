@@ -28,7 +28,7 @@
 #define LIBS3_H
 
 #include <stdint.h>
-#include <sys/time.h>
+#include <sys/select.h>
 
 
 #ifdef __cplusplus
@@ -905,8 +905,10 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
 
 
 /**
- * This callback is made once for each object resulting from a list bucket
- * operation.
+ * This callback is made repeatedly as a list bucket operation progresses.
+ * The contents reported via this callback are only reported once per list
+ * bucket operation, but multiple calls to this callback may be necessary to
+ * report all items resulting from the list bucket operation.
  *
  * @param isTruncated is true if the list bucket request was truncated by the
  *        S3 service, in which case the remainder of the list may be obtained
@@ -1045,7 +1047,9 @@ typedef struct S3ListBucketHandler
 
     /**
      * The listBucketCallback is called as items are reported back from S3 as
-     * responses to the request
+     * responses to the request.  This may be called more than one time per
+     * list bucket request, each time providing more items from the list
+     * operation.
      **/
     S3ListBucketCallback *listBucketCallback;
 } S3ListBucketHandler;
