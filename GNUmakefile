@@ -121,6 +121,7 @@ install: libs3 s3 headers
 	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
                $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
 	ln -sf libs3.so.$(LIBS3_VER) $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(DESTDIR)/lib/libs3.so
 
 
 # --------------------------------------------------------------------------
@@ -131,6 +132,7 @@ uninstall:
 	rm -f $(DESTDIR)/bin/s3 \
               $(DESTDIR)/include/libs3.h \
               $(DESTDIR)/lib/libs3.a \
+              $(DESTDIR)/lib/libs3.so \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER) \
 
