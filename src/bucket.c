@@ -131,14 +131,14 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        protocol,                                     // protocol
-        uriStyle,                                     // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          uriStyle,                                   // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         "?location",                                  // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -267,14 +267,14 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        protocol,                                     // protocol
-        S3UriStylePath,                               // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          S3UriStylePath,                             // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -349,14 +349,14 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeDELETE,                        // httpRequestType
-        protocol,                                     // protocol
-        uriStyle,                                     // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          uriStyle,                                   // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -700,14 +700,14 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         0,                                            // key
         queryParams[0] ? queryParams : 0,             // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

@@ -634,29 +634,30 @@ static void canonicalize_amz_headers(RequestComputedValues *values)
 
 
 // Canonicalizes the resource into params->canonicalizedResource
-static void canonicalize_resource(const RequestParams *params,
-                                  RequestComputedValues *values)
+static void canonicalize_resource(const char *bucketName,
+                                  const char *subResource,
+                                  const char *urlEncodedKey,
+                                  char *buffer)
 {
-    char *buffer = values->canonicalizedResource;
     int len = 0;
 
     *buffer = 0;
 
 #define append(str) len += sprintf(&(buffer[len]), "%s", str)
 
-    if (params->bucketName && params->bucketName[0]) {
+    if (bucketName && bucketName[0]) {
         buffer[len++] = '/';
-        append(params->bucketName);
+        append(bucketName);
     }
 
     append("/");
 
-    if (values->urlEncodedKey[0]) {
-        append(values->urlEncodedKey);
+    if (urlEncodedKey && urlEncodedKey[0]) {
+        append(urlEncodedKey);
     }
 
-    if (params->subResource && params->subResource[0]) {
-        append(params->subResource);
+    if (subResource && subResource[0]) {
+        append(subResource);
     }
 }
 
@@ -684,9 +685,9 @@ static S3Status compose_auth_header(const RequestParams *params,
 {
     // We allow for:
     // 17 bytes for HTTP-Verb + \n
-    // 129 bytes for MD5 + \n
+    // 129 bytes for Content-MD5 + \n
     // 129 bytes for Content-Type + \n
-    // 1 byte for Data + \n
+    // 1 byte for empty Date + \n
     // CanonicalizedAmzHeaders & CanonicalizedResource
     char signbuf[17 + 129 + 129 + 1 + 
                  (sizeof(values->canonicalizedAmzHeaders) - 1) +
@@ -718,45 +719,48 @@ static S3Status compose_auth_header(const RequestParams *params,
     // Generate an HMAC-SHA-1 of the signbuf
     unsigned char hmac[20];
 
-    HMAC_SHA1(hmac, (unsigned char *) params->secretAccessKey,
-              strlen(params->secretAccessKey),
+    HMAC_SHA1(hmac, (unsigned char *) params->bucketContext.secretAccessKey,
+              strlen(params->bucketContext.secretAccessKey),
               (unsigned char *) signbuf, len);
 
     // Now base-64 encode the results
-    unsigned char b64[((20 + 1) * 4) / 3];
+    char b64[((20 + 1) * 4) / 3];
     int b64Len = base64Encode(hmac, 20, b64);
     
     snprintf(values->authorizationHeader, sizeof(values->authorizationHeader),
-             "Authorization: AWS %s:%.*s", params->accessKeyId, b64Len, b64);
+             "Authorization: AWS %s:%.*s", params->bucketContext.accessKeyId,
+             b64Len, b64);
 
     return S3StatusOK;
 }
 
 
 // Compose the URI to use for the request given the request parameters
-static S3Status compose_uri(Request *request, const RequestParams *params, 
-                            const RequestComputedValues *values)
+static S3Status compose_uri(char *buffer, int bufferSize,
+                            const S3BucketContext *bucketContext,
+                            const char *urlEncodedKey,
+                            const char *subResource, const char *queryParams)
 {
     int len = 0;
-
-#define uri_append(fmt, ...)                            \
-    do {                                                \
-        len += snprintf(&(request->uri[len]),           \
-                        sizeof(request->uri) - len,     \
-                        fmt, __VA_ARGS__);              \
-        if (len >= (int) sizeof(request->uri)) {        \
-            return S3StatusUriTooLong;                  \
-        }                                               \
+    
+#define uri_append(fmt, ...)                                                 \
+    do {                                                                     \
+        len += snprintf(&(buffer[len]), bufferSize - len, fmt, __VA_ARGS__); \
+        if (len >= bufferSize) {                                             \
+            return S3StatusUriTooLong;                                       \
+        }                                                                    \
     } while (0)
 
-    uri_append("http%s://", (params->protocol == S3ProtocolHTTP) ? "" : "s");
+    uri_append("http%s://", 
+               (bucketContext->protocol == S3ProtocolHTTP) ? "" : "s");
 
-    if (params->bucketName && params->bucketName[0]) {
-        if (params->uriStyle == S3UriStyleVirtualHost) {
-            uri_append("%s.s3.amazonaws.com", params->bucketName);
+    if (bucketContext->bucketName && 
+        bucketContext->bucketName[0]) {
+        if (bucketContext->uriStyle == S3UriStyleVirtualHost) {
+            uri_append("%s.s3.amazonaws.com", bucketContext->bucketName);
         }
         else {
-            uri_append("s3.amazonaws.com/%s", params->bucketName);
+            uri_append("s3.amazonaws.com/%s", bucketContext->bucketName);
         }
     }
     else {
@@ -765,18 +769,17 @@ static S3Status compose_uri(Request *request, const RequestParams *params,
 
     uri_append("%s", "/");
 
-    if (params->key && params->key[0]) {
-        uri_append("%s", values->urlEncodedKey);
-    }
-
-    if (params->subResource && params->subResource[0]) {
-        uri_append("%s", params->subResource);
+    uri_append("%s", urlEncodedKey);
+    
+    if (subResource && subResource[0]) {
+        uri_append("%s", subResource);
     }
     
-    if (params->queryParams) {
-        uri_append("%s", params->queryParams);
+    if (queryParams) {
+        uri_append("%c%s", (subResource && subResource[0]) ? '&' : '?',
+                   queryParams);
     }
-
+    
     return S3StatusOK;
 }
 
@@ -985,7 +988,10 @@ static S3Status request_get(const RequestParams *params,
     request->headers = 0;
 
     // Compute the URL
-    if ((status = compose_uri(request, params, values)) != S3StatusOK) {
+    if ((status = compose_uri
+         (request->uri, sizeof(request->uri), 
+          &(params->bucketContext), values->urlEncodedKey,
+          params->subResource, params->queryParams)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
         free(request);
         return status;
@@ -1109,9 +1115,10 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     RequestComputedValues computed;
 
     // Validate the bucket name
-    if (params->bucketName && 
+    if (params->bucketContext.bucketName && 
         ((status = S3_validate_bucket_name
-          (params->bucketName, params->uriStyle)) != S3StatusOK)) {
+          (params->bucketContext.bucketName, 
+           params->bucketContext.uriStyle)) != S3StatusOK)) {
         return_status(status);
     }
 
@@ -1135,7 +1142,9 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     canonicalize_amz_headers(&computed);
 
     // Compute the canonicalized resource
-    canonicalize_resource(params, &computed);
+    canonicalize_resource(params->bucketContext.bucketName,
+                          params->subResource, computed.urlEncodedKey,
+                          computed.canonicalizedResource);
 
     // Compose Authorization header
     if ((status = compose_auth_header(params, &computed)) != S3StatusOK) {
@@ -1282,4 +1291,85 @@ S3Status request_curl_code_to_status(CURLcode code)
     default:
         return S3StatusInternalError;
     }
+}
+
+
+S3Status S3_generate_authenticated_query_string
+    (char *buffer, const S3BucketContext *bucketContext,
+     const char *key, int64_t expires, const char *resource)
+{
+#define MAX_EXPIRES (((int64_t) 1 << 31) - 1)
+    // S3 seems to only accept expiration dates up to the number of seconds
+    // representably by a signed 32-bit integer
+    if (expires < 0) {
+        expires = MAX_EXPIRES;
+    }
+    else if (expires > MAX_EXPIRES) {
+        expires = MAX_EXPIRES;
+    }
+
+    // xxx todo: rework this so that it can be incorporated into shared code
+    // with request_perform().  It's really unfortunate that this code is not
+    // shared with request_perform().
+
+    // URL encode the key
+    char urlEncodedKey[S3_MAX_KEY_SIZE * 3];
+    if (key) {
+        urlEncode(urlEncodedKey, key, strlen(key));
+    }
+    else {
+        urlEncodedKey[0] = 0;
+    }
+
+    // Compute canonicalized resource
+    char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE];
+    canonicalize_resource(bucketContext->bucketName, resource, urlEncodedKey,
+                          canonicalizedResource);
+                          
+    // We allow for:
+    // 17 bytes for HTTP-Verb + \n
+    // 1 byte for empty Content-MD5 + \n
+    // 1 byte for empty Content-Type + \n
+    // 20 bytes for Expires + \n
+    // 0 bytes for CanonicalizedAmzHeaders
+    // CanonicalizedResource
+    char signbuf[17 + 1 + 1 + 1 + 20 + sizeof(canonicalizedResource) + 1];
+    int len = 0;
+
+#define signbuf_append(format, ...)                             \
+    len += snprintf(&(signbuf[len]), sizeof(signbuf) - len,     \
+                    format, __VA_ARGS__)
+
+    signbuf_append("%s\n", "GET"); // HTTP-Verb
+    signbuf_append("%s\n", ""); // Content-MD5
+    signbuf_append("%s\n", ""); // Content-Type
+    signbuf_append("%llu\n", (uint64_t) expires);
+    signbuf_append("%s", canonicalizedResource);
+
+    // Generate an HMAC-SHA-1 of the signbuf
+    unsigned char hmac[20];
+
+    HMAC_SHA1(hmac, (unsigned char *) bucketContext->secretAccessKey,
+              strlen(bucketContext->secretAccessKey),
+              (unsigned char *) signbuf, len);
+
+    // Now base-64 encode the results
+    char b64[((20 + 1) * 4) / 3];
+    int b64Len = base64Encode(hmac, 20, b64);
+
+    // Now urlEncode that
+    char signature[sizeof(b64) * 3];
+    urlEncode(signature, b64, b64Len);
+
+    // Finally, compose the uri, with params:
+    // ?AWSAccessKeyId=xxx[&Expires=]&Signature=xxx
+    char queryParams[sizeof("AWSAccessKeyId=") + 20 + 
+                     sizeof("&Expires=") + 20 + 
+                     sizeof("&Signature=") + sizeof(signature) + 1];
+
+    sprintf(queryParams, "AWSAccessKeyId=%s&Expires=%ld&Signature=%s",
+            bucketContext->accessKeyId, (long) expires, signature);
+
+    return compose_uri(buffer, S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE,
+                       bucketContext, urlEncodedKey, resource, queryParams);
 }

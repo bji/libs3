@@ -90,15 +90,17 @@ const char *S3_get_status_name(S3Status status)
         handlecase(KeyTooLong);
         handlecase(UriTooLong);
         handlecase(XmlParseFailure);
-        handlecase(BadAclEmailAddressTooLong);
-        handlecase(BadAclUserIdTooLong);
-        handlecase(BadAclUserDisplayNameTooLong);
-        handlecase(BadAclGroupUriTooLong);
-        handlecase(BadAclPermissionTooLong);
-        handlecase(TooManyAclGrants);
-        handlecase(BadAclGrantee);
-        handlecase(BadAclPermission);
-        handlecase(AclXmlDocumentTooLarge);
+        handlecase(EmailAddressTooLong);
+        handlecase(UserIdTooLong);
+        handlecase(UserDisplayNameTooLong);
+        handlecase(GroupUriTooLong);
+        handlecase(PermissionTooLong);
+        handlecase(TargetBucketTooLong);
+        handlecase(TargetPrefixTooLong);
+        handlecase(TooManyGrants);
+        handlecase(BadGrantee);
+        handlecase(BadPermission);
+        handlecase(XmlDocumentTooLarge);
         handlecase(NameLookupError);
         handlecase(FailedToConnect);
         handlecase(ServerFailedVerification);
@@ -283,7 +285,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
                          S3_MAX_GRANTEE_USER_ID_SIZE - caData->ownerIdLen - 1,
                          "%.*s", dataLen, data);
             if (caData->ownerIdLen >= S3_MAX_GRANTEE_USER_ID_SIZE) {
-                return S3StatusBadAclUserIdTooLong;
+                return S3StatusUserIdTooLong;
             }
         }
         else if (!strcmp(elementPath, "AccessControlPolicy/Owner/"
@@ -296,7 +298,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
                          "%.*s", dataLen, data);
             if (caData->ownerDisplayNameLen >= 
                 S3_MAX_GRANTEE_DISPLAY_NAME_SIZE) {
-                return S3StatusBadAclUserDisplayNameTooLong;
+                return S3StatusUserDisplayNameTooLong;
             }
         }
         else if (!strcmp(elementPath, 
@@ -305,7 +307,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // AmazonCustomerByEmail
             string_buffer_append(caData->emailAddress, data, dataLen, fit);
             if (!fit) {
-                return S3StatusBadAclEmailAddressTooLong;
+                return S3StatusEmailAddressTooLong;
             }
         }
         else if (!strcmp(elementPath,
@@ -314,7 +316,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // CanonicalUser
             string_buffer_append(caData->userId, data, dataLen, fit);
             if (!fit) {
-                return S3StatusBadAclUserIdTooLong;
+                return S3StatusUserIdTooLong;
             }
         }
         else if (!strcmp(elementPath,
@@ -323,7 +325,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // CanonicalUser
             string_buffer_append(caData->userDisplayName, data, dataLen, fit);
             if (!fit) {
-                return S3StatusBadAclUserDisplayNameTooLong;
+                return S3StatusUserDisplayNameTooLong;
             }
         }
         else if (!strcmp(elementPath,
@@ -332,7 +334,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // Group
             string_buffer_append(caData->groupUri, data, dataLen, fit);
             if (!fit) {
-                return S3StatusBadAclGroupUriTooLong;
+                return S3StatusGroupUriTooLong;
             }
         }
         else if (!strcmp(elementPath,
@@ -341,7 +343,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // Permission
             string_buffer_append(caData->permission, data, dataLen, fit);
             if (!fit) {
-                return S3StatusBadAclPermissionTooLong;
+                return S3StatusPermissionTooLong;
             }
         }
     }
@@ -351,7 +353,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             // A grant has just been completed; so add the next S3AclGrant
             // based on the values read
             if (*(caData->aclGrantCountReturn) == S3_MAX_ACL_GRANT_COUNT) {
-                return S3StatusTooManyAclGrants;
+                return S3StatusTooManyGrants;
             }
 
             S3AclGrant *grant = &(caData->aclGrants
@@ -379,12 +381,17 @@ static S3Status convertAclXmlCallback(const char *elementPath,
                                  "AllUsers")) {
                     grant->granteeType = S3GranteeTypeAllUsers;
                 }
+                else if (!strcmp(caData->groupUri,
+                                 "http://acs.amazonaws.com/groups/s3/"
+                                 "LogDelivery")) {
+                    grant->granteeType = S3GranteeTypeLogDelivery;
+                }
                 else {
-                    return S3StatusBadAclGrantee;
+                    return S3StatusBadGrantee;
                 }
             }
             else {
-                return S3StatusBadAclGrantee;
+                return S3StatusBadGrantee;
             }
 
             if (!strcmp(caData->permission, "READ")) {
@@ -403,7 +410,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
                 grant->permission = S3PermissionFullControl;
             }
             else {
-                return S3StatusBadAclPermission;
+                return S3StatusBadPermission;
             }
 
             (*(caData->aclGrantCountReturn))++;
@@ -466,4 +473,3 @@ int S3_status_is_retryable(S3Status status)
         return 0;
     }
 }
-

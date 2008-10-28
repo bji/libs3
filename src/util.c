@@ -173,12 +173,12 @@ uint64_t parseUnsignedInt(const char *str)
 }
 
 
-int base64Encode(const unsigned char *in, int inLen, unsigned char *out)
+int base64Encode(const unsigned char *in, int inLen, char *out)
 {
     static const char *ENC = 
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    unsigned char *original_out = out;
+    char *original_out = out;
 
     while (inLen) {
         // first 6 bits of char 1
