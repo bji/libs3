@@ -7,9 +7,11 @@ S3_deinitialize
 S3_delete_bucket
 S3_delete_object
 S3_destroy_request_context
+S3_generate_authenticated_query_string
 S3_get_acl
 S3_get_object
 S3_get_request_context_fdsets
+S3_get_server_access_logging
 S3_get_status_name
 S3_head_object
 S3_initialize
@@ -19,6 +21,7 @@ S3_put_object
 S3_runall_request_context
 S3_runonce_request_context
 S3_set_acl
+S3_set_server_access_logging
 S3_status_is_retryable
 S3_test_bucket
 S3_validate_bucket_name
