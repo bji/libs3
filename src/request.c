@@ -657,6 +657,7 @@ static void canonicalize_resource(const char *bucketName,
     }
 
     if (subResource && subResource[0]) {
+        append("?");
         append(subResource);
     }
 }
@@ -772,11 +773,11 @@ static S3Status compose_uri(char *buffer, int bufferSize,
     uri_append("%s", urlEncodedKey);
     
     if (subResource && subResource[0]) {
-        uri_append("%s", subResource);
+        uri_append("?%s", subResource);
     }
     
     if (queryParams) {
-        uri_append("%c%s", (subResource && subResource[0]) ? '&' : '?',
+        uri_append("%s%s", (subResource && subResource[0]) ? "&" : "?",
                    queryParams);
     }
     
@@ -976,7 +977,8 @@ static S3Status request_get(const RequestParams *params,
     }
 
     // Initialize the request
-    request->prev = request->next = 0;
+    request->prev = 0;
+    request->next = 0;
 
     // Request status is initialized to no error, will be updated whenever
     // an error occurs
@@ -1163,8 +1165,8 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
             if (context->requests) {
                 request->prev = context->requests->prev;
                 request->next = context->requests;
-                context->requests->prev->next = 
-                    context->requests->prev = request;
+                context->requests->prev->next = request;
+                context->requests->prev = request;
             }
             else {
                 context->requests = request->next = request->prev = request;
@@ -1343,7 +1345,7 @@ S3Status S3_generate_authenticated_query_string
     signbuf_append("%s\n", "GET"); // HTTP-Verb
     signbuf_append("%s\n", ""); // Content-MD5
     signbuf_append("%s\n", ""); // Content-Type
-    signbuf_append("%llu\n", (uint64_t) expires);
+    signbuf_append("%llu\n", (unsigned long long) expires);
     signbuf_append("%s", canonicalizedResource);
 
     // Generate an HMAC-SHA-1 of the signbuf

@@ -129,7 +129,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
-        "?acl",                                       // subResource
+        "acl",                                        // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -329,7 +329,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
-        "?acl",                                       // subResource
+        "acl",                                        // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

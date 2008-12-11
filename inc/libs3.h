@@ -727,7 +727,7 @@ typedef struct S3PutProperties
     /**
      * If present, this provides the MD5 signature of the contents, and is
      * used to validate the contents.  This is highly recommended by Amazon
-     * but not required.
+     * but not required.  Its format is as a base64-encoded MD5 sum.
      **/
     const char *md5;
 

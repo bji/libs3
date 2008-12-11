@@ -332,7 +332,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
           bucketContext->secretAccessKey },           // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
-        "?logging",                                   // subResource
+        "logging",                                    // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -536,7 +536,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
           bucketContext->secretAccessKey },           // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
-        "?logging",                                   // subResource
+        "logging",                                    // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

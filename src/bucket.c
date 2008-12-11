@@ -138,7 +138,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
           secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
-        "?location",                                  // subResource
+        "location",                                   // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -612,6 +612,8 @@ static void listBucketCompleteCallback(S3Status requestStatus,
     (*(lbData->responseCompleteCallback))
         (requestStatus, s3ErrorDetails, lbData->callbackData);
 
+    simplexml_deinitialize(&(lbData->simpleXml));
+
     free(lbData);
 }
 
@@ -628,11 +630,13 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
 #define safe_append(name, value)                                        \
     do {                                                                \
         int fit;                                                        \
-        string_buffer_append(queryParams, &sep, 1, fit);                \
-        if (!fit) {                                                     \
-            (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, callbackData);          \
-            return;                                                     \
+        if (amp) {                                                      \
+            string_buffer_append(queryParams, "&", 1, fit);             \
+            if (!fit) {                                                 \
+                (*(handler->responseHandler.completeCallback))          \
+                    (S3StatusQueryParamsTooLong, 0, callbackData);      \
+                return;                                                 \
+            }                                                           \
         }                                                               \
         string_buffer_append(queryParams, name "=",                     \
                              sizeof(name "=") - 1, fit);                \
@@ -641,7 +645,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
                 (S3StatusQueryParamsTooLong, 0, callbackData);          \
             return;                                                     \
         }                                                               \
-        sep = '&';                                                      \
+        amp = 1;                                                        \
         char encoded[3 * 1024];                                         \
         if (!urlEncode(encoded, value, 1024)) {                         \
             (*(handler->responseHandler.completeCallback))              \
@@ -658,7 +662,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     } while (0)
 
 
-    char sep = '?';
+    int amp = 0;
     if (prefix) {
         safe_append("prefix", prefix);
     }
