@@ -1,6 +1,6 @@
 Summary: C Library and Tools for Amazon S3 Access
 Name: libs3
-Version: trunk
+Version: 1.3
 Release: 1
 License: GPL
 Group: Networking/Utilities
