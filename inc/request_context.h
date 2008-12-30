@@ -31,9 +31,9 @@
 
 struct S3RequestContext
 {
-    CURLM *curlm;
+	CURLM *curlm;
 
-    struct Request *requests;
+	struct Request *requests;
 };
 
 

@@ -34,7 +34,7 @@ unsigned long pthread_self();
 
 typedef struct
 {
-    CRITICAL_SECTION criticalSection;
+	CRITICAL_SECTION criticalSection;
 } pthread_mutex_t;
 
 int pthread_mutex_init(pthread_mutex_t *mutex, void *);

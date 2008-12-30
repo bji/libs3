@@ -33,39 +33,39 @@
 // put object ----------------------------------------------------------------
 
 void S3_put_object(const S3BucketContext *bucketContext, const char *key,
-                   uint64_t contentLength,
-                   const S3PutProperties *putProperties,
-                   S3RequestContext *requestContext,
-                   const S3PutObjectHandler *handler, void *callbackData)
+				   uint64_t contentLength,
+				   const S3PutProperties *putProperties,
+				   S3RequestContext *requestContext,
+				   const S3PutObjectHandler *handler, void *callbackData)
 {
-    // Set up the RequestParams
-    RequestParams params =
-    {
-        HttpRequestTypePUT,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
-          bucketContext->protocol,                    // protocol
-          bucketContext->uriStyle,                    // uriStyle
-          bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
-        key,                                          // key
-        0,                                            // queryParams
-        0,                                            // subResource
-        0,                                            // copySourceBucketName
-        0,                                            // copySourceKey
-        0,                                            // getConditions
-        0,                                            // startByte
-        0,                                            // byteCount
-        putProperties,                                // putProperties
-        handler->responseHandler.propertiesCallback,  // propertiesCallback
-        handler->putObjectDataCallback,               // toS3Callback
-        contentLength,                                // toS3CallbackTotalSize
-        0,                                            // fromS3Callback
-        handler->responseHandler.completeCallback,    // completeCallback
-        callbackData                                  // callbackData
-    };
+	// Set up the RequestParams
+	RequestParams params =
+	{
+		HttpRequestTypePUT,							  // httpRequestType
+		{ bucketContext->bucketName,				  // bucketName
+		  bucketContext->protocol,					  // protocol
+		  bucketContext->uriStyle,					  // uriStyle
+		  bucketContext->accessKeyId,				  // accessKeyId
+		  bucketContext->secretAccessKey },			  // secretAccessKey
+		key,										  // key
+		0,											  // queryParams
+		0,											  // subResource
+		0,											  // copySourceBucketName
+		0,											  // copySourceKey
+		0,											  // getConditions
+		0,											  // startByte
+		0,											  // byteCount
+		putProperties,								  // putProperties
+		handler->responseHandler.propertiesCallback,  // propertiesCallback
+		handler->putObjectDataCallback,				  // toS3Callback
+		contentLength,								  // toS3CallbackTotalSize
+		0,											  // fromS3Callback
+		handler->responseHandler.completeCallback,	  // completeCallback
+		callbackData								  // callbackData
+	};
 
-    // Perform the request
-    request_perform(&params, requestContext);
+	// Perform the request
+	request_perform(&params, requestContext);
 }
 
 
@@ -74,264 +74,264 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
 
 typedef struct CopyObjectData
 {
-    SimpleXml simpleXml;
+	SimpleXml simpleXml;
 
-    S3ResponsePropertiesCallback *responsePropertiesCallback;
-    S3ResponseCompleteCallback *responseCompleteCallback;
-    void *callbackData;
+	S3ResponsePropertiesCallback *responsePropertiesCallback;
+	S3ResponseCompleteCallback *responseCompleteCallback;
+	void *callbackData;
 
-    int64_t *lastModifiedReturn;
-    int eTagReturnSize;
-    char *eTagReturn;
-    int eTagReturnLen;
-    
-    string_buffer(lastModified, 256);
+	int64_t *lastModifiedReturn;
+	int eTagReturnSize;
+	char *eTagReturn;
+	int eTagReturnLen;
+	
+	string_buffer(lastModified, 256);
 } CopyObjectData;
 
 
 static S3Status copyObjectXmlCallback(const char *elementPath,
-                                      const char *data, int dataLen,
-                                      void *callbackData)
+									  const char *data, int dataLen,
+									  void *callbackData)
 {
-    CopyObjectData *coData = (CopyObjectData *) callbackData;
+	CopyObjectData *coData = (CopyObjectData *) callbackData;
 
-    int fit;
+	int fit;
 
-    if (data) {
-        if (!strcmp(elementPath, "CopyObjectResult/LastModified")) {
-            string_buffer_append(coData->lastModified, data, dataLen, fit);
-        }
-        else if (!strcmp(elementPath, "CopyObjectResult/ETag")) {
-            if (coData->eTagReturnSize && coData->eTagReturn) {
-                coData->eTagReturnLen +=
-                    snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
-                             coData->eTagReturnSize - 
-                             coData->eTagReturnLen - 1,
-                             "%.*s", dataLen, data);
-                if (coData->eTagReturnLen >= coData->eTagReturnSize) {
-                    return S3StatusXmlParseFailure;
-                }
-            }
-        }
-    }
+	if (data) {
+		if (!strcmp(elementPath, "CopyObjectResult/LastModified")) {
+			string_buffer_append(coData->lastModified, data, dataLen, fit);
+		}
+		else if (!strcmp(elementPath, "CopyObjectResult/ETag")) {
+			if (coData->eTagReturnSize && coData->eTagReturn) {
+				coData->eTagReturnLen +=
+					snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
+							 coData->eTagReturnSize - 
+							 coData->eTagReturnLen - 1,
+							 "%.*s", dataLen, data);
+				if (coData->eTagReturnLen >= coData->eTagReturnSize) {
+					return S3StatusXmlParseFailure;
+				}
+			}
+		}
+	}
 
-    return S3StatusOK;
+	return S3StatusOK;
 }
 
 
 static S3Status copyObjectPropertiesCallback
-    (const S3ResponseProperties *responseProperties, void *callbackData)
+	(const S3ResponseProperties *responseProperties, void *callbackData)
 {
-    CopyObjectData *coData = (CopyObjectData *) callbackData;
-    
-    return (*(coData->responsePropertiesCallback))
-        (responseProperties, coData->callbackData);
+	CopyObjectData *coData = (CopyObjectData *) callbackData;
+	
+	return (*(coData->responsePropertiesCallback))
+		(responseProperties, coData->callbackData);
 }
 
 
 static S3Status copyObjectDataCallback(int bufferSize, const char *buffer,
-                                       void *callbackData)
+									   void *callbackData)
 {
-    CopyObjectData *coData = (CopyObjectData *) callbackData;
+	CopyObjectData *coData = (CopyObjectData *) callbackData;
 
-    return simplexml_add(&(coData->simpleXml), buffer, bufferSize);
+	return simplexml_add(&(coData->simpleXml), buffer, bufferSize);
 }
 
 
 static void copyObjectCompleteCallback(S3Status requestStatus, 
-                                       const S3ErrorDetails *s3ErrorDetails,
-                                       void *callbackData)
+									   const S3ErrorDetails *s3ErrorDetails,
+									   void *callbackData)
 {
-    CopyObjectData *coData = (CopyObjectData *) callbackData;
+	CopyObjectData *coData = (CopyObjectData *) callbackData;
 
-    if (coData->lastModifiedReturn) {
-        time_t lastModified = -1;
-        if (coData->lastModifiedLen) {
-            lastModified = parseIso8601Time(coData->lastModified);
-        }
+	if (coData->lastModifiedReturn) {
+		time_t lastModified = -1;
+		if (coData->lastModifiedLen) {
+			lastModified = parseIso8601Time(coData->lastModified);
+		}
 
-        *(coData->lastModifiedReturn) = lastModified;
-    }
+		*(coData->lastModifiedReturn) = lastModified;
+	}
 
-    (*(coData->responseCompleteCallback))
-        (requestStatus, s3ErrorDetails, coData->callbackData);
+	(*(coData->responseCompleteCallback))
+		(requestStatus, s3ErrorDetails, coData->callbackData);
 
-    simplexml_deinitialize(&(coData->simpleXml));
+	simplexml_deinitialize(&(coData->simpleXml));
 
-    free(coData);
+	free(coData);
 }
 
 
 void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
-                    const char *destinationBucket, const char *destinationKey,
-                    const S3PutProperties *putProperties,
-                    int64_t *lastModifiedReturn, int eTagReturnSize,
-                    char *eTagReturn, S3RequestContext *requestContext,
-                    const S3ResponseHandler *handler, void *callbackData)
+					const char *destinationBucket, const char *destinationKey,
+					const S3PutProperties *putProperties,
+					int64_t *lastModifiedReturn, int eTagReturnSize,
+					char *eTagReturn, S3RequestContext *requestContext,
+					const S3ResponseHandler *handler, void *callbackData)
 {
-    // Create the callback data
-    CopyObjectData *data = 
-        (CopyObjectData *) malloc(sizeof(CopyObjectData));
-    if (!data) {
-        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
-        return;
-    }
+	// Create the callback data
+	CopyObjectData *data = 
+		(CopyObjectData *) malloc(sizeof(CopyObjectData));
+	if (!data) {
+		(*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
+		return;
+	}
 
-    simplexml_initialize(&(data->simpleXml), &copyObjectXmlCallback, data);
+	simplexml_initialize(&(data->simpleXml), &copyObjectXmlCallback, data);
 
-    data->responsePropertiesCallback = handler->propertiesCallback;
-    data->responseCompleteCallback = handler->completeCallback;
-    data->callbackData = callbackData;
+	data->responsePropertiesCallback = handler->propertiesCallback;
+	data->responseCompleteCallback = handler->completeCallback;
+	data->callbackData = callbackData;
 
-    data->lastModifiedReturn = lastModifiedReturn;
-    data->eTagReturnSize = eTagReturnSize;
-    data->eTagReturn = eTagReturn;
-    if (data->eTagReturnSize && data->eTagReturn) {
-        data->eTagReturn[0] = 0;
-    }
-    data->eTagReturnLen = 0;
-    string_buffer_initialize(data->lastModified);
+	data->lastModifiedReturn = lastModifiedReturn;
+	data->eTagReturnSize = eTagReturnSize;
+	data->eTagReturn = eTagReturn;
+	if (data->eTagReturnSize && data->eTagReturn) {
+		data->eTagReturn[0] = 0;
+	}
+	data->eTagReturnLen = 0;
+	string_buffer_initialize(data->lastModified);
 
-    // Set up the RequestParams
-    RequestParams params =
-    {
-        HttpRequestTypeCOPY,                          // httpRequestType
-        { destinationBucket ? destinationBucket : 
-          bucketContext->bucketName,                  // bucketName
-          bucketContext->protocol,                    // protocol
-          bucketContext->uriStyle,                    // uriStyle
-          bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
-        destinationKey ? destinationKey : key,        // key
-        0,                                            // queryParams
-        0,                                            // subResource
-        bucketContext->bucketName,                    // copySourceBucketName
-        key,                                          // copySourceKey
-        0,                                            // getConditions
-        0,                                            // startByte
-        0,                                            // byteCount
-        putProperties,                                // putProperties
-        &copyObjectPropertiesCallback,                // propertiesCallback
-        0,                                            // toS3Callback
-        0,                                            // toS3CallbackTotalSize
-        &copyObjectDataCallback,                      // fromS3Callback
-        &copyObjectCompleteCallback,                  // completeCallback
-        data                                          // callbackData
-    };
+	// Set up the RequestParams
+	RequestParams params =
+	{
+		HttpRequestTypeCOPY,						  // httpRequestType
+		{ destinationBucket ? destinationBucket : 
+		  bucketContext->bucketName,				  // bucketName
+		  bucketContext->protocol,					  // protocol
+		  bucketContext->uriStyle,					  // uriStyle
+		  bucketContext->accessKeyId,				  // accessKeyId
+		  bucketContext->secretAccessKey },			  // secretAccessKey
+		destinationKey ? destinationKey : key,		  // key
+		0,											  // queryParams
+		0,											  // subResource
+		bucketContext->bucketName,					  // copySourceBucketName
+		key,										  // copySourceKey
+		0,											  // getConditions
+		0,											  // startByte
+		0,											  // byteCount
+		putProperties,								  // putProperties
+		&copyObjectPropertiesCallback,				  // propertiesCallback
+		0,											  // toS3Callback
+		0,											  // toS3CallbackTotalSize
+		&copyObjectDataCallback,					  // fromS3Callback
+		&copyObjectCompleteCallback,				  // completeCallback
+		data										  // callbackData
+	};
 
-    // Perform the request
-    request_perform(&params, requestContext);
+	// Perform the request
+	request_perform(&params, requestContext);
 }
 
 
 // get object ----------------------------------------------------------------
 
 void S3_get_object(const S3BucketContext *bucketContext, const char *key,
-                   const S3GetConditions *getConditions,
-                   uint64_t startByte, uint64_t byteCount,
-                   S3RequestContext *requestContext,
-                   const S3GetObjectHandler *handler, void *callbackData)
+				   const S3GetConditions *getConditions,
+				   uint64_t startByte, uint64_t byteCount,
+				   S3RequestContext *requestContext,
+				   const S3GetObjectHandler *handler, void *callbackData)
 {
-    // Set up the RequestParams
-    RequestParams params =
-    {
-        HttpRequestTypeGET,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
-          bucketContext->protocol,                    // protocol
-          bucketContext->uriStyle,                    // uriStyle
-          bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
-        key,                                          // key
-        0,                                            // queryParams
-        0,                                            // subResource
-        0,                                            // copySourceBucketName
-        0,                                            // copySourceKey
-        getConditions,                                // getConditions
-        startByte,                                    // startByte
-        byteCount,                                    // byteCount
-        0,                                            // putProperties
-        handler->responseHandler.propertiesCallback,  // propertiesCallback
-        0,                                            // toS3Callback
-        0,                                            // toS3CallbackTotalSize
-        handler->getObjectDataCallback,               // fromS3Callback
-        handler->responseHandler.completeCallback,    // completeCallback
-        callbackData                                  // callbackData
-    };
+	// Set up the RequestParams
+	RequestParams params =
+	{
+		HttpRequestTypeGET,							  // httpRequestType
+		{ bucketContext->bucketName,				  // bucketName
+		  bucketContext->protocol,					  // protocol
+		  bucketContext->uriStyle,					  // uriStyle
+		  bucketContext->accessKeyId,				  // accessKeyId
+		  bucketContext->secretAccessKey },			  // secretAccessKey
+		key,										  // key
+		0,											  // queryParams
+		0,											  // subResource
+		0,											  // copySourceBucketName
+		0,											  // copySourceKey
+		getConditions,								  // getConditions
+		startByte,									  // startByte
+		byteCount,									  // byteCount
+		0,											  // putProperties
+		handler->responseHandler.propertiesCallback,  // propertiesCallback
+		0,											  // toS3Callback
+		0,											  // toS3CallbackTotalSize
+		handler->getObjectDataCallback,				  // fromS3Callback
+		handler->responseHandler.completeCallback,	  // completeCallback
+		callbackData								  // callbackData
+	};
 
-    // Perform the request
-    request_perform(&params, requestContext);
+	// Perform the request
+	request_perform(&params, requestContext);
 }
 
 
 // head object ---------------------------------------------------------------
 
 void S3_head_object(const S3BucketContext *bucketContext, const char *key,
-                    S3RequestContext *requestContext,
-                    const S3ResponseHandler *handler, void *callbackData)
+					S3RequestContext *requestContext,
+					const S3ResponseHandler *handler, void *callbackData)
 {
-    // Set up the RequestParams
-    RequestParams params =
-    {
-        HttpRequestTypeHEAD,                          // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
-          bucketContext->protocol,                    // protocol
-          bucketContext->uriStyle,                    // uriStyle
-          bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
-        key,                                          // key
-        0,                                            // queryParams
-        0,                                            // subResource
-        0,                                            // copySourceBucketName
-        0,                                            // copySourceKey
-        0,                                            // getConditions
-        0,                                            // startByte
-        0,                                            // byteCount
-        0,                                            // putProperties
-        handler->propertiesCallback,                  // propertiesCallback
-        0,                                            // toS3Callback
-        0,                                            // toS3CallbackTotalSize
-        0,                                            // fromS3Callback
-        handler->completeCallback,                    // completeCallback
-        callbackData                                  // callbackData
-    };
+	// Set up the RequestParams
+	RequestParams params =
+	{
+		HttpRequestTypeHEAD,						  // httpRequestType
+		{ bucketContext->bucketName,				  // bucketName
+		  bucketContext->protocol,					  // protocol
+		  bucketContext->uriStyle,					  // uriStyle
+		  bucketContext->accessKeyId,				  // accessKeyId
+		  bucketContext->secretAccessKey },			  // secretAccessKey
+		key,										  // key
+		0,											  // queryParams
+		0,											  // subResource
+		0,											  // copySourceBucketName
+		0,											  // copySourceKey
+		0,											  // getConditions
+		0,											  // startByte
+		0,											  // byteCount
+		0,											  // putProperties
+		handler->propertiesCallback,				  // propertiesCallback
+		0,											  // toS3Callback
+		0,											  // toS3CallbackTotalSize
+		0,											  // fromS3Callback
+		handler->completeCallback,					  // completeCallback
+		callbackData								  // callbackData
+	};
 
-    // Perform the request
-    request_perform(&params, requestContext);
+	// Perform the request
+	request_perform(&params, requestContext);
 }
-                         
+						 
 
 // delete object --------------------------------------------------------------
 
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
-                      S3RequestContext *requestContext,
-                      const S3ResponseHandler *handler, void *callbackData)
+					  S3RequestContext *requestContext,
+					  const S3ResponseHandler *handler, void *callbackData)
 {
-    // Set up the RequestParams
-    RequestParams params =
-    {
-        HttpRequestTypeDELETE,                        // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
-          bucketContext->protocol,                    // protocol
-          bucketContext->uriStyle,                    // uriStyle
-          bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
-        key,                                          // key
-        0,                                            // queryParams
-        0,                                            // subResource
-        0,                                            // copySourceBucketName
-        0,                                            // copySourceKey
-        0,                                            // getConditions
-        0,                                            // startByte
-        0,                                            // byteCount
-        0,                                            // putProperties
-        handler->propertiesCallback,                  // propertiesCallback
-        0,                                            // toS3Callback
-        0,                                            // toS3CallbackTotalSize
-        0,                                            // fromS3Callback
-        handler->completeCallback,                    // completeCallback
-        callbackData                                  // callbackData
-    };
+	// Set up the RequestParams
+	RequestParams params =
+	{
+		HttpRequestTypeDELETE,						  // httpRequestType
+		{ bucketContext->bucketName,				  // bucketName
+		  bucketContext->protocol,					  // protocol
+		  bucketContext->uriStyle,					  // uriStyle
+		  bucketContext->accessKeyId,				  // accessKeyId
+		  bucketContext->secretAccessKey },			  // secretAccessKey
+		key,										  // key
+		0,											  // queryParams
+		0,											  // subResource
+		0,											  // copySourceBucketName
+		0,											  // copySourceKey
+		0,											  // getConditions
+		0,											  // startByte
+		0,											  // byteCount
+		0,											  // putProperties
+		handler->propertiesCallback,				  // propertiesCallback
+		0,											  // toS3Callback
+		0,											  // toS3CallbackTotalSize
+		0,											  // fromS3Callback
+		handler->completeCallback,					  // completeCallback
+		callbackData								  // callbackData
+	};
 
-    // Perform the request
-    request_perform(&params, requestContext);
+	// Perform the request
+	request_perform(&params, requestContext);
 }

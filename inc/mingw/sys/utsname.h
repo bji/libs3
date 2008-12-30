@@ -32,8 +32,8 @@
 
 struct utsname
 {
-    const char *sysname;
-    const char *machine;
+	const char *sysname;
+	const char *machine;
 };
 
 int uname(struct utsname *);

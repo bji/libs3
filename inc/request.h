@@ -35,71 +35,71 @@
 // Describes a type of HTTP request (these are our supported HTTP "verbs")
 typedef enum
 {
-    HttpRequestTypeGET,
-    HttpRequestTypeHEAD,
-    HttpRequestTypePUT,
-    HttpRequestTypeCOPY,
-    HttpRequestTypeDELETE
+	HttpRequestTypeGET,
+	HttpRequestTypeHEAD,
+	HttpRequestTypePUT,
+	HttpRequestTypeCOPY,
+	HttpRequestTypeDELETE
 } HttpRequestType;
 
 
-// This completely describes a request.  A RequestParams is not required to be
+// This completely describes a request.	 A RequestParams is not required to be
 // allocated from the heap and its lifetime is not assumed to extend beyond
 // the lifetime of the function to which it has been passed.
 typedef struct RequestParams
 {
-    // Request type, affects the HTTP verb used
-    HttpRequestType httpRequestType;
+	// Request type, affects the HTTP verb used
+	HttpRequestType httpRequestType;
 
-    // Bucket context for request
-    S3BucketContext bucketContext;
+	// Bucket context for request
+	S3BucketContext bucketContext;
 
-    // Key, if any
-    const char *key;
+	// Key, if any
+	const char *key;
 
-    // Query params - ready to append to URI (i.e. ?p1=v1?p2=v2)
-    const char *queryParams;
+	// Query params - ready to append to URI (i.e. ?p1=v1?p2=v2)
+	const char *queryParams;
 
-    // sub resource, like ?acl, ?location, ?torrent, ?logging
-    const char *subResource;
+	// sub resource, like ?acl, ?location, ?torrent, ?logging
+	const char *subResource;
 
-    // If this is a copy operation, this gives the source bucket
-    const char *copySourceBucketName;
+	// If this is a copy operation, this gives the source bucket
+	const char *copySourceBucketName;
 
-    // If this is a copy operation, this gives the source key
-    const char *copySourceKey;
+	// If this is a copy operation, this gives the source key
+	const char *copySourceKey;
 
-    // Get conditions
-    const S3GetConditions *getConditions;
+	// Get conditions
+	const S3GetConditions *getConditions;
 
-    // Start byte
-    uint64_t startByte;
+	// Start byte
+	uint64_t startByte;
 
-    // Byte count
-    uint64_t byteCount;
+	// Byte count
+	uint64_t byteCount;
 
-    // Put properties
-    const S3PutProperties *putProperties;
+	// Put properties
+	const S3PutProperties *putProperties;
 
-    // Callback to be made when headers are available.  Might not be called.
-    S3ResponsePropertiesCallback *propertiesCallback;
+	// Callback to be made when headers are available.	Might not be called.
+	S3ResponsePropertiesCallback *propertiesCallback;
 
-    // Callback to be made to supply data to send to S3.  Might not be called.
-    S3PutObjectDataCallback *toS3Callback;
+	// Callback to be made to supply data to send to S3.  Might not be called.
+	S3PutObjectDataCallback *toS3Callback;
 
-    // Number of bytes total that readCallback will supply
-    int64_t toS3CallbackTotalSize;
+	// Number of bytes total that readCallback will supply
+	int64_t toS3CallbackTotalSize;
 
-    // Callback to be made that supplies data read from S3.
-    // Might not be called.
-    S3GetObjectDataCallback *fromS3Callback;
+	// Callback to be made that supplies data read from S3.
+	// Might not be called.
+	S3GetObjectDataCallback *fromS3Callback;
 
-    // Callback to be made when request is complete.  This will *always* be
-    // called.
-    S3ResponseCompleteCallback *completeCallback;
+	// Callback to be made when request is complete.  This will *always* be
+	// called.
+	S3ResponseCompleteCallback *completeCallback;
 
-    // Data passed to the callbacks
-    void *callbackData;
+	// Data passed to the callbacks
+	void *callbackData;
 } RequestParams;
 
 
@@ -107,57 +107,57 @@ typedef struct RequestParams
 // (and thus live while a curl_multi is in use).
 typedef struct Request
 {
-    // These put the request on a doubly-linked list of requests in a
-    // request context, *if* the request is in a request context (else these
-    // will both be 0)
-    struct Request *prev, *next;
+	// These put the request on a doubly-linked list of requests in a
+	// request context, *if* the request is in a request context (else these
+	// will both be 0)
+	struct Request *prev, *next;
 
-    // The status of this Request, as will be reported to the user via the
-    // complete callback
-    S3Status status;
+	// The status of this Request, as will be reported to the user via the
+	// complete callback
+	S3Status status;
 
-    // The HTTP code returned by the S3 server, if it is known.  Would rather
-    // not have to keep track of this but S3 doesn't always indicate its
-    // errors the same way
-    int httpResponseCode;
+	// The HTTP code returned by the S3 server, if it is known.	 Would rather
+	// not have to keep track of this but S3 doesn't always indicate its
+	// errors the same way
+	int httpResponseCode;
 
-    // The HTTP headers to use for the curl request
-    struct curl_slist *headers;
+	// The HTTP headers to use for the curl request
+	struct curl_slist *headers;
 
-    // The CURL structure driving the request
-    CURL *curl;
+	// The CURL structure driving the request
+	CURL *curl;
 
-    // libcurl requires that the uri be stored outside of the curl handle
-    char uri[MAX_URI_SIZE + 1];
+	// libcurl requires that the uri be stored outside of the curl handle
+	char uri[MAX_URI_SIZE + 1];
 
-    // Callback to be made when headers are available.  Might not be called.
-    S3ResponsePropertiesCallback *propertiesCallback;
+	// Callback to be made when headers are available.	Might not be called.
+	S3ResponsePropertiesCallback *propertiesCallback;
 
-    // Callback to be made to supply data to send to S3.  Might not be called.
-    S3PutObjectDataCallback *toS3Callback;
+	// Callback to be made to supply data to send to S3.  Might not be called.
+	S3PutObjectDataCallback *toS3Callback;
 
-    // Number of bytes total that readCallback has left to supply
-    int64_t toS3CallbackBytesRemaining;
+	// Number of bytes total that readCallback has left to supply
+	int64_t toS3CallbackBytesRemaining;
 
-    // Callback to be made that supplies data read from S3.
-    // Might not be called.
-    S3GetObjectDataCallback *fromS3Callback;
+	// Callback to be made that supplies data read from S3.
+	// Might not be called.
+	S3GetObjectDataCallback *fromS3Callback;
 
-    // Callback to be made when request is complete.  This will *always* be
-    // called.
-    S3ResponseCompleteCallback *completeCallback;
+	// Callback to be made when request is complete.  This will *always* be
+	// called.
+	S3ResponseCompleteCallback *completeCallback;
 
-    // Data passed to the callbacks
-    void *callbackData;
+	// Data passed to the callbacks
+	void *callbackData;
 
-    // Handler of response headers
-    ResponseHeadersHandler responseHeadersHandler;
+	// Handler of response headers
+	ResponseHeadersHandler responseHeadersHandler;
 
-    // This is set to nonzero after the properties callback has been made
-    int propertiesCallbackMade;
+	// This is set to nonzero after the properties callback has been made
+	int propertiesCallbackMade;
 
-    // Parser of errors
-    ErrorParser errorParser;
+	// Parser of errors
+	ErrorParser errorParser;
 } Request;
 
 
