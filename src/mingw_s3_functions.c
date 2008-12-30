@@ -26,12 +26,12 @@
 
 int setenv(const char *a, const char *b, int c)
 {
-	(void) c;
+    (void) c;
 
-	return SetEnvironmentVariable(a, b);
+    return SetEnvironmentVariable(a, b);
 }
 
 int unsetenv(const char *a)
 {
-	return SetEnvironmentVariable(a, 0);
+    return SetEnvironmentVariable(a, 0);
 }

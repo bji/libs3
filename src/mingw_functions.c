@@ -29,91 +29,91 @@
 
 unsigned long pthread_self()
 {
-	return (unsigned long) GetCurrentThreadId();
+    return (unsigned long) GetCurrentThreadId();
 }
 
 
 int pthread_mutex_init(pthread_mutex_t *mutex, void *v)
 {
-	(void) v;
+    (void) v;
 
-	InitializeCriticalSection(&(mutex->criticalSection));
+    InitializeCriticalSection(&(mutex->criticalSection));
 
-	return 0;
+    return 0;
 }
 
 
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
-	EnterCriticalSection(&(mutex->criticalSection));
+    EnterCriticalSection(&(mutex->criticalSection));
 
-	return 0;
+    return 0;
 }
 
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
-	LeaveCriticalSection(&(mutex->criticalSection));
+    LeaveCriticalSection(&(mutex->criticalSection));
 
-	return 0;
+    return 0;
 }
 
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
-	DeleteCriticalSection(&(mutex->criticalSection));
+    DeleteCriticalSection(&(mutex->criticalSection));
 
-	return 0;
+    return 0;
 }
 
 
 int uname(struct utsname *u)
 {
-	OSVERSIONINFO info;
-	info.dwOSVersionInfoSize = sizeof(info);
+    OSVERSIONINFO info;
+    info.dwOSVersionInfoSize = sizeof(info);
 
-	if (!GetVersionEx(&info)) {
-		return -1;
-	}
+    if (!GetVersionEx(&info)) {
+        return -1;
+    }
 
-	u->machine = "";
+    u->machine = "";
 
-	switch (info.dwMajorVersion) {
-	case 4:
-		switch (info.dwMinorVersion) {
-		case 0:
-			u->sysname = "Microsoft Windows NT 4.0";
-			break;
-		case 10:
-			u->sysname = "Microsoft Windows 98";
-			break;
-		case 90:
-			u->sysname = "Microsoft Windows Me";
-			break;
-		default:
-			return -1;
-		}
-		break;
+    switch (info.dwMajorVersion) {
+    case 4:
+        switch (info.dwMinorVersion) {
+        case 0:
+            u->sysname = "Microsoft Windows NT 4.0";
+            break;
+        case 10:
+            u->sysname = "Microsoft Windows 98";
+            break;
+        case 90:
+            u->sysname = "Microsoft Windows Me";
+            break;
+        default:
+            return -1;
+        }
+        break;
 
-	case 5:
-		switch (info.dwMinorVersion) {
-		case 0:
-			u->sysname = "Microsoft Windows 2000";
-			break;
-		case 1:
-			u->sysname = "Microsoft Windows XP";
-			break;
-		case 2:
-			u->sysname = "Microsoft Server 2003";
-			break;
-		default:
-			return -1;
-		}
-		break;
+    case 5:
+        switch (info.dwMinorVersion) {
+        case 0:
+            u->sysname = "Microsoft Windows 2000";
+            break;
+        case 1:
+            u->sysname = "Microsoft Windows XP";
+            break;
+        case 2:
+            u->sysname = "Microsoft Server 2003";
+            break;
+        default:
+            return -1;
+        }
+        break;
 
-	default:
-		return -1;
-	}
+    default:
+        return -1;
+    }
 
-	return 0;
+    return 0;
 }

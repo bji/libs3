@@ -34,31 +34,31 @@
 
 typedef struct ResponseHeadersHandler
 {
-	// The structure to pass to the headers callback.  This is filled in by
-	// the ResponseHeadersHandler from the headers added to it.
-	S3ResponseProperties responseProperties;
+    // The structure to pass to the headers callback.  This is filled in by
+    // the ResponseHeadersHandler from the headers added to it.
+    S3ResponseProperties responseProperties;
 
-	// Set to 1 after the done call has been made
-	int done;
+    // Set to 1 after the done call has been made
+    int done;
 
-	// copied into here.  We allow 128 bytes for each header, plus \0 term.
-	string_multibuffer(responsePropertyStrings, 5 * 129);
+    // copied into here.  We allow 128 bytes for each header, plus \0 term.
+    string_multibuffer(responsePropertyStrings, 5 * 129);
 
-	// responseproperties.metaHeaders strings get copied into here
-	string_multibuffer(responseMetaDataStrings, 
-					   COMPACTED_METADATA_BUFFER_SIZE);
+    // responseproperties.metaHeaders strings get copied into here
+    string_multibuffer(responseMetaDataStrings, 
+                       COMPACTED_METADATA_BUFFER_SIZE);
 
-	// Response meta data
-	S3NameValue responseMetaData[S3_MAX_METADATA_COUNT];
+    // Response meta data
+    S3NameValue responseMetaData[S3_MAX_METADATA_COUNT];
 } ResponseHeadersHandler;
 
 
 void response_headers_handler_initialize(ResponseHeadersHandler *handler);
 
 void response_headers_handler_add(ResponseHeadersHandler *handler,
-								  char *data, int dataLen);
+                                  char *data, int dataLen);
 
 void response_headers_handler_done(ResponseHeadersHandler *handler, 
-								   CURL *curl);
+                                   CURL *curl);
 
 #endif /* RESPONSE_HEADERS_HANDLER_H */

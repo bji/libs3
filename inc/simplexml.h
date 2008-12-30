@@ -41,21 +41,21 @@
 //
 // data is passed in as 0 on end of element
 typedef S3Status (SimpleXmlCallback)(const char *elementPath, const char *data,
-									 int dataLen, void *callbackData);
+                                     int dataLen, void *callbackData);
 
 typedef struct SimpleXml
 {
-	void *xmlParser;
+    void *xmlParser;
 
-	SimpleXmlCallback *callback;
+    SimpleXmlCallback *callback;
 
-	void *callbackData;
+    void *callbackData;
 
-	char elementPath[512];
+    char elementPath[512];
 
-	int elementPathLen;
+    int elementPathLen;
 
-	S3Status status;
+    S3Status status;
 } SimpleXml;
 
 
@@ -64,7 +64,7 @@ typedef struct SimpleXml
 
 // Always call this, even if the simplexml doesn't end up being used
 void simplexml_initialize(SimpleXml *simpleXml, SimpleXmlCallback *callback,
-						  void *callbackData);
+                          void *callbackData);
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen);
 

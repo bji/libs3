@@ -36,34 +36,34 @@
 
 typedef struct ErrorParser
 {
-	// This is the S3ErrorDetails that this ErrorParser fills in from the
-	// data that it parses
-	S3ErrorDetails s3ErrorDetails;
+    // This is the S3ErrorDetails that this ErrorParser fills in from the
+    // data that it parses
+    S3ErrorDetails s3ErrorDetails;
 
-	// This is the error XML parser
-	SimpleXml errorXmlParser;
+    // This is the error XML parser
+    SimpleXml errorXmlParser;
 
-	// Set to 1 after the first call to add
-	int errorXmlParserInitialized;
+    // Set to 1 after the first call to add
+    int errorXmlParserInitialized;
 
-	// Used to buffer the S3 Error Code as it is read in
-	string_buffer(code, 1024);
+    // Used to buffer the S3 Error Code as it is read in
+    string_buffer(code, 1024);
 
-	// Used to buffer the S3 Error Message as it is read in
-	string_buffer(message, 1024);
+    // Used to buffer the S3 Error Message as it is read in
+    string_buffer(message, 1024);
 
-	// Used to buffer the S3 Error Resource as it is read in
-	string_buffer(resource, 1024);
+    // Used to buffer the S3 Error Resource as it is read in
+    string_buffer(resource, 1024);
 
-	// Used to buffer the S3 Error Further Details as it is read in
-	string_buffer(furtherDetails, 1024);
-	
-	// The extra details; we support up to EXTRA_DETAILS_SIZE of them
-	S3NameValue extraDetails[EXTRA_DETAILS_SIZE];
+    // Used to buffer the S3 Error Further Details as it is read in
+    string_buffer(furtherDetails, 1024);
+    
+    // The extra details; we support up to EXTRA_DETAILS_SIZE of them
+    S3NameValue extraDetails[EXTRA_DETAILS_SIZE];
 
-	// This is the buffer from which the names and values used in extraDetails
-	// are allocated
-	string_multibuffer(extraDetailsNamesValues, EXTRA_DETAILS_SIZE * 1024);
+    // This is the buffer from which the names and values used in extraDetails
+    // are allocated
+    string_multibuffer(extraDetailsNamesValues, EXTRA_DETAILS_SIZE * 1024);
 } ErrorParser;
 
 
@@ -71,7 +71,7 @@ typedef struct ErrorParser
 void error_parser_initialize(ErrorParser *errorParser);
 
 S3Status error_parser_add(ErrorParser *errorParser, char *buffer,
-						  int bufferSize);
+                          int bufferSize);
 
 void error_parser_convert_status(ErrorParser *errorParser, S3Status *status);
 

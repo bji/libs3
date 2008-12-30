@@ -28,12 +28,12 @@
 #include <string.h>
 #include "simplexml.h"
 
-// Use libxml2 for parsing XML.	 XML is severely overused in modern
+// Use libxml2 for parsing XML.  XML is severely overused in modern
 // computing.  It is useful for only a very small subset of tasks, but
 // software developers who don't know better and are afraid to go against the
 // grain use it for everything, and in most cases, it is completely
 // inappropriate.  Usually, the document structure is severely under-specified
-// as well, as is the case with S3.	 We do our best by just caring about the
+// as well, as is the case with S3.  We do our best by just caring about the
 // most important aspects of the S3 "XML document" responses: the elements and
 // their values.  The SAX API (just about the lamest API ever devised and
 // proof that XML sucks - well, the real proof is how crappy all of the XML
@@ -47,161 +47,161 @@
 
 static xmlEntityPtr saxGetEntity(void *user_data, const xmlChar *name)
 {
-	(void) user_data;
+    (void) user_data;
 
-	return xmlGetPredefinedEntity(name);
+    return xmlGetPredefinedEntity(name);
 }
 
 
 static void saxStartElement(void *user_data, const xmlChar *nameUtf8,
-							const xmlChar **attr)
+                            const xmlChar **attr)
 {
-	(void) attr;
+    (void) attr;
 
-	SimpleXml *simpleXml = (SimpleXml *) user_data;
+    SimpleXml *simpleXml = (SimpleXml *) user_data;
 
-	if (simpleXml->status != S3StatusOK) {
-		return;
-	}
-	
-	// Assume that name has no non-ASCII in it
-	char *name = (char *) nameUtf8;
+    if (simpleXml->status != S3StatusOK) {
+        return;
+    }
+    
+    // Assume that name has no non-ASCII in it
+    char *name = (char *) nameUtf8;
 
-	// Append the element to the element path
-	int len = strlen(name);
+    // Append the element to the element path
+    int len = strlen(name);
 
-	if ((simpleXml->elementPathLen + len + 1) >= 
-		(int) sizeof(simpleXml->elementPath)) {
-		// Cannot handle this element, stop!
-		simpleXml->status = S3StatusXmlParseFailure;
-		return;
-	}
+    if ((simpleXml->elementPathLen + len + 1) >= 
+        (int) sizeof(simpleXml->elementPath)) {
+        // Cannot handle this element, stop!
+        simpleXml->status = S3StatusXmlParseFailure;
+        return;
+    }
 
-	if (simpleXml->elementPathLen) {
-		simpleXml->elementPath[simpleXml->elementPathLen++] = '/';
-	}
-	strcpy(&(simpleXml->elementPath[simpleXml->elementPathLen]), name);
-	simpleXml->elementPathLen += len;
+    if (simpleXml->elementPathLen) {
+        simpleXml->elementPath[simpleXml->elementPathLen++] = '/';
+    }
+    strcpy(&(simpleXml->elementPath[simpleXml->elementPathLen]), name);
+    simpleXml->elementPathLen += len;
 }
 
 
 static void saxEndElement(void *user_data, const xmlChar *name)
 {
-	(void) name;
+    (void) name;
 
-	SimpleXml *simpleXml = (SimpleXml *) user_data;
+    SimpleXml *simpleXml = (SimpleXml *) user_data;
 
-	if (simpleXml->status != S3StatusOK) {
-		return;
-	}
+    if (simpleXml->status != S3StatusOK) {
+        return;
+    }
 
-	// Call back with 0 data
-	simpleXml->status = (*(simpleXml->callback))
-		(simpleXml->elementPath, 0, 0, simpleXml->callbackData);
+    // Call back with 0 data
+    simpleXml->status = (*(simpleXml->callback))
+        (simpleXml->elementPath, 0, 0, simpleXml->callbackData);
 
-	while ((simpleXml->elementPathLen > 0) &&
-		   (simpleXml->elementPath[simpleXml->elementPathLen] != '/')) {
-		simpleXml->elementPathLen--;
-	}
+    while ((simpleXml->elementPathLen > 0) &&
+           (simpleXml->elementPath[simpleXml->elementPathLen] != '/')) {
+        simpleXml->elementPathLen--;
+    }
 
-	simpleXml->elementPath[simpleXml->elementPathLen] = 0;
+    simpleXml->elementPath[simpleXml->elementPathLen] = 0;
 }
 
 
 static void saxCharacters(void *user_data, const xmlChar *ch, int len)
 {
-	SimpleXml *simpleXml = (SimpleXml *) user_data;
+    SimpleXml *simpleXml = (SimpleXml *) user_data;
 
-	if (simpleXml->status != S3StatusOK) {
-		return;
-	}
+    if (simpleXml->status != S3StatusOK) {
+        return;
+    }
 
-	simpleXml->status = (*(simpleXml->callback))
-		(simpleXml->elementPath, (char *) ch, len, simpleXml->callbackData);
+    simpleXml->status = (*(simpleXml->callback))
+        (simpleXml->elementPath, (char *) ch, len, simpleXml->callbackData);
 }
 
 
 static void saxError(void *user_data, const char *msg, ...)
 {
-	(void) msg;
+    (void) msg;
 
-	SimpleXml *simpleXml = (SimpleXml *) user_data;
+    SimpleXml *simpleXml = (SimpleXml *) user_data;
 
-	if (simpleXml->status != S3StatusOK) {
-		return;
-	}
+    if (simpleXml->status != S3StatusOK) {
+        return;
+    }
 
-	simpleXml->status = S3StatusXmlParseFailure;
+    simpleXml->status = S3StatusXmlParseFailure;
 }
 
 
 static struct _xmlSAXHandler saxHandlerG =
 {
-	0, // internalSubsetSAXFunc
-	0, // isStandaloneSAXFunc
-	0, // hasInternalSubsetSAXFunc
-	0, // hasExternalSubsetSAXFunc
-	0, // resolveEntitySAXFunc
-	&saxGetEntity, // getEntitySAXFunc
-	0, // entityDeclSAXFunc
-	0, // notationDeclSAXFunc
-	0, // attributeDeclSAXFunc
-	0, // elementDeclSAXFunc
-	0, // unparsedEntityDeclSAXFunc
-	0, // setDocumentLocatorSAXFunc
-	0, // startDocumentSAXFunc
-	0, // endDocumentSAXFunc
-	&saxStartElement, // startElementSAXFunc
-	&saxEndElement, // endElementSAXFunc
-	0, // referenceSAXFunc
-	&saxCharacters, // charactersSAXFunc
-	0, // ignorableWhitespaceSAXFunc
-	0, // processingInstructionSAXFunc
-	0, // commentSAXFunc
-	0, // warningSAXFunc
-	&saxError, // errorSAXFunc
-	&saxError, // fatalErrorSAXFunc
-	0, // getParameterEntitySAXFunc
-	&saxCharacters, // cdataBlockSAXFunc
-	0, // externalSubsetSAXFunc
-	0, // initialized
-	0, // _private
-	0, // startElementNsSAX2Func
-	0, // endElementNsSAX2Func
-	0 // xmlStructuredErrorFunc serror;
+    0, // internalSubsetSAXFunc
+    0, // isStandaloneSAXFunc
+    0, // hasInternalSubsetSAXFunc
+    0, // hasExternalSubsetSAXFunc
+    0, // resolveEntitySAXFunc
+    &saxGetEntity, // getEntitySAXFunc
+    0, // entityDeclSAXFunc
+    0, // notationDeclSAXFunc
+    0, // attributeDeclSAXFunc
+    0, // elementDeclSAXFunc
+    0, // unparsedEntityDeclSAXFunc
+    0, // setDocumentLocatorSAXFunc
+    0, // startDocumentSAXFunc
+    0, // endDocumentSAXFunc
+    &saxStartElement, // startElementSAXFunc
+    &saxEndElement, // endElementSAXFunc
+    0, // referenceSAXFunc
+    &saxCharacters, // charactersSAXFunc
+    0, // ignorableWhitespaceSAXFunc
+    0, // processingInstructionSAXFunc
+    0, // commentSAXFunc
+    0, // warningSAXFunc
+    &saxError, // errorSAXFunc
+    &saxError, // fatalErrorSAXFunc
+    0, // getParameterEntitySAXFunc
+    &saxCharacters, // cdataBlockSAXFunc
+    0, // externalSubsetSAXFunc
+    0, // initialized
+    0, // _private
+    0, // startElementNsSAX2Func
+    0, // endElementNsSAX2Func
+    0 // xmlStructuredErrorFunc serror;
 };
 
 void simplexml_initialize(SimpleXml *simpleXml, 
-						  SimpleXmlCallback *callback, void *callbackData)
+                          SimpleXmlCallback *callback, void *callbackData)
 {
-	simpleXml->callback = callback;
-	simpleXml->callbackData = callbackData;
-	simpleXml->elementPathLen = 0;
-	simpleXml->status = S3StatusOK;
-	simpleXml->xmlParser = 0;
+    simpleXml->callback = callback;
+    simpleXml->callbackData = callbackData;
+    simpleXml->elementPathLen = 0;
+    simpleXml->status = S3StatusOK;
+    simpleXml->xmlParser = 0;
 }
 
 
 void simplexml_deinitialize(SimpleXml *simpleXml)
 {
-	if (simpleXml->xmlParser) {
-		xmlFreeParserCtxt(simpleXml->xmlParser);
-	}
+    if (simpleXml->xmlParser) {
+        xmlFreeParserCtxt(simpleXml->xmlParser);
+    }
 }
 
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen)
 {
-	if (!simpleXml->xmlParser &&
-		(!(simpleXml->xmlParser = xmlCreatePushParserCtxt
-		   (&saxHandlerG, simpleXml, 0, 0, 0)))) {
-		return S3StatusInternalError;
-	}
+    if (!simpleXml->xmlParser &&
+        (!(simpleXml->xmlParser = xmlCreatePushParserCtxt
+           (&saxHandlerG, simpleXml, 0, 0, 0)))) {
+        return S3StatusInternalError;
+    }
 
-	if (xmlParseChunk((xmlParserCtxtPtr) simpleXml->xmlParser, 
-					  data, dataLen, 0)) {
-		return S3StatusXmlParseFailure;
-	}
+    if (xmlParseChunk((xmlParserCtxtPtr) simpleXml->xmlParser, 
+                      data, dataLen, 0)) {
+        return S3StatusXmlParseFailure;
+    }
 
-	return simpleXml->status;
+    return simpleXml->status;
 }

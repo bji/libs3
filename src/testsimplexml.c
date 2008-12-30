@@ -31,57 +31,57 @@
 #include "simplexml.h"
 
 static S3Status simpleXmlCallback(const char *elementPath, const char *data,
-								  int dataLen, void *callbackData)
+                                  int dataLen, void *callbackData)
 {
-	(void) callbackData;
+    (void) callbackData;
 
-	printf("[%s]: [%.*s]\n", elementPath, dataLen, data);
+    printf("[%s]: [%.*s]\n", elementPath, dataLen, data);
 
-	return S3StatusOK;
+    return S3StatusOK;
 }
 
 
 // The only argument allowed is a specification of the random seed to use
 int main(int argc, char **argv)
 {
-	if (argc > 1) {
-		char *arg = argv[1];
-		int seed = 0;
-		while (*arg) {
-			seed *= 10;
-			seed += (*arg++ - '0');
-		}
-		
-		srand(seed);
-	}
-	else {
-		srand(time(0));
-	}
+    if (argc > 1) {
+        char *arg = argv[1];
+        int seed = 0;
+        while (*arg) {
+            seed *= 10;
+            seed += (*arg++ - '0');
+        }
+        
+        srand(seed);
+    }
+    else {
+        srand(time(0));
+    }
 
-	SimpleXml simpleXml;
+    SimpleXml simpleXml;
 
-	simplexml_initialize(&simpleXml, &simpleXmlCallback, 0);
+    simplexml_initialize(&simpleXml, &simpleXmlCallback, 0);
 
-	// Read chunks of 10K from stdin, and then feed them in random chunks
-	// to simplexml_add
-	char inbuf[10000];
+    // Read chunks of 10K from stdin, and then feed them in random chunks
+    // to simplexml_add
+    char inbuf[10000];
 
-	int amt_read;
-	while ((amt_read = fread(inbuf, 1, sizeof(inbuf), stdin)) > 0) {
-		char *buf = inbuf;
-		while (amt_read) {
-			int amt = (rand() % amt_read) + 1;
-			S3Status status = simplexml_add(&simpleXml, buf, amt);
-			if (status != S3StatusOK) {
-				fprintf(stderr, "ERROR: Parse failure: %d\n", status);
-				simplexml_deinitialize(&simpleXml);
-				return -1;
-			}
-			buf += amt, amt_read -= amt;
-		}
-	}
+    int amt_read;
+    while ((amt_read = fread(inbuf, 1, sizeof(inbuf), stdin)) > 0) {
+        char *buf = inbuf;
+        while (amt_read) {
+            int amt = (rand() % amt_read) + 1;
+            S3Status status = simplexml_add(&simpleXml, buf, amt);
+            if (status != S3StatusOK) {
+                fprintf(stderr, "ERROR: Parse failure: %d\n", status);
+                simplexml_deinitialize(&simpleXml);
+                return -1;
+            }
+            buf += amt, amt_read -= amt;
+        }
+    }
 
-	simplexml_deinitialize(&simpleXml);
+    simplexml_deinitialize(&simpleXml);
 
-	return 0;
+    return 0;
 }
