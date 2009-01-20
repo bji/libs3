@@ -35,6 +35,8 @@ unsigned long pthread_self()
 
 int pthread_mutex_init(pthread_mutex_t *mutex, void *v)
 {
+    (void) v;
+
     InitializeCriticalSection(&(mutex->criticalSection));
 
     return 0;

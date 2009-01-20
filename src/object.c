@@ -42,14 +42,14 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -80,7 +80,7 @@ typedef struct CopyObjectData
     S3ResponseCompleteCallback *responseCompleteCallback;
     void *callbackData;
 
-    time_t *lastModifiedReturn;
+    int64_t *lastModifiedReturn;
     int eTagReturnSize;
     char *eTagReturn;
     int eTagReturnLen;
@@ -165,7 +165,7 @@ static void copyObjectCompleteCallback(S3Status requestStatus,
 void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
                     const char *destinationBucket, const char *destinationKey,
                     const S3PutProperties *putProperties,
-                    time_t *lastModifiedReturn, int eTagReturnSize,
+                    int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData)
 {
@@ -196,15 +196,15 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeCOPY,                          // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        destinationBucket ? destinationBucket : 
-        bucketContext->bucketName,                    // bucketName
+        { destinationBucket ? destinationBucket : 
+          bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         destinationKey ? destinationKey : key,        // key
         0,                                            // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         bucketContext->bucketName,                    // copySourceBucketName
         key,                                          // copySourceKey
         0,                                            // getConditions
@@ -236,14 +236,14 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         getConditions,                                // getConditions
@@ -273,14 +273,14 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeHEAD,                          // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -310,14 +310,14 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeDELETE,                        // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

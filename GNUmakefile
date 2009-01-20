@@ -86,7 +86,7 @@ ifndef CFLAGS
     CFLAGS = -O3
 endif
 
-CFLAGS += -Wall -Werror -std=c99 -Iinc \
+CFLAGS += -Wall -Werror -Wshadow -Wextra -std=c99 -Iinc \
           $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\" \
@@ -121,6 +121,7 @@ install: libs3 s3 headers
 	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
                $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
 	ln -sf libs3.so.$(LIBS3_VER) $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(DESTDIR)/lib/libs3.so
 
 
 # --------------------------------------------------------------------------
@@ -131,6 +132,7 @@ uninstall:
 	rm -f $(DESTDIR)/bin/s3 \
               $(DESTDIR)/include/libs3.h \
               $(DESTDIR)/lib/libs3.a \
+              $(DESTDIR)/lib/libs3.so \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER) \
 
@@ -249,8 +251,8 @@ libs3: $(LIBS3_SHARED) $(LIBS3_SHARED_MAJOR) $(BUILD)/lib/libs3.a
 
 LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
                  src/object.c src/request.c src/request_context.c \
-                 src/response_headers_handler.c src/service.c \
-                 src/simplexml.c src/util.c
+                 src/response_headers_handler.c src/service_access_logging.c \
+                 src/service.c src/simplexml.c src/util.c
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.do)
 	@mkdir -p $(dir $@)

@@ -158,14 +158,14 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        protocol,                                     // protocol
-        S3UriStylePath,                               // uriStyle
-        0,                                            // bucketName
+        { 0,                                          // bucketName
+          protocol,                                   // protocol
+          S3UriStylePath,                             // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

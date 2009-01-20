@@ -33,6 +33,8 @@
 static S3Status simpleXmlCallback(const char *elementPath, const char *data,
                                   int dataLen, void *callbackData)
 {
+    (void) callbackData;
+
     printf("[%s]: [%.*s]\n", elementPath, dataLen, data);
 
     return S3StatusOK;

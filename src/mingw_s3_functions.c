@@ -26,6 +26,8 @@
 
 int setenv(const char *a, const char *b, int c)
 {
+    (void) c;
+
     return SetEnvironmentVariable(a, b);
 }
 

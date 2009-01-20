@@ -70,7 +70,7 @@ static S3Status getAclDataCallback(int bufferSize, const char *buffer,
 
     string_buffer_append(gaData->aclXmlDocument, buffer, bufferSize, fit);
     
-    return fit ? S3StatusOK : S3StatusAclXmlDocumentTooLarge;
+    return fit ? S3StatusOK : S3StatusXmlDocumentTooLarge;
 }
 
 
@@ -122,14 +122,14 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
-        "?acl",                                       // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
+        "acl",                                        // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -168,7 +168,7 @@ static S3Status generateAclXmlDocument(const char *ownerId,
              xmlDocumentBufferSize - *xmlDocumentLenReturn - 1, \
              fmt, __VA_ARGS__);                                 \
         if (*xmlDocumentLenReturn >= xmlDocumentBufferSize) {   \
-            return S3StatusAclXmlDocumentTooLarge;              \
+            return S3StatusXmlDocumentTooLarge;                 \
         } \
     } while (0)
 
@@ -191,11 +191,24 @@ static S3Status generateAclXmlDocument(const char *ownerId,
                    grant->grantee.canonicalUser.id, 
                    grant->grantee.canonicalUser.displayName);
             break;
-        default: // case S3GranteeTypeAllAwsUsers/S3GranteeTypeAllUsers:
-            append("Group\"><URI>http://acs.amazonaws.com/groups/"
-                   "global/%s</URI>",
-                   (grant->granteeType == S3GranteeTypeAllAwsUsers) ?
-                   "AuthenticatedUsers" : "AllUsers");
+        default: { // case S3GranteeTypeAllAwsUsers/S3GranteeTypeAllUsers:
+            const char *grantee;
+            switch (grant->granteeType) {
+            case S3GranteeTypeAllAwsUsers:
+                grantee = "http://acs.amazonaws.com/groups/global/"
+                    "AuthenticatedUsers";
+                break;
+            case S3GranteeTypeAllUsers:
+                grantee = "http://acs.amazonaws.com/groups/global/"
+                    "AllUsers";
+                break;
+            default:
+                grantee = "http://acs.amazonaws.com/groups/s3/"
+                    "LogDelivery";
+                break;
+            }
+            append("Group\"><URI>%s</URI>", grantee);
+        }
             break;
         }
         append("</Grantee><Permission>%s</Permission></Grant>",
@@ -278,7 +291,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
 {
     if (aclGrantCount > S3_MAX_ACL_GRANT_COUNT) {
         (*(handler->completeCallback))
-            (S3StatusTooManyAclGrants, 0, callbackData);
+            (S3StatusTooManyGrants, 0, callbackData);
         return;
     }
 
@@ -309,14 +322,14 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         key,                                          // key
         0,                                            // queryParams
-        "?acl",                                       // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
+        "acl",                                        // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

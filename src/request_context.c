@@ -75,13 +75,25 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext)
     int requestsRemaining;
     do {
         fd_set readfds, writefds, exceptfds;
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        FD_ZERO(&exceptfds);
         int maxfd;
         S3Status status = S3_get_request_context_fdsets
             (requestContext, &readfds, &writefds, &exceptfds, &maxfd);
         if (status != S3StatusOK) {
             return status;
         }
-        select(maxfd + 1, &readfds, &writefds, &exceptfds, 0);
+        // curl will return -1 if it hasn't even created any fds yet because
+        // none of the connections have started yet.  In this case, don't
+        // do the select at all, because it will wait forever; instead, just
+        // skip it and go straight to running the underlying CURL handles
+        if (maxfd != -1) {
+            int64_t timeout = S3_get_request_context_timeout(requestContext);
+            struct timeval tv = { timeout / 1000, (timeout % 1000) * 1000 };
+            select(maxfd + 1, &readfds, &writefds, &exceptfds,
+                   (timeout == -1) ? 0 : &tv);
+        }
         status = S3_runonce_request_context(requestContext,
                                             &requestsRemaining);
         if (status != S3StatusOK) {
@@ -115,14 +127,12 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
         CURLMsg *msg;
         int junk;
         while ((msg = curl_multi_info_read(requestContext->curlm, &junk))) {
-            if ((msg->msg != CURLMSG_DONE) ||
-                (curl_multi_remove_handle(requestContext->curlm, 
-                                          msg->easy_handle) != CURLM_OK)) {
+            if (msg->msg != CURLMSG_DONE) {
                 return S3StatusInternalError;
             }
             Request *request;
-            if (curl_easy_getinfo(msg->easy_handle, CURLOPT_PRIVATE, 
-                                  (char *) &request) != CURLE_OK) {
+            if (curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, 
+                                  (char **) &request) != CURLE_OK) {
                 return S3StatusInternalError;
             }
             // Remove the request from the list of requests
@@ -143,9 +153,16 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                 request->status = request_curl_code_to_status
                     (msg->data.result);
             }
+            if (curl_multi_remove_handle(requestContext->curlm, 
+                                         msg->easy_handle) != CURLM_OK) {
+                return S3StatusInternalError;
+            }
             // Finish the request, ensuring that all callbacks have been made,
             // and also releases the request
             request_finish(request);
+            // Now, since a callback was made, there may be new requests 
+            // queued up to be performed immediately, so do so
+            status = CURLM_CALL_MULTI_PERFORM;
         }
     } while (status == CURLM_CALL_MULTI_PERFORM);
 
@@ -159,4 +176,15 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
     return ((curl_multi_fdset(requestContext->curlm, readFdSet, writeFdSet,
                               exceptFdSet, maxFd) == CURLM_OK) ?
             S3StatusOK : S3StatusInternalError);
+}
+
+int64_t S3_get_request_context_timeout(S3RequestContext *requestContext)
+{
+    long timeout;
+
+    if (curl_multi_timeout(requestContext->curlm, &timeout) != CURLM_OK) {
+        timeout = 0;
+    }
+    
+    return timeout;
 }

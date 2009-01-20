@@ -66,14 +66,14 @@
 int urlEncode(char *dest, const char *src, int maxSrcSize);
 
 // Returns < 0 on failure >= 0 on success
-time_t parseIso8601Time(const char *str);
+int64_t parseIso8601Time(const char *str);
 
 uint64_t parseUnsignedInt(const char *str);
 
 // base64 encode bytes.  The output buffer must have at least
 // ((4 * (inLen + 1)) / 3) bytes in it.  Returns the number of bytes written
 // to [out].
-int base64Encode(const unsigned char *in, int inLen, unsigned char *out);
+int base64Encode(const unsigned char *in, int inLen, char *out);
 
 // Compute HMAC-SHA-1 with key [key] and message [message], storing result
 // in [hmac]

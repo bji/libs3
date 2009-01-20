@@ -51,14 +51,8 @@ typedef struct RequestParams
     // Request type, affects the HTTP verb used
     HttpRequestType httpRequestType;
 
-    // Protocol to use for request
-    S3Protocol protocol;
-
-    // URI style to use for request
-    S3UriStyle uriStyle;
-
-    // Bucket name, if any
-    const char *bucketName;
+    // Bucket context for request
+    S3BucketContext bucketContext;
 
     // Key, if any
     const char *key;
@@ -68,12 +62,6 @@ typedef struct RequestParams
 
     // sub resource, like ?acl, ?location, ?torrent, ?logging
     const char *subResource;
-
-    // AWS Access Key ID
-    const char *accessKeyId;
-
-    // AWS Secret Access Key
-    const char *secretAccessKey;
 
     // If this is a copy operation, this gives the source bucket
     const char *copySourceBucketName;
@@ -148,8 +136,8 @@ typedef struct Request
     // Callback to be made to supply data to send to S3.  Might not be called.
     S3PutObjectDataCallback *toS3Callback;
 
-    // Number of bytes total that readCallback will supply
-    int64_t toS3CallbackTotalSize;
+    // Number of bytes total that readCallback has left to supply
+    int64_t toS3CallbackBytesRemaining;
 
     // Callback to be made that supplies data read from S3.
     // Might not be called.

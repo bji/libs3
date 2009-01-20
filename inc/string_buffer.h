@@ -50,7 +50,7 @@
     do {                                                                \
         sb##Len += snprintf(&(sb[sb##Len]), sizeof(sb) - sb##Len - 1,   \
                             "%.*s", (int) (len), str);                  \
-        if (sb##Len > (sizeof(sb) - 1)) {                               \
+        if (sb##Len > (int) (sizeof(sb) - 1)) {                         \
             sb##Len = sizeof(sb) - 1;                                   \
             all_fit = 0;                                                \
         }                                                               \
@@ -84,7 +84,7 @@
         smb##Size += (snprintf(&(smb[smb##Size]),                       \
                                sizeof(smb) - smb##Size,                 \
                                "%.*s", (int) (len), str) + 1);          \
-        if (smb##Size > sizeof(smb)) {                                  \
+        if (smb##Size > (int) sizeof(smb)) {                            \
             smb##Size = sizeof(smb);                                    \
             all_fit = 0;                                                \
         }                                                               \

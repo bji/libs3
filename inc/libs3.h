@@ -28,7 +28,7 @@
 #define LIBS3_H
 
 #include <stdint.h>
-#include <sys/time.h>
+#include <sys/select.h>
 
 
 #ifdef __cplusplus
@@ -129,6 +129,12 @@ extern "C" {
 
 
 /**
+ * S3_MAX_BUCKET_NAME_SIZE is the maximum size of a bucket name.
+ **/
+
+#define S3_MAX_BUCKET_NAME_SIZE            255
+
+/**
  * S3_MAX_KEY_SIZE is the maximum size of keys that Amazon S3 supports.
  **/
 #define S3_MAX_KEY_SIZE                    1024
@@ -185,6 +191,17 @@ extern "C" {
  * libs3 supports in an ACL grantee user display name.
  **/
 #define S3_MAX_GRANTEE_DISPLAY_NAME_SIZE   128
+
+
+/**
+ * This is the maximum number of characters that will be stored in the
+ * return buffer for the utility function which computes an HTTP authenticated
+ * query string
+ **/
+#define S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE \
+    (sizeof("https://" S3_HOSTNAME "/") + (S3_MAX_KEY_SIZE * 3) + \
+     sizeof("?AWSAccessKeyId=") + 32 + sizeof("&Expires=") + 32 + \
+     sizeof("&Signature=") + 28 + 1)
 
 
 /**
@@ -250,15 +267,17 @@ typedef enum
     S3StatusKeyTooLong                                      ,
     S3StatusUriTooLong                                      ,
     S3StatusXmlParseFailure                                 ,
-    S3StatusBadAclEmailAddressTooLong                       ,
-    S3StatusBadAclUserIdTooLong                             ,
-    S3StatusBadAclUserDisplayNameTooLong                    ,
-    S3StatusBadAclGroupUriTooLong                           ,
-    S3StatusBadAclPermissionTooLong                         ,
-    S3StatusTooManyAclGrants                                ,
-    S3StatusBadAclGrantee                                   ,
-    S3StatusBadAclPermission                                ,
-    S3StatusAclXmlDocumentTooLarge                          ,
+    S3StatusEmailAddressTooLong                             ,
+    S3StatusUserIdTooLong                                   ,
+    S3StatusUserDisplayNameTooLong                          ,
+    S3StatusGroupUriTooLong                                 ,
+    S3StatusPermissionTooLong                               ,
+    S3StatusTargetBucketTooLong                             ,
+    S3StatusTargetPrefixTooLong                             ,
+    S3StatusTooManyGrants                                   ,
+    S3StatusBadGrantee                                      ,
+    S3StatusBadPermission                                   ,
+    S3StatusXmlDocumentTooLarge                             ,
     S3StatusNameLookupError                                 ,
     S3StatusFailedToConnect                                 ,
     S3StatusServerFailedVerification                        ,
@@ -391,13 +410,16 @@ typedef enum
  *     listing owned buckets
  * All AWS Users - identifies all authenticated AWS users
  * All Users - identifies all users
+ * Log Delivery - identifies the Amazon group responsible for writing
+ *                server access logs into buckets
  **/
 typedef enum
 {
     S3GranteeTypeAmazonCustomerByEmail  = 0,
     S3GranteeTypeCanonicalUser          = 1,
     S3GranteeTypeAllAwsUsers            = 2,
-    S3GranteeTypeAllUsers               = 3
+    S3GranteeTypeAllUsers               = 3,
+    S3GranteeTypeLogDelivery            = 4
 } S3GranteeType;
 
 
@@ -534,7 +556,7 @@ typedef struct S3ResponseProperties
      * of seconds since the UNIX epoch.
      * 
      **/
-    time_t lastModified;
+    int64_t lastModified;
 
     /**
      * This is the number of user-provided meta data associated with the
@@ -662,7 +684,7 @@ typedef struct S3ListBucketContent
      * This is the number of seconds since UNIX epoch of the last modified
      * date of the object identified by the key. 
      **/
-    time_t lastModified;
+    int64_t lastModified;
 
     /**
      * This gives a tag which gives a signature of the contents of the object,
@@ -705,7 +727,7 @@ typedef struct S3PutProperties
     /**
      * If present, this provides the MD5 signature of the contents, and is
      * used to validate the contents.  This is highly recommended by Amazon
-     * but not required.
+     * but not required.  Its format is as a base64-encoded MD5 sum.
      **/
     const char *md5;
 
@@ -736,7 +758,7 @@ typedef struct S3PutProperties
      * information is typically only delivered to users who download the
      * content via a web browser.
      **/
-    time_t expires;
+    int64_t expires;
 
     /**
      * This identifies the "canned ACL" that should be used for this object.
@@ -770,7 +792,7 @@ typedef struct S3GetConditions
      * seconds since Unix epoch.  If this value is less than zero, it will not
      * be used in the conditional.
      **/
-    time_t ifModifiedSince;
+    int64_t ifModifiedSince;
 
     /**
      * The request will be processed if the Last-Modification header of the
@@ -778,7 +800,7 @@ typedef struct S3GetConditions
      * Unix epoch.  If this value is less than zero, it will not be used in
      * the conditional.
      **/
-    time_t ifNotModifiedSince;
+    int64_t ifNotModifiedSince;
 
     /**
      * If non-NULL, this gives an eTag header value which the object must
@@ -900,13 +922,15 @@ typedef void (S3ResponseCompleteCallback)(S3Status status,
 typedef S3Status (S3ListServiceCallback)(const char *ownerId, 
                                          const char *ownerDisplayName,
                                          const char *bucketName,
-                                         time_t creationDateSeconds,
+                                         int64_t creationDateSeconds,
                                          void *callbackData);
 
 
 /**
- * This callback is made once for each object resulting from a list bucket
- * operation.
+ * This callback is made repeatedly as a list bucket operation progresses.
+ * The contents reported via this callback are only reported once per list
+ * bucket operation, but multiple calls to this callback may be necessary to
+ * report all items resulting from the list bucket operation.
  *
  * @param isTruncated is true if the list bucket request was truncated by the
  *        S3 service, in which case the remainder of the list may be obtained
@@ -1045,7 +1069,9 @@ typedef struct S3ListBucketHandler
 
     /**
      * The listBucketCallback is called as items are reported back from S3 as
-     * responses to the request
+     * responses to the request.  This may be called more than one time per
+     * list bucket request, each time providing more items from the list
+     * operation.
      **/
     S3ListBucketCallback *listBucketCallback;
 } S3ListBucketHandler;
@@ -1344,6 +1370,57 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                                        fd_set *exceptFdSet, int *maxFd);
 
 
+/**
+ * This function returns the maximum number of milliseconds that the caller of
+ * S3_runonce_request_context should wait on the fdsets obtained via a call to
+ * S3_get_request_context_fdsets.  In other words, this is essentially the
+ * select() timeout that needs to be used (shorter values are OK, but no
+ * longer than this) to ensure that internal timeout code of libs3 can work
+ * properly.  This function should be called right before select() each time
+ * select() on the request_context fdsets are to be performed by the libs3
+ * user.
+ *
+ * @param requestContext is the S3RequestContext to get the timeout from
+ * @return the maximum number of milliseconds to select() on fdsets.  Callers
+ *         could wait a shorter time if they wish, but not longer.
+ **/
+int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
+
+
+/** **************************************************************************
+ * S3 Utility Functions
+ ************************************************************************** **/
+
+/**
+ * Generates an HTTP authenticated query string, which may then be used by
+ * a browser (or other web client) to issue the request.  The request is
+ * implicitly a GET request; Amazon S3 is documented to only support this type
+ * of authenticated query string request.
+ *
+ * @param buffer is the output buffer for the authenticated query string.
+ *        It must be at least S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE bytes in 
+ *        length.
+ * @param bucketContext gives the bucket and associated parameters for the
+ *        request to generate.
+ * @param key gives the key which the authenticated request will GET.
+ * @param expires gives the number of seconds since Unix epoch for the
+ *        expiration date of the request; after this time, the request will
+ *        no longer be valid.  If this value is negative, the largest
+ *        expiration date possible is used (currently, Jan 19, 2038).
+ * @param resource gives a sub-resource to be fetched for the request, or NULL
+ *        for none.  This should be of the form "?<resource>", i.e. 
+ *        "?torrent".
+ * @return One of:
+ *         S3StatusUriTooLong if, due to an internal error, the generated URI
+ *             is longer than S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE bytes in
+ *             length and thus will not fit into the supplied buffer
+ *         S3StatusOK on success
+ **/
+S3Status S3_generate_authenticated_query_string
+    (char *buffer, const S3BucketContext *bucketContext,
+     const char *key, int64_t expires, const char *resource);
+
+
 /** **************************************************************************
  * Service Functions
  ************************************************************************** **/
@@ -1370,7 +1447,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const S3ListServiceHandler *handler,
                      void *callbackData);
                          
-                            
+
 /** **************************************************************************
  * Bucket Functions
  ************************************************************************** **/
@@ -1559,7 +1636,7 @@ void S3_copy_object(const S3BucketContext *bucketContext,
                     const char *key, const char *destinationBucket,
                     const char *destinationKey,
                     const S3PutProperties *putProperties,
-                    time_t *lastModifiedReturn, int eTagReturnSize,
+                    int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
 
@@ -1698,23 +1775,93 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
-/**
- * xxx todo
- * Service Logging ...
- **/
-
+/** **************************************************************************
+ * Server Access Log Functions
+ ************************************************************************** **/
 
 /**
- * xxx todo
- * function for generating an HTTP authenticated query string
+ * Gets the service access logging settings for a bucket.  The service access
+ * logging settings specify whether or not the S3 service will write service
+ * access logs for requests made for the given bucket, and if so, several
+ * settings controlling how these logs will be written.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being requested
+ * @param targetBucketReturn must be passed in as a buffer of at least
+ *        (S3_MAX_BUCKET_NAME_SIZE + 1) bytes in length, and will be filled
+ *        in with the target bucket name for access logging for the given
+ *        bucket, which is the bucket into which access logs for the specified
+ *        bucket will be written.  This is returned as an empty string if
+ *        service access logging is not enabled for the given bucket.
+ * @param targetPrefixReturn must be passed in as a buffer of at least
+ *        (S3_MAX_KEY_SIZE + 1) bytes in length, and will be filled in
+ *        with the key prefix for server access logs for the given bucket,
+ *        or the empty string if no such prefix is specified.
+ * @param aclGrantCountReturn returns the number of ACL grants that are
+ *        associated with the server access logging for the given bucket.
+ * @param aclGrants must be passed in as an array of at least
+ *        S3_MAX_ACL_GRANT_COUNT S3AclGrant structures, and these will be
+ *        filled in with the target grants associated with the server access
+ *        logging for the given bucket, whose number is returned in the
+ *        aclGrantCountReturn parameter.  These grants will be applied to the
+ *        ACL of any server access logging log files generated by the S3
+ *        service for the given bucket.
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
-
+void S3_get_server_access_logging(const S3BucketContext *bucketContext,
+                                  char *targetBucketReturn,
+                                  char *targetPrefixReturn,
+                                  int *aclGrantCountReturn, 
+                                  S3AclGrant *aclGrants,
+                                  S3RequestContext *requestContext,
+                                  const S3ResponseHandler *handler,
+                                  void *callbackData);
+                                  
 
 /**
- * xxx todo
- * functions for generating form stuff for posting to s3
+ * Sets the service access logging settings for a bucket.  The service access
+ * logging settings specify whether or not the S3 service will write service
+ * access logs for requests made for the given bucket, and if so, several
+ * settings controlling how these logs will be written.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param targetBucket gives the target bucket name for access logging for the
+ *        given bucket, which is the bucket into which access logs for the
+ *        specified bucket will be written.
+ * @param targetPrefix is an option parameter which specifies the key prefix
+ *        for server access logs for the given bucket, or NULL if no such
+ *        prefix is to be used.
+ * @param aclGrantCount specifies the number of ACL grants that are to be
+ *        associated with the server access logging for the given bucket.
+ * @param aclGrants is as an array of S3AclGrant structures, whose number is
+ *        given by the aclGrantCount parameter.  These grants will be applied
+ *        to the ACL of any server access logging log files generated by the
+ *        S3 service for the given bucket.
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
  **/
-
+void S3_set_server_access_logging(const S3BucketContext *bucketContext,
+                                  const char *targetBucket, 
+                                  const char *targetPrefix, int aclGrantCount, 
+                                  const S3AclGrant *aclGrants, 
+                                  S3RequestContext *requestContext,
+                                  const S3ResponseHandler *handler,
+                                  void *callbackData);
+                                  
 
 #ifdef __cplusplus
 }

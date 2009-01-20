@@ -131,14 +131,14 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        protocol,                                     // protocol
-        uriStyle,                                     // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          uriStyle,                                   // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
-        "?location",                                  // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
+        "location",                                   // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -267,14 +267,14 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        protocol,                                     // protocol
-        S3UriStylePath,                               // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          S3UriStylePath,                             // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -349,14 +349,14 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeDELETE,                        // httpRequestType
-        protocol,                                     // protocol
-        uriStyle,                                     // uriStyle
-        bucketName,                                   // bucketName
+        { bucketName,                                 // bucketName
+          protocol,                                   // protocol
+          uriStyle,                                   // uriStyle
+          accessKeyId,                                // accessKeyId
+          secretAccessKey },                          // secretAccessKey
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
-        accessKeyId,                                  // accessKeyId
-        secretAccessKey,                              // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -532,7 +532,7 @@ static S3Status listBucketXmlCallback(const char *elementPath,
                          lbData->commonPrefixLens[which] - 1,
                          "%.*s", dataLen, data);
             if (lbData->commonPrefixLens[which] >=
-                sizeof(lbData->commonPrefixes[which])) {
+                (int) sizeof(lbData->commonPrefixes[which])) {
                 return S3StatusXmlParseFailure;
             }
         }
@@ -612,6 +612,8 @@ static void listBucketCompleteCallback(S3Status requestStatus,
     (*(lbData->responseCompleteCallback))
         (requestStatus, s3ErrorDetails, lbData->callbackData);
 
+    simplexml_deinitialize(&(lbData->simpleXml));
+
     free(lbData);
 }
 
@@ -628,11 +630,13 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
 #define safe_append(name, value)                                        \
     do {                                                                \
         int fit;                                                        \
-        string_buffer_append(queryParams, &sep, 1, fit);                \
-        if (!fit) {                                                     \
-            (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, callbackData);          \
-            return;                                                     \
+        if (amp) {                                                      \
+            string_buffer_append(queryParams, "&", 1, fit);             \
+            if (!fit) {                                                 \
+                (*(handler->responseHandler.completeCallback))          \
+                    (S3StatusQueryParamsTooLong, 0, callbackData);      \
+                return;                                                 \
+            }                                                           \
         }                                                               \
         string_buffer_append(queryParams, name "=",                     \
                              sizeof(name "=") - 1, fit);                \
@@ -641,7 +645,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
                 (S3StatusQueryParamsTooLong, 0, callbackData);          \
             return;                                                     \
         }                                                               \
-        sep = '&';                                                      \
+        amp = 1;                                                        \
         char encoded[3 * 1024];                                         \
         if (!urlEncode(encoded, value, 1024)) {                         \
             (*(handler->responseHandler.completeCallback))              \
@@ -658,7 +662,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     } while (0)
 
 
-    char sep = '?';
+    int amp = 0;
     if (prefix) {
         safe_append("prefix", prefix);
     }
@@ -700,14 +704,14 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        bucketContext->protocol,                      // protocol
-        bucketContext->uriStyle,                      // uriStyle
-        bucketContext->bucketName,                    // bucketName
+        { bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey },           // secretAccessKey
         0,                                            // key
         queryParams[0] ? queryParams : 0,             // queryParams
         0,                                            // subResource
-        bucketContext->accessKeyId,                   // accessKeyId
-        bucketContext->secretAccessKey,               // secretAccessKey
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
