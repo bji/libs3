@@ -1,6 +1,6 @@
 # Contributor: Bryan Ischo <bryan@ischo.com>
 pkgname=libs3
-pkgver=trunk
+pkgver=1.4
 pkgrel=1
 pkgdesc="C Library and Tools for Amazon S3 Access"
 arch=('i686' 'x86_64')
