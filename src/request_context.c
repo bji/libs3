@@ -132,7 +132,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
             }
             Request *request;
             if (curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, 
-                                  (char **) &request) != CURLE_OK) {
+                                  (char **) (char *) &request) != CURLE_OK) {
                 return S3StatusInternalError;
             }
             // Remove the request from the list of requests
