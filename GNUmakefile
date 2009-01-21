@@ -185,7 +185,7 @@ $(BUILD)/deb/DEBIAN/control: debian/control
 $(BUILD)/deb-dev/DEBIAN/control: debian/control.dev
 	@mkdir -p $(dir $@)
 	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
-            < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' >> $@
+            < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' > $@
 
 $(BUILD)/deb/DEBIAN/shlibs:
 	echo -n "libs3 $(LIBS3_VER_MAJOR) libs3 " > $@
