@@ -15,7 +15,7 @@ replaces=()
 backup=()
 options=()
 install=
-source=($pkgname-$pkgver.tar.gz)
+source=(http://libs3.ischo.com/$pkgname-$pkgver.tar.gz)
 noextract=()
 md5sums=('source md5') #generate with 'makepkg -g'
 
