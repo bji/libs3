@@ -5,7 +5,7 @@ Architecture: DEBIAN_ARCHITECTURE
 Section: net
 Priority: extra
 Maintainer: Bryan Ischo <bryan@ischo.com>
-Homepage: http://reallibs3.svn.sourceforge.net
+Homepage: http://libs3.ischo.com/index.html
 Description: C Library and Tools for Amazon S3 Access
  This package includes the libs3 shared object library, needed to run
  applications compiled against libs3, and additionally contains the s3
