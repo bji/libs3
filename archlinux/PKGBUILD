@@ -1,0 +1,29 @@
+# Contributor: Bryan Ischo <bryan@ischo.com>
+pkgname=libs3
+pkgver=trunk
+pkgrel=1
+pkgdesc="C Library and Tools for Amazon S3 Access"
+arch=('i686' 'x86_64')
+url="http://libs3.ischo.com/index.html"
+license=('GPL')
+groups=()
+depends=('libxml2' 'openssl')
+makedepends=('make')
+provides=()
+conflicts=()
+replaces=()
+backup=()
+options=()
+install=
+source=($pkgname-$pkgver.tar.gz)
+noextract=()
+md5sums=('source md5') #generate with 'makepkg -g'
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  make exported || return 1
+  cp -a build/{bin,include,lib} $pkgdir
+}
+
+# vim:set ts=2 sw=2 et:
