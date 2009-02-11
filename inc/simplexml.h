@@ -33,7 +33,7 @@
 // Simple XML callback.
 //
 // elementPath: is the full "path" of the element; i.e.
-// <foo><bar><baz>data</baz><bar><foo> would have 'data' in the element
+// <foo><bar><baz>data</baz></bar></foo> would have 'data' in the element
 // foo/bar/baz.
 // 
 // Return of anything other than S3StatusOK causes the calling

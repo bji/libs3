@@ -47,14 +47,6 @@
 #endif
 
 
-// Something is weird with glibc ... setenv/unsetenv/ftruncate are not defined
-// in stdlib.h as they should be.  And fileno is not in stdio.h
-extern int setenv(const char *, const char *, int);
-extern int unsetenv(const char *);
-extern int ftruncate(int, off_t);
-extern int fileno(FILE *);
-
-
 // Command-line options, saved as globals ------------------------------------
 
 static int forceG = 0;
