@@ -71,11 +71,6 @@ extern "C" {
  *      using file descriptors and a select()/poll() loop
  * - Shut down libs3 at program exit time by calling S3_deinitialize()
  *
- * In order to use libs3 with multiple threads, your program must provide
- * threading callbacks to the S3_initialize() function (if your program is
- * single threaded, you can pass NULL for these callback arguments to
- * S3_initialize()).
- *
  * All functions which send requests to S3 return their results via a set of
  * callback functions which must be supplied to libs3 at the time that the
  * request is initiated.  libs3 will call these functions back in the thread
