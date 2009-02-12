@@ -159,7 +159,7 @@ int64_t parseIso8601Time(const char *str)
 uint64_t parseUnsignedInt(const char *str)
 {
     // Skip whitespace
-    while (isblank(*str)) {
+    while (is_blank(*str)) {
         str++;
     }
 
@@ -559,4 +559,9 @@ uint64_t hash(const unsigned char *k, int length)
 
  end:
     return ((((uint64_t) c) << 32) | b);
+}
+
+int is_blank(char c)
+{
+    return ((c == ' ') || (c == '\t'));
 }

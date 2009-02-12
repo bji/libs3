@@ -83,5 +83,8 @@ void HMAC_SHA1(unsigned char hmac[20], const unsigned char *key, int key_len,
 // Compute a 64-bit hash values given a set of bytes
 uint64_t hash(const unsigned char *k, int length);
 
+// Because Windows seems to be missing isblank(), use our own; it's a very
+// easy function to write in any case
+int is_blank(char c);
 
 #endif /* UTIL_H */

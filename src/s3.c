@@ -46,6 +46,9 @@
 #define FOPEN_EXTRA_FLAGS ""
 #endif
 
+// Also needed for Windows, because somehow MinGW doesn't define this
+extern int putenv(char *);
+
 
 // Command-line options, saved as globals ------------------------------------
 
@@ -66,6 +69,11 @@ static const char *secretAccessKeyG = 0;
 
 static int statusG = 0;
 static char errorDetailsG[4096] = { 0 };
+
+
+// Other globals -------------------------------------------------------------
+
+static char putenvBufG[256];
 
 
 // Option prefixes -----------------------------------------------------------
@@ -489,16 +497,13 @@ static int64_t parseIso8601Time(const char *str)
 
     // This is hokey but it's the recommended way ...
     char *tz = getenv("TZ");
-    setenv("TZ", "UTC", 1);
+    snprintf(putenvBufG, sizeof(putenvBufG), "TZ=UTC");
+    putenv(putenvBufG);
 
     int64_t ret = mktime(&stm);
 
-    if (tz) {
-        setenv("TZ", tz, 1);
-    }
-    else {
-        unsetenv("TZ");
-    }
+    snprintf(putenvBufG, sizeof(putenvBufG), "TZ=%s", tz ? tz : "");
+    putenv(putenvBufG);
 
     // Skip the millis
 
@@ -1956,12 +1961,7 @@ static void get_object(int argc, char **argv, int optindex)
                       byteCount, 0, &getObjectHandler, outfile);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
-    if (statusG == S3StatusOK) {
-        if (outfile != stdout) {
-            ftruncate(fileno(outfile), ftell(outfile));
-        }
-    }
-    else {
+    if (statusG != S3StatusOK) {
         printError();
     }
 
