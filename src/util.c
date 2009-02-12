@@ -63,6 +63,7 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
 
     if (src) while (*src) {
         if (++len > maxSrcSize) {
+            *dest = 0;
             return 0;
         }
         const char *urlsafe = urlSafe;
