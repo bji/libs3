@@ -74,17 +74,17 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
 
     // Skip whitespace at beginning of header; there never should be any,
     // but just to be safe
-    while (isblank(*header)) {
+    while (is_blank(*header)) {
         header++;
     }
 
     // The header must end in \r\n, so skip back over it, and also over any
     // trailing whitespace
     end -= 3;
-    while ((end > header) && isblank(*end)) {
+    while ((end > header) && is_blank(*end)) {
         end--;
     }
-    if (!isblank(*end)) {
+    if (!is_blank(*end)) {
         end++;
     }
 
@@ -106,7 +106,7 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
     // Now walk c past the colon
     c++;
     // Now skip whitespace to the beginning of the value
-    while (isblank(*c)) {
+    while (is_blank(*c)) {
         c++;
     }
 
