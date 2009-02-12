@@ -365,7 +365,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
             params->putProperties-> sourceField[0]) {                       \
             /* Skip whitespace at beginning of val */                       \
             const char *val = params->putProperties-> sourceField;          \
-            while (*val && isblank(*val)) {                                 \
+            while (*val && is_blank(*val)) {                                \
                 val++;                                                      \
             }                                                               \
             if (!*val) {                                                    \
@@ -378,7 +378,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
                 return tooLongError;                                        \
             }                                                               \
             /* Now remove the whitespace at the end */                      \
-            while (isblank(values-> destField[len])) {                      \
+            while (is_blank(values-> destField[len])) {                     \
                 len--;                                                      \
             }                                                               \
             values-> destField[len] = 0;                                    \
@@ -395,7 +395,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
             params->getConditions-> sourceField[0]) {                       \
             /* Skip whitespace at beginning of val */                       \
             const char *val = params->getConditions-> sourceField;          \
-            while (*val && isblank(*val)) {                                 \
+            while (*val && is_blank(*val)) {                                \
                 val++;                                                      \
             }                                                               \
             if (!*val) {                                                    \
@@ -408,7 +408,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
                 return tooLongError;                                        \
             }                                                               \
             /* Now remove the whitespace at the end */                      \
-            while (isblank(values-> destField[len])) {                      \
+            while (is_blank(values-> destField[len])) {                     \
                 len--;                                                      \
             }                                                               \
             values-> destField[len] = 0;                                    \
@@ -608,16 +608,16 @@ static void canonicalize_amz_headers(RequestComputedValues *values)
         while (*c) {
             // If c points to a \r\n[whitespace] sequence, then fold
             // this newline out
-            if ((*c == '\r') && (*(c + 1) == '\n') && isblank(*(c + 2))) {
+            if ((*c == '\r') && (*(c + 1) == '\n') && is_blank(*(c + 2))) {
                 c += 3;
-                while (isblank(*c)) {
+                while (is_blank(*c)) {
                     c++;
                 }
                 // Also, what has most recently been copied into buffer amy
                 // have been whitespace, and since we're folding whitespace
                 // out around this newline sequence, back buffer up over
                 // any whitespace it contains
-                while (isblank(*(buffer - 1))) {
+                while (is_blank(*(buffer - 1))) {
                     buffer--;
                 }
                 continue;
