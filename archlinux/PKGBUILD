@@ -8,7 +8,7 @@ url="http://libs3.ischo.com/index.html"
 license=('GPL')
 groups=()
 depends=('libxml2' 'openssl')
-makedepends=('make')
+makedepends=('make' 'libxml2' 'openssl')
 provides=()
 conflicts=()
 replaces=()
@@ -22,8 +22,8 @@ md5sums=('source md5') #generate with 'makepkg -g'
 build() {
   cd "$srcdir/$pkgname-$pkgver"
 
-  make exported || return 1
-  cp -a build/{bin,include,lib} $pkgdir
+  DESTDIR=PKGBUILD-install make install || return 1
+  cp -a PKGBUILD-install/* $pkgdir
 }
 
 # vim:set ts=2 sw=2 et:
