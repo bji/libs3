@@ -22,8 +22,7 @@ md5sums=('source md5') #generate with 'makepkg -g'
 build() {
   cd "$srcdir/$pkgname-$pkgver"
 
-  DESTDIR=PKGBUILD-install make install || return 1
-  cp -a PKGBUILD-install $pkgdir/usr
+  DESTDIR=$pkgdir/usr make install || return 1
 }
 
 # vim:set ts=2 sw=2 et:
