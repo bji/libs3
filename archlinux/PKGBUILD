@@ -7,8 +7,8 @@ arch=('i686' 'x86_64')
 url="http://libs3.ischo.com/index.html"
 license=('GPL')
 groups=()
-depends=('libxml2' 'openssl')
-makedepends=('make' 'libxml2' 'openssl')
+depends=('libxml2' 'openssl' 'curl')
+makedepends=('make' 'libxml2' 'openssl' 'curl')
 provides=()
 conflicts=()
 replaces=()
@@ -23,7 +23,7 @@ build() {
   cd "$srcdir/$pkgname-$pkgver"
 
   DESTDIR=PKGBUILD-install make install || return 1
-  cp -a PKGBUILD-install/* $pkgdir
+  cp -a PKGBUILD-install $pkgdir/usr
 }
 
 # vim:set ts=2 sw=2 et:
