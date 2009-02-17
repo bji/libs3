@@ -43,10 +43,42 @@ LIBS3_VER_MINOR := trunk0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
+# -----------------------------------------------------------------------------
+# Determine verbosity.  VERBOSE_SHOW should be prepended to every command which
+# should only be displayed if VERBOSE is set.  QUIET_ECHO may be used to
+# echo text only if VERBOSE is not set.  Typically, a VERBOSE_SHOW command will
+# be paired with a QUIET_ECHO command, to provide a command which is displayed
+# in VERBOSE mode, along with text which is displayed in non-VERBOSE mode to
+# describe the command.
+#
+# No matter what VERBOSE is defined to, it ends up as true if it's defined.
+# This will be weird if you defined VERBOSE=false in the environment, and we
+# switch it to true here; but the meaning of VERBOSE is, "if it's defined to
+# any value, then verbosity is turned on".  So don't define VERBOSE if you
+# don't want verbosity in the build process.
+# -----------------------------------------------------------------------------
+
+ifdef VERBOSE
+        VERBOSE = true
+        VERBOSE_ECHO = @ echo
+        VERBOSE_SHOW =
+        QUIET_ECHO = @ echo > /dev/null
+else
+        VERBOSE = false
+        VERBOSE_ECHO = @ echo > /dev/null
+        VERBOSE_SHOW = @
+        QUIET_ECHO = @ echo
+endif
+
+
 # --------------------------------------------------------------------------
 # BUILD directory
 ifndef BUILD
-    BUILD := build
+    ifdef DEBUG
+        BUILD := build-debug
+    else
+        BUILD := build
+    endif
 endif
 
 
@@ -83,7 +115,11 @@ endif
 # compiler.
 
 ifndef CFLAGS
-    CFLAGS = -O3
+    ifdef DEBUG
+        CFLAGS := -g
+    else
+        CFLAGS := -O3
+    endif
 endif
 
 CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
@@ -118,30 +154,58 @@ exported: libs3 s3 headers
 
 .PHONY: install
 install: exported
-	-@mkdir $(DESTDIR)\bin
-	-@mkdir $(DESTDIR)\include
-	-@mkdir $(DESTDIR)\lib
-	copy $(BUILD)\bin\s3.exe $(DESTDIR)\bin
-	copy $(BUILD)\bin\libs3.dll $(DESTDIR)\bin
-	copy $(BUILD)\lib\libs3.a $(DESTDIR)\lib
-	copy mswin\libs3.def $(DESTDIR)\lib
-	copy $(BUILD)\include\libs3.h $(DESTDIR)\include
-	copy LICENSE $(DESTDIR)
-	copy COPYING $(DESTDIR)
+    $(QUIET_ECHO) $(DESTDIR)\bin\s3.exe: Installing executable
+	- @ mkdir $(DESTDIR)\bin
+	$(VERBOSE_SHOW) copy $(BUILD)\bin\s3.exe $(DESTDIR)\bin\s3.exe
+    $(QUIET_ECHO) $(DESTDIR)\bin\libs3.dll: Installing dynamic library
+	$(VERBOSE_SHOW) copy $(BUILD)\bin\libs3.dll $(DESTDIR)\bin\libs3.dll
+    $(QUIET_ECHO) $(DESTDIR)\lib\libs3.a: Installing static library
+	- @ mkdir $(DESTDIR)\lib
+	$(VERBOSE_SHOW) copy $(BUILD)\lib\libs3.a $(DESTDIR)\lib\libs3.a
+	$(QUIET_ECHO) $(DESTDIR)\lib\libs3.def: Installing def file
+	$(VERBOSE_SHOW) copy mswin\libs3.def $(DESTDIR)\lib\libs3.def
+	- @ mkdir $(DESTDIR)\include
+	$(QUIET_ECHO) $(DESTDIR)\include\libs3.h: Copying header
+	$(VERBOSE_SHOW) copy $(BUILD)\include\libs3.h $(DESTDIR)\include\libs3.h
+	$(QUIET_ECHO) $(DESTDIR)\LICENSE: Copying license
+	$(VERBOSE_SHOW) copy LICENSE $(DESTDIR)\LICENSE
+	$(QUIET_ECHO) $(DESTDIR)\COPYING: Copying license
+	$(VERBOSE_SHOW) copy COPYING $(DESTDIR)\COPYING
+
+
+# --------------------------------------------------------------------------
+# Uninstall target
+
+.PHONY: uninstall
+uninstall:
+	$(QUIET_ECHO) Installed files: Uninstalling
+	$(VERBOSE_SHOW) \
+	    del $(DESTDIR)\bin\s3.exe \
+            $(DESTDIR)\bin\libs3.dll \
+            $(DESTDIR)\lib\libs3.a \
+            $(DESTDIR)\lib\libs3.def \
+            $(DESTDIR)\include\libs3.h \
+            $(DESTDIR)\LICENSE \
+            $(DESTDIR)\COPYING
 
 
 # --------------------------------------------------------------------------
 # Compile target patterns
 
 $(BUILD)/obj/%.o: src/%.c
-	-@mkdir $(subst /,\,$(dir $@))
-	gcc $(CFLAGS) -o $@ -c $<
+	$(QUIET_ECHO) $@: Compiling object
+	- @ mkdir $(subst /,\,$(dir $(BUILD)/dep/$<))
+	@ gcc $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+        -o $(BUILD)/dep/$(<:%.c=%.d) -c $<
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) gcc $(CFLAGS) -o $@ -c $<
 
 
 # --------------------------------------------------------------------------
 # libs3 library targets
 
 LIBS3_SHARED = $(BUILD)/bin/libs3.dll
+LIBS3_STATIC = $(BUILD)/lib/libs3.a
 
 .PHONY: libs3
 libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
@@ -152,12 +216,14 @@ LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
                  src/service.c src/simplexml.c src/util.c src/mingw_functions.c
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.o)
-	-@mkdir $(subst /,\,$(dir $@))
-	gcc -shared -o $@ $^ $(LDFLAGS) -lws2_32
+	$(QUIET_ECHO) $@: Building dynamic library
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) gcc -shared -o $@ $^ $(LDFLAGS) -lws2_32
 
-$(BUILD)/lib/libs3.a: $(LIBS3_SHARED)
-	-@mkdir $(subst /,\,$(dir $@))
-	dlltool --def mswin\libs3.def --dllname $(subst /,\,$<) \
+$(LIBS3_STATIC): $(LIBS3_SHARED)
+	$(QUIET_ECHO) $@: Building static library
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) dlltool --def mswin\libs3.def --dllname $(subst /,\,$<) \
             --output-lib $(subst /,\,$@)
 
 
@@ -169,8 +235,9 @@ s3: $(BUILD)/bin/s3.exe
 
 $(BUILD)/bin/s3.exe: $(BUILD)/obj/s3.o $(BUILD)/obj/mingw_s3_functions.o \
                      $(BUILD)/lib/libs3.a
-	-@mkdir $(subst /,\,$(dir $@))
-	gcc -o $@ $^ $(LDFLAGS) -lws2_32
+	$(QUIET_ECHO) $@: Building executable
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) gcc -o $@ $^ $(LDFLAGS) -lws2_32
 
 
 # --------------------------------------------------------------------------
@@ -180,8 +247,9 @@ $(BUILD)/bin/s3.exe: $(BUILD)/obj/s3.o $(BUILD)/obj/mingw_s3_functions.o \
 headers: $(BUILD)\include\libs3.h
 
 $(BUILD)\include\libs3.h: inc\libs3.h
-	-@mkdir $(subst /,\,$(dir $@))
-	copy $< $@
+	$(QUIET_ECHO) $@: Copying header
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) copy $< $@
 
 
 # --------------------------------------------------------------------------
@@ -192,8 +260,9 @@ test: $(BUILD)/bin/testsimplexml
 
 $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o \
                             $(BUILD)/obj/simplexml.o
-	-@mkdir $(subst /,\,$(dir $@))
-	gcc -o $@ $^ $(LIBXML2_LIBS)
+	$(QUIET_ECHO $@: Building executable
+	- @ mkdir $(subst /,\,$(dir $@))
+	$(VERBOSE_SHOW) gcc -o $@ $^ $(LIBXML2_LIBS)
 
 
 # --------------------------------------------------------------------------
@@ -201,4 +270,22 @@ $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o \
 
 .PHONY: clean
 clean:
-	mswin\rmrf.bat $(BUILD)
+	$(QUIET_ECHO) $(BUILD): Cleaning
+	$(VERBOSE_SHOW) mswin\rmrf.bat $(BUILD)
+
+
+# --------------------------------------------------------------------------
+# Clean dependencies target
+
+.PHONY: cleandeps
+cleandeps:
+	$(QUIET_ECHO) $(BUILD)/dep: Cleaning dependencies
+	$(VERBOSE_SHOW) mswin\rmrf.bat $(BUILD)\dep
+
+
+# --------------------------------------------------------------------------
+# Dependencies
+
+ALL_SOURCES := $(LIBS3_SOURCES) s3.c testsimplexml.c
+
+$(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.d)))

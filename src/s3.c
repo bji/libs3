@@ -316,10 +316,10 @@ static void usageExit(FILE *out)
 " Date Format:\n"
 "\n"
 "  The format for dates used in parameters is as ISO 8601 dates, i.e.\n"
-"  YYYY-MM-DDTHH:MM:SS[.s...][T/+-dd:dd].  Examples:\n"
-"      2008-07-29T20:36:14.0023T\n"
-"      2008-07-29T20:36:14.0023+06:00\n"
-"      2008-07-29T20:36:14.0023-10:00\n"
+"  YYYY-MM-DDTHH:MM:SS[+/-dd:dd].  Examples:\n"
+"      2008-07-29T20:36:14\n"
+"      2008-07-29T20:36:14-06:00\n"
+"      2008-07-29T20:36:14+11:30\n"
 "\n");
 
     exit(-1);

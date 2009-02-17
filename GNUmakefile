@@ -43,10 +43,42 @@ LIBS3_VER_MINOR := trunk0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
+# -----------------------------------------------------------------------------
+# Determine verbosity.  VERBOSE_SHOW should be prepended to every command which
+# should only be displayed if VERBOSE is set.  QUIET_ECHO may be used to
+# echo text only if VERBOSE is not set.  Typically, a VERBOSE_SHOW command will
+# be paired with a QUIET_ECHO command, to provide a command which is displayed
+# in VERBOSE mode, along with text which is displayed in non-VERBOSE mode to
+# describe the command.
+#
+# No matter what VERBOSE is defined to, it ends up as true if it's defined.
+# This will be weird if you defined VERBOSE=false in the environment, and we
+# switch it to true here; but the meaning of VERBOSE is, "if it's defined to
+# any value, then verbosity is turned on".  So don't define VERBOSE if you
+# don't want verbosity in the build process.
+# -----------------------------------------------------------------------------
+
+ifdef VERBOSE
+        VERBOSE = true
+        VERBOSE_ECHO = @ echo
+        VERBOSE_SHOW =
+        QUIET_ECHO = @ echo > /dev/null
+else
+        VERBOSE = false
+        VERBOSE_ECHO = @ echo > /dev/null
+        VERBOSE_SHOW = @
+        QUIET_ECHO = @ echo
+endif
+
+
 # --------------------------------------------------------------------------
 # BUILD directory
 ifndef BUILD
-    BUILD := build
+    ifdef DEBUG
+        BUILD := build-debug
+    else
+        BUILD := build
+    endif
 endif
 
 
@@ -83,7 +115,11 @@ endif
 # compiler.
 
 ifndef CFLAGS
-    CFLAGS = -O3
+    ifdef DEBUG
+        CFLAGS := -g
+    else
+        CFLAGS := -O3
+    endif
 endif
 
 CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
@@ -117,14 +153,26 @@ exported: libs3 s3 headers
 
 .PHONY: install
 install: exported
-	install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 $(DESTDIR)/bin/s3
-	install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
-               $(DESTDIR)/include/libs3.h
-	install -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a $(DESTDIR)/lib/libs3.a
-	install -Dps -m u+rw,go+r $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
+	$(QUIET_ECHO) $(DESTDIR)/bin/s3: Installing executable
+	$(VERBOSE_SHOW) install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 \
+                    $(DESTDIR)/bin/s3
+	$(QUIET_ECHO) \
+        $(DESTDIR)/lib/libs3.so.$(LIBS3_VER): Installing shared library
+	$(VERBOSE_SHOW) install -Dps -m u+rw,go+r \
+               $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
                $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
-	ln -sf libs3.so.$(LIBS3_VER) $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
-	ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(DESTDIR)/lib/libs3.so
+	$(QUIET_ECHO) \
+        $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR): Linking shared library
+	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER) \
+               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+	$(QUIET_ECHO) $(DESTDIR)/lib/libs3.so: Linking shared library
+	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(DESTDIR)/lib/libs3.so
+	$(QUIET_ECHO) $(DESTDIR)/lib/libs3.a: Installing static library
+	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a \
+                    $(DESTDIR)/lib/libs3.a
+	$(QUIET_ECHO) $(DESTDIR)/include/libs3.h: Installing header
+	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
+                    $(DESTDIR)/include/libs3.h
 
 
 # --------------------------------------------------------------------------
@@ -132,12 +180,123 @@ install: exported
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(DESTDIR)/bin/s3 \
+	$(QUIET_ECHO) Installed files: Uninstalling
+	$(VERBOSE_SHOW) \
+	    rm -f $(DESTDIR)/bin/s3 \
               $(DESTDIR)/include/libs3.h \
               $(DESTDIR)/lib/libs3.a \
               $(DESTDIR)/lib/libs3.so \
               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
-              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER) \
+              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
+
+
+# --------------------------------------------------------------------------
+# Compile target patterns
+
+$(BUILD)/obj/%.o: src/%.c
+	$(QUIET_ECHO) $@: Compiling object
+	@ mkdir -p $(dir $(BUILD)/dep/$<)
+	@ gcc $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+        -o $(BUILD)/dep/$(<:%.c=%.d) -c $<
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) gcc $(CFLAGS) -o $@ -c $<
+
+$(BUILD)/obj/%.do: src/%.c
+	$(QUIET_ECHO) $@: Compiling dynamic object
+	@ mkdir -p $(dir $(BUILD)/dep/$<)
+	@ gcc $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+        -o $(BUILD)/dep/$(<:%.c=%.dd) -c $<
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
+
+
+# --------------------------------------------------------------------------
+# libs3 library targets
+
+LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+LIBS3_STATIC = $(BUILD)/lib/libs3.a
+
+.PHONY: libs3
+libs3: $(LIBS3_SHARED) $(LIBS3_STATIC)
+
+LIBS3_SOURCES := acl.c bucket.c error_parser.c general.c \
+                 object.c request.c request_context.c \
+                 response_headers_handler.c service_access_logging.c \
+                 service.c simplexml.c util.c
+
+$(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
+	$(QUIET_ECHO) $@: Building shared library
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) \
+        -o $@ $^ $(LDFLAGS)
+
+$(LIBS3_STATIC): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.o)
+	$(QUIET_ECHO) $@: Building static library
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) $(AR) cr $@ $^
+
+
+# --------------------------------------------------------------------------
+# Driver program targets
+
+.PHONY: s3
+s3: $(BUILD)/bin/s3
+
+$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(LIBS3_SHARED)
+	$(QUIET_ECHO) $@: Building executable
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) gcc -o $@ $^ $(LDFLAGS)
+
+
+# --------------------------------------------------------------------------
+# libs3 header targets
+
+.PHONY: headers
+headers: $(BUILD)/include/libs3.h
+
+$(BUILD)/include/libs3.h: inc/libs3.h
+	$(QUIET_ECHO) $@: Linking header
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) ln -sf $(abspath $<) $@
+
+
+# --------------------------------------------------------------------------
+# Test targets
+
+.PHONY: test
+test: $(BUILD)/bin/testsimplexml
+
+$(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(LIBS3_STATIC)
+	$(QUIET_ECHO) $@: Building executable
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) gcc -o $@ $^ $(LIBXML2_LIBS)
+
+
+# --------------------------------------------------------------------------
+# Clean target
+
+.PHONY: clean
+clean:
+	$(QUIET_ECHO) $(BUILD): Cleaning
+	$(VERBOSE_SHOW) rm -rf $(BUILD)
+
+
+# --------------------------------------------------------------------------
+# Clean dependencies target
+
+.PHONY: cleandeps
+cleandeps:
+	$(QUIET_ECHO) $(BUILD)/dep: Cleaning dependencies
+	$(VERBOSE_SHOW) rm -rf $(BUILD)/dep
+
+
+# --------------------------------------------------------------------------
+# Dependencies
+
+ALL_SOURCES := $(LIBS3_SOURCES) s3.c testsimplexml.c
+
+$(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.d)))
+$(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.dd)))
 
 
 # --------------------------------------------------------------------------
@@ -232,76 +391,3 @@ $(BUILD)/deb-dev/usr/share/doc/libs3-dev/changelog.Debian.gz: \
 	gzip --best -c $< > $@
 
 
-# --------------------------------------------------------------------------
-# Compile target patterns
-
-$(BUILD)/obj/%.o: src/%.c
-	@mkdir -p $(dir $@)
-	gcc $(CFLAGS) -o $@ -c $<
-
-$(BUILD)/obj/%.do: src/%.c
-	@mkdir -p $(dir $@)
-	gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
-
-
-# --------------------------------------------------------------------------
-# libs3 library targets
-
-LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR)
-
-.PHONY: libs3
-libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
-
-LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
-                 src/object.c src/request.c src/request_context.c \
-                 src/response_headers_handler.c src/service_access_logging.c \
-                 src/service.c src/simplexml.c src/util.c
-
-$(LIBS3_SHARED): $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.do)
-	@mkdir -p $(dir $@)
-	gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) -o $@ $^ $(LDFLAGS)
-
-$(BUILD)/lib/libs3.a: $(LIBS3_SOURCES:src/%.c=$(BUILD)/obj/%.o)
-	@mkdir -p $(dir $@)
-	$(AR) cr $@ $^
-
-
-# --------------------------------------------------------------------------
-# Driver program targets
-
-.PHONY: s3
-s3: $(BUILD)/bin/s3
-
-$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(LIBS3_SHARED)
-	@mkdir -p $(dir $@)
-	gcc -o $@ $^ $(LDFLAGS)
-
-
-# --------------------------------------------------------------------------
-# libs3 header targets
-
-.PHONY: headers
-headers: $(BUILD)/include/libs3.h
-
-$(BUILD)/include/libs3.h: inc/libs3.h
-	@mkdir -p $(dir $@)
-	cp $< $@
-
-
-# --------------------------------------------------------------------------
-# Test targets
-
-.PHONY: test
-test: $(BUILD)/bin/testsimplexml
-
-$(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(BUILD)/lib/libs3.a
-	@mkdir -p $(dir $@)
-	gcc -o $@ $^ $(LIBXML2_LIBS)
-
-
-# --------------------------------------------------------------------------
-# Clean target
-
-.PHONY: clean
-clean:
-	rm -rf $(BUILD)
