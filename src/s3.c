@@ -417,6 +417,8 @@ static void growbuffer_read(growbuffer **gb, int amt, int *amtReturn,
         }
         else {
             *gb = buf->next;
+            buf->prev->next = buf->next;
+            buf->next->prev = buf->prev;
         }
         free(buf);
     }
