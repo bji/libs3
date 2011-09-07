@@ -89,6 +89,9 @@ static S3Status xmlCallback(const char *elementPath, const char *data,
         }
     }
 
+    /* Avoid compiler error about variable set but not used */
+    (void) fit;
+
     return S3StatusOK;
 }
 

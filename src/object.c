@@ -115,6 +115,9 @@ static S3Status copyObjectXmlCallback(const char *elementPath,
         }
     }
 
+    /* Avoid compiler error about variable set but not used */
+    (void) fit;
+
     return S3StatusOK;
 }
 

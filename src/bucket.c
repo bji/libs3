@@ -59,6 +59,9 @@ static S3Status testBucketXmlCallback(const char *elementPath,
         string_buffer_append(tbData->locationConstraint, data, dataLen, fit);
     }
 
+    /* Avoid compiler error about variable set but not used */
+    (void) fit;
+
     return S3StatusOK;
 }
 
@@ -574,6 +577,9 @@ static S3Status listBucketXmlCallback(const char *elementPath,
             }
         }
     }
+
+    /* Avoid compiler error about variable set but not used */
+    (void) fit;
 
     return S3StatusOK;
 }
