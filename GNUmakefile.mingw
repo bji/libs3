@@ -36,10 +36,10 @@
 
 
 # --------------------------------------------------------------------------
-# Set libs3 version number
+# Set libs3 version number, unless it is already set.
 
-LIBS3_VER_MAJOR := trunk0
-LIBS3_VER_MINOR := trunk0
+LIBS3_VER_MAJOR ?= trunk0
+LIBS3_VER_MINOR ?= trunk0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
