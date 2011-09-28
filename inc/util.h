@@ -32,6 +32,14 @@
 #include <stdint.h>
 #include "libs3.h"
 
+// acl groups
+#define ACS_URL "http://acs.amazonaws.com/groups/"
+
+#define ACS_GROUP_ALL_USERS     ACS_URL "global/AllUsers"
+#define ACS_GROUP_AWS_USERS     ACS_URL "global/AuthenticatedUsers"
+#define ACS_GROUP_LOG_DELIVERY  ACS_URL "s3/LogDelivery"
+
+
 
 // Derived from S3 documentation
 
@@ -49,7 +57,7 @@
 // https://s3.amazonaws.com/${BUCKET}/${KEY}?acl
 // 255 is the maximum bucket length
 #define MAX_URI_SIZE \
-    ((sizeof("https://" S3_HOSTNAME "/") - 1) + 255 + 1 +       \
+    ((sizeof("https:///") - 1) + S3_MAX_HOSTNAME_SIZE + 255 + 1 +       \
      MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent" - 1)) + 1)
 
 // Maximum size of a canonicalized resource

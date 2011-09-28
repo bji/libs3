@@ -144,7 +144,9 @@ static char putenvBufG[256];
 static void S3_init()
 {
     S3Status status;
-    if ((status = S3_initialize("s3", S3_INIT_ALL))
+    const char *hostname = getenv("S3_HOSTNAME");
+    
+    if ((status = S3_initialize("s3", S3_INIT_ALL, hostname))
         != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
                 S3_get_status_name(status));
@@ -184,6 +186,7 @@ static void usageExit(FILE *out)
 "\n"
 "   S3_ACCESS_KEY_ID     : S3 access key ID (required)\n"
 "   S3_SECRET_ACCESS_KEY : S3 secret access key (required)\n"
+"   S3_HOSTNAME          : specify alternative S3 host (optional)\n"
 "\n" 
 " Commands (with <required parameters> and [optional parameters]) :\n"
 "\n"
@@ -862,7 +865,7 @@ static void list_service(int allDetails)
     };
 
     do {
-        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 
+        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 
                         &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -906,7 +909,7 @@ static void test_bucket(int argc, char **argv, int optindex)
     char locationConstraint[64];
     do {
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                       bucketName, sizeof(locationConstraint),
+                       0, bucketName, sizeof(locationConstraint),
                        locationConstraint, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -1005,7 +1008,7 @@ static void create_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG,
-                         bucketName, cannedAcl, locationConstraint, 0,
+                         0, bucketName, cannedAcl, locationConstraint, 0,
                          &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -1045,7 +1048,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         bucketName, 0, &responseHandler, 0);
+                         0, bucketName, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1196,6 +1199,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -1315,6 +1319,7 @@ static void delete_object(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -1575,6 +1580,7 @@ static void put_object(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -1761,6 +1767,7 @@ static void copy_object(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         sourceBucketName,
         protocolG,
         uriStyleG,
@@ -1940,6 +1947,7 @@ static void get_object(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2013,6 +2021,7 @@ static void head_object(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2091,6 +2100,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
     
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2192,6 +2202,7 @@ void get_acl(int argc, char **argv, int optindex)
 
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2354,6 +2365,7 @@ void set_acl(int argc, char **argv, int optindex)
 
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2445,6 +2457,7 @@ void get_logging(int argc, char **argv, int optindex)
 
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,
@@ -2610,6 +2623,7 @@ void set_logging(int argc, char **argv, int optindex)
 
     S3BucketContext bucketContext =
     {
+        0,
         bucketName,
         protocolG,
         uriStyleG,

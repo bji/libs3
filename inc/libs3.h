@@ -116,11 +116,14 @@ extern "C" {
  ************************************************************************** **/
 
 /**
- * This is the hostname that all S3 requests will go through; virtual-host
- * style requests will prepend the bucket name to this host name, and
- * path-style requests will use this hostname directly
+ * S3_MAX_HOSTNAME_SIZE is the maximum size we allow for a host name
  **/
-#define S3_HOSTNAME                        "s3.amazonaws.com"
+#define S3_MAX_HOSTNAME_SIZE               255
+
+/**
+ * This is the default hostname that is being used for the S3 requests
+ **/
+#define S3_DEFAULT_HOSTNAME                "s3.amazonaws.com"
 
 
 /**
@@ -194,7 +197,7 @@ extern "C" {
  * query string
  **/
 #define S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE \
-    (sizeof("https://" S3_HOSTNAME "/") + (S3_MAX_KEY_SIZE * 3) + \
+    (sizeof("https:///") + S3_MAX_HOSTNAME_SIZE + (S3_MAX_KEY_SIZE * 3) + \
      sizeof("?AWSAccessKeyId=") + 32 + sizeof("&Expires=") + 32 + \
      sizeof("&Signature=") + 28 + 1)
 
@@ -635,6 +638,12 @@ typedef struct S3AclGrant
  **/
 typedef struct S3BucketContext
 {
+    /**
+     * The name of the host to connect to when making S3 requests.  If set to
+     * NULL, the default S3 hostname passed in to S3_initialize will be used.
+     **/
+    const char *hostName;
+
     /**
      * The name of the bucket to use in the bucket context
      **/
@@ -1145,13 +1154,20 @@ typedef struct S3GetObjectHandler
  *        all necessary initialization; however, be warned that things may
  *        break if your application re-initializes the dependent libraries
  *        later.
+ * @param defaultS3Hostname is a string the specifies the default S3 server
+ *        hostname to use when making S3 requests; this value is used
+ *        whenever the hostName of an S3BucketContext is NULL.  If NULL is
+ *        passed here then the default of S3_DEFAULT_HOSTNAME will be used.
  * @return One of:
  *         S3StatusOK on success
+ *         S3StatusUriTooLong if the defaultS3HostName is longer than
+ *             S3_MAX_HOSTNAME_SIZE
  *         S3StatusInternalError if dependent libraries could not be
  *             initialized
  *         S3StatusOutOfMemory on failure due to out of memory
  **/
-S3Status S3_initialize(const char *userAgentInfo, int flags);
+S3Status S3_initialize(const char *userAgentInfo, int flags,
+                       const char *defaultS3HostName);
 
 
 /**
@@ -1428,6 +1444,8 @@ S3Status S3_generate_authenticated_query_string
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param hostName is the S3 host name to use; if NULL is passed in, the
+ *        default S3 host as provided to S3_initialize() will be used.
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -1437,7 +1455,7 @@ S3Status S3_generate_authenticated_query_string
  *        all callbacks for this request
  **/
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
-                     const char *secretAccessKey,
+                     const char *secretAccessKey, const char *hostName,
                      S3RequestContext *requestContext,
                      const S3ListServiceHandler *handler,
                      void *callbackData);
@@ -1457,6 +1475,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param hostName is the S3 host name to use; if NULL is passed in, the
+ *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the bucket name to test
  * @param locationConstraintReturnSize gives the number of bytes in the
  *        locationConstraintReturn parameter
@@ -1477,7 +1497,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
-                    const char *bucketName, int locationConstraintReturnSize,
+                    const char *hostName, const char *bucketName,
+                    int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
@@ -1491,6 +1512,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param hostName is the S3 host name to use; if NULL is passed in, the
+ *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be created
  * @param cannedAcl gives the "REST canned ACL" to use for the created bucket
  * @param locationConstraint if non-NULL, gives the geographic location for
@@ -1504,8 +1527,9 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        all callbacks for this request
  **/
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *bucketName, 
-                      S3CannedAcl cannedAcl, const char *locationConstraint,
+                      const char *secretAccessKey, const char *hostName,
+                      const char *bucketName, S3CannedAcl cannedAcl,
+                      const char *locationConstraint,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
@@ -1520,6 +1544,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param hostName is the S3 host name to use; if NULL is passed in, the
+ *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be deleted
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
@@ -1531,7 +1557,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
-                      const char *bucketName, S3RequestContext *requestContext,
+                      const char *hostName, const char *bucketName,
+                      S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
 

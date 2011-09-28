@@ -42,7 +42,8 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
@@ -199,7 +200,8 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeCOPY,                          // httpRequestType
-        { destinationBucket ? destinationBucket : 
+        { bucketContext->hostName,                    // hostName
+          destinationBucket ? destinationBucket : 
           bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
@@ -239,7 +241,8 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
@@ -276,7 +279,8 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeHEAD,                          // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
@@ -313,7 +317,8 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeDELETE,                        // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId

@@ -32,13 +32,14 @@
 
 static int initializeCountG = 0;
 
-S3Status S3_initialize(const char *userAgentInfo, int flags)
+S3Status S3_initialize(const char *userAgentInfo, int flags,
+                       const char *defaultS3HostName)
 {
     if (initializeCountG++) {
         return S3StatusOK;
     }
 
-    return request_api_initialize(userAgentInfo, flags);
+    return request_api_initialize(userAgentInfo, flags, defaultS3HostName);
 }
 
 
@@ -372,18 +373,15 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             }
             else if (caData->groupUri[0]) {
                 if (!strcmp(caData->groupUri,
-                            "http://acs.amazonaws.com/groups/global/"
-                            "AuthenticatedUsers")) {
+                            ACS_GROUP_AWS_USERS)) {
                     grant->granteeType = S3GranteeTypeAllAwsUsers;
                 }
                 else if (!strcmp(caData->groupUri,
-                                 "http://acs.amazonaws.com/groups/global/"
-                                 "AllUsers")) {
+                            ACS_GROUP_ALL_USERS)) {
                     grant->granteeType = S3GranteeTypeAllUsers;
                 }
                 else if (!strcmp(caData->groupUri,
-                                 "http://acs.amazonaws.com/groups/s3/"
-                                 "LogDelivery")) {
+                                 ACS_GROUP_LOG_DELIVERY)) {
                     grant->granteeType = S3GranteeTypeLogDelivery;
                 }
                 else {

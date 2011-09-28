@@ -122,7 +122,8 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
@@ -195,16 +196,13 @@ static S3Status generateAclXmlDocument(const char *ownerId,
             const char *grantee;
             switch (grant->granteeType) {
             case S3GranteeTypeAllAwsUsers:
-                grantee = "http://acs.amazonaws.com/groups/global/"
-                    "AuthenticatedUsers";
+                grantee = ACS_GROUP_AWS_USERS;
                 break;
             case S3GranteeTypeAllUsers:
-                grantee = "http://acs.amazonaws.com/groups/global/"
-                    "AllUsers";
+                grantee = ACS_GROUP_ALL_USERS;
                 break;
             default:
-                grantee = "http://acs.amazonaws.com/groups/s3/"
-                    "LogDelivery";
+                grantee = ACS_GROUP_LOG_DELIVERY;
                 break;
             }
             append("Group\"><URI>%s</URI>", grantee);
@@ -322,7 +320,8 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId

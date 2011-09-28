@@ -46,6 +46,8 @@ static Request *requestStackG[REQUEST_STACK_SIZE];
 
 static int requestStackCountG;
 
+char defaultHostNameG[S3_MAX_HOSTNAME_SIZE];
+
 
 typedef struct RequestComputedValues
 {
@@ -755,17 +757,20 @@ static S3Status compose_uri(char *buffer, int bufferSize,
     uri_append("http%s://", 
                (bucketContext->protocol == S3ProtocolHTTP) ? "" : "s");
 
+    const char *hostName = 
+        bucketContext->hostName ? bucketContext->hostName : defaultHostNameG;
+
     if (bucketContext->bucketName && 
         bucketContext->bucketName[0]) {
         if (bucketContext->uriStyle == S3UriStyleVirtualHost) {
-            uri_append("%s.s3.amazonaws.com", bucketContext->bucketName);
+            uri_append("%s.%s", bucketContext->bucketName, hostName);
         }
         else {
-            uri_append("s3.amazonaws.com/%s", bucketContext->bucketName);
+            uri_append("%s/%s", hostName, bucketContext->bucketName);
         }
     }
     else {
-        uri_append("%s", "s3.amazonaws.com");
+        uri_append("%s", hostName);
     }
 
     uri_append("%s", "/");
@@ -1058,12 +1063,22 @@ static void request_release(Request *request)
 }
 
 
-S3Status request_api_initialize(const char *userAgentInfo, int flags)
+S3Status request_api_initialize(const char *userAgentInfo, int flags,
+                                const char *defaultHostName)
 {
     if (curl_global_init(CURL_GLOBAL_ALL & 
                          ~((flags & S3_INIT_WINSOCK) ? 0 : CURL_GLOBAL_WIN32))
         != CURLE_OK) {
         return S3StatusInternalError;
+    }
+
+    if (!defaultHostName) {
+        defaultHostName = S3_DEFAULT_HOSTNAME;
+    }
+
+    if (snprintf(defaultHostNameG, S3_MAX_HOSTNAME_SIZE, 
+                 "%s", defaultHostName) >= S3_MAX_HOSTNAME_SIZE) {
+        return S3StatusUriTooLong;
     }
 
     pthread_mutex_init(&requestStackMutexG, 0);

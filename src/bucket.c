@@ -107,7 +107,8 @@ static void testBucketCompleteCallback(S3Status requestStatus,
 
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
-                    const char *bucketName, int locationConstraintReturnSize,
+                    const char *hostName, const char *bucketName,
+                    int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData)
@@ -134,7 +135,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        { bucketName,                                 // bucketName
+        { hostName,                                   // hostName
+          bucketName,                                 // bucketName
           protocol,                                   // protocol
           uriStyle,                                   // uriStyle
           accessKeyId,                                // accessKeyId
@@ -223,8 +225,9 @@ static void createBucketCompleteCallback(S3Status requestStatus,
 
 
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *bucketName,
-                      S3CannedAcl cannedAcl, const char *locationConstraint,
+                      const char *secretAccessKey, const char *hostName,
+                      const char *bucketName, S3CannedAcl cannedAcl,
+                      const char *locationConstraint,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData)
 {
@@ -270,7 +273,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        { bucketName,                                 // bucketName
+        { hostName,                                   // hostName
+          bucketName,                                 // bucketName
           protocol,                                   // protocol
           S3UriStylePath,                             // uriStyle
           accessKeyId,                                // accessKeyId
@@ -332,7 +336,7 @@ static void deleteBucketCompleteCallback(S3Status requestStatus,
 
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
-                      const char *bucketName,
+                      const char *hostName, const char *bucketName,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData)
 {
@@ -352,7 +356,8 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
     RequestParams params =
     {
         HttpRequestTypeDELETE,                        // httpRequestType
-        { bucketName,                                 // bucketName
+        { hostName,                                   // hostName
+          bucketName,                                 // bucketName
           protocol,                                   // protocol
           uriStyle,                                   // uriStyle
           accessKeyId,                                // accessKeyId
@@ -710,7 +715,8 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId

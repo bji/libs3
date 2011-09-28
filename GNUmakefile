@@ -37,6 +37,9 @@
 
 # --------------------------------------------------------------------------
 # Set libs3 version number, unless it is already set.
+# This is trunk0.trunk0 on the libs3 git master branch; release branches
+# are created with this set to specific version numbers when releases are
+# made.
 
 LIBS3_VER_MAJOR ?= trunk0
 LIBS3_VER_MINOR ?= trunk0

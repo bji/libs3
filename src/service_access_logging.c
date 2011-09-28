@@ -147,13 +147,11 @@ static S3Status convertBlsXmlCallback(const char *elementPath,
             }
             else if (caData->groupUri[0]) {
                 if (!strcmp(caData->groupUri,
-                            "http://acs.amazonaws.com/groups/global/"
-                            "AuthenticatedUsers")) {
+                            ACS_GROUP_AWS_USERS)) {
                     grant->granteeType = S3GranteeTypeAllAwsUsers;
                 }
                 else if (!strcmp(caData->groupUri,
-                                 "http://acs.amazonaws.com/groups/global/"
-                                 "AllUsers")) {
+                                 ACS_GROUP_ALL_USERS)) {
                     grant->granteeType = S3GranteeTypeAllUsers;
                 }
                 else {
@@ -325,7 +323,8 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
     RequestParams params =
     {
         HttpRequestTypeGET,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
@@ -405,10 +404,9 @@ static S3Status generateSalXmlDocument(const char *targetBucket,
                            grant->grantee.canonicalUser.displayName);
                     break;
                 default: // case S3GranteeTypeAllAwsUsers/S3GranteeTypeAllUsers:
-                    append("Group\"><URI>http://acs.amazonaws.com/groups/"
-                           "global/%s</URI>",
+                    append("Group\"><URI>%s</URI>",
                            (grant->granteeType == S3GranteeTypeAllAwsUsers) ?
-                           "AuthenticatedUsers" : "AllUsers");
+                           ACS_GROUP_AWS_USERS : ACS_GROUP_ALL_USERS);
                     break;
                 }
                 append("</Grantee><Permission>%s</Permission></Grant>",
@@ -529,7 +527,8 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
     RequestParams params =
     {
         HttpRequestTypePUT,                           // httpRequestType
-        { bucketContext->bucketName,                  // bucketName
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
