@@ -523,7 +523,7 @@ static int headerle(const char *header1, const char *header2)
 {
     while (1) {
         if (*header1 == ':') {
-            return (*header2 == ':');
+            return (*header2 != ':');
         }
         else if (*header2 == ':') {
             return 0;
