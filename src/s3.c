@@ -46,6 +46,11 @@
 #define FOPEN_EXTRA_FLAGS ""
 #endif
 
+// Some Unix stuff (to work around Windows issues)
+#ifndef SLEEP_UNITS_PER_SECOND
+#define SLEEP_UNITS_PER_SECOND 1
+#endif
+
 // Also needed for Windows, because somehow MinGW doesn't define this
 extern int putenv(char *);
 
@@ -667,12 +672,11 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
     return 1;
 }
 
-
 static int should_retry()
 {
     if (retriesG--) {
         // Sleep before next retry; start out with a 1 second sleep
-        static int retrySleepInterval = 1;
+        static int retrySleepInterval = 1 * SLEEP_UNITS_PER_SECOND;
         sleep(retrySleepInterval);
         // Next sleep 1 second longer
         retrySleepInterval++;
@@ -1220,7 +1224,6 @@ static void list_bucket(const char *bucketName, const char *prefix,
         if (statusG != S3StatusOK) {
             break;
         }
-        marker = data.nextMarker;
     } while (data.isTruncated && (!maxkeys || (data.keyCount < maxkeys)));
 
     if (statusG == S3StatusOK) {
@@ -2663,6 +2666,7 @@ int main(int argc, char **argv)
             break;
         case 'r': {
             const char *v = optarg;
+            retriesG = 0;
             while (*v) {
                 retriesG *= 10;
                 retriesG += *v - '0';

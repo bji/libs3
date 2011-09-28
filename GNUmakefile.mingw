@@ -130,7 +130,8 @@ CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
           -D__STRICT_ANSI__ \
           -D_ISOC99_SOURCE \
           -D_POSIX_C_SOURCE=200112L \
-          -Dsleep=Sleep -DFOPEN_EXTRA_FLAGS=\"b\" \
+          -Dsleep=Sleep -DSLEEP_UNITS_PER_SECOND=1000 \
+          -DFOPEN_EXTRA_FLAGS=\"b\" \
           -Iinc/mingw -include windows.h
 
 LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS)
