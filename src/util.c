@@ -56,7 +56,6 @@ static int checkString(const char *str, const char *format)
 
 int urlEncode(char *dest, const char *src, int maxSrcSize)
 {
-    static const char *urlSafe = "-_.!~*'()/";
     static const char *hex = "0123456789ABCDEF";
 
     int len = 0;
@@ -66,28 +65,22 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
             *dest = 0;
             return 0;
         }
-        const char *urlsafe = urlSafe;
-        int isurlsafe = 0;
-        while (*urlsafe) {
-            if (*urlsafe == *src) {
-                isurlsafe = 1;
-                break;
-            }
-            urlsafe++;
-        }
-        if (isurlsafe || isalnum(*src)) {
-            *dest++ = *src++;
+        unsigned char c = *src;
+        if (isalnum(c) ||
+            (c == '-') || (c == '_') || (c == '.') || (c == '!') || 
+            (c == '~') || (c == '*') || (c == '\'') || (c == '(') ||
+            (c == ')') || (c == '/')) {
+            *dest++ = c;
         }
         else if (*src == ' ') {
             *dest++ = '+';
-            src++;
         }
         else {
             *dest++ = '%';
-            *dest++ = hex[*src / 16];
-            *dest++ = hex[*src % 16];
-            src++;
+            *dest++ = hex[c >> 4];
+            *dest++ = hex[c & 15];
         }
+        src++;
     }
 
     *dest = 0;
