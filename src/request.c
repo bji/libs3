@@ -168,7 +168,10 @@ static size_t curl_read_func(void *ptr, size_t size, size_t nmemb, void *data)
 
     int len = size * nmemb;
 
-    request_headers_done(request);
+    // CURL may call this function before response headers are available,
+    // so don't assume response headers are available and attempt to parse
+    // them.  Leave that to curl_write_func, which is guaranteed to be called
+    // only after headers are available.
 
     if (request->status != S3StatusOK) {
         return CURL_READFUNC_ABORT;
