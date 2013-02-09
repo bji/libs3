@@ -114,6 +114,9 @@ static char putenvBufG[256];
 #define EXPIRES_PREFIX_LEN (sizeof(EXPIRES_PREFIX) - 1)
 #define X_AMZ_META_PREFIX "x-amz-meta-"
 #define X_AMZ_META_PREFIX_LEN (sizeof(X_AMZ_META_PREFIX) - 1)
+#define USE_SERVER_SIDE_ENCRYPTION_PREFIX "useServerSideEncryption="
+#define USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN \
+    (sizeof(USE_SERVER_SIDE_ENCRYPTION_PREFIX) - 1)
 #define IF_MODIFIED_SINCE_PREFIX "ifModifiedSince="
 #define IF_MODIFIED_SINCE_PREFIX_LEN (sizeof(IF_MODIFIED_SINCE_PREFIX) - 1)
 #define IF_NOT_MODIFIED_SINCE_PREFIX "ifNotmodifiedSince="
@@ -254,6 +257,8 @@ static void usageExit(FILE *out)
 "     [expires]          : Expiration date to associate with object\n"
 "     [cannedAcl]        : Canned ACL for the object (see Canned ACLs)\n"
 "     [x-amz-meta-...]]  : Metadata headers to associate with the object\n"
+"     [useServerSideEncryption] : Whether or not to use server-side\n"
+"                          encryption for the object\n"
 "\n"
 "   copy                 : Copies an object; if any options are set, the "
                           "entire\n"
@@ -741,6 +746,9 @@ static S3Status responsePropertiesCallback
     for (i = 0; i < properties->metaDataCount; i++) {
         printf("x-amz-meta-%s: %s\n", properties->metaData[i].name,
                properties->metaData[i].value);
+    }
+    if (properties->usesServerSideEncryption) {
+        printf("UsesServerSideEncryption: true\n");
     }
 
     return S3StatusOK;
@@ -1423,6 +1431,7 @@ static void put_object(int argc, char **argv, int optindex)
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
     int metaPropertiesCount = 0;
     S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
+    char useServerSideEncryption = 0;
     int noStatus = 0;
 
     while (optindex < argc) {
@@ -1487,6 +1496,18 @@ static void put_object(int argc, char **argv, int optindex)
             *value++ = 0;
             metaProperties[metaPropertiesCount].name = name;
             metaProperties[metaPropertiesCount++].value = value;
+        }
+        else if (!strncmp(param, USE_SERVER_SIDE_ENCRYPTION_PREFIX,
+                          USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN)) {
+            const char *val = &(param[USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN]);
+            if (!strcmp(val, "true") || !strcmp(val, "TRUE") || 
+                !strcmp(val, "yes") || !strcmp(val, "YES") ||
+                !strcmp(val, "1")) {
+                useServerSideEncryption = 1;
+            }
+            else {
+                useServerSideEncryption = 0;
+            }
         }
         else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
             char *val = &(param[CANNED_ACL_PREFIX_LEN]);
@@ -1598,7 +1619,8 @@ static void put_object(int argc, char **argv, int optindex)
         expires,
         cannedAcl,
         metaPropertiesCount,
-        metaProperties
+        metaProperties,
+        useServerSideEncryption
     };
 
     S3PutObjectHandler putObjectHandler =
@@ -1682,6 +1704,7 @@ static void copy_object(int argc, char **argv, int optindex)
     S3CannedAcl cannedAcl = S3CannedAclPrivate;
     int metaPropertiesCount = 0;
     S3NameValue metaProperties[S3_MAX_METADATA_COUNT];
+    char useServerSideEncryption = 0;
     int anyPropertiesSet = 0;
 
     while (optindex < argc) {
@@ -1737,6 +1760,18 @@ static void copy_object(int argc, char **argv, int optindex)
             metaProperties[metaPropertiesCount++].value = value;
             anyPropertiesSet = 1;
         }
+        else if (!strncmp(param, USE_SERVER_SIDE_ENCRYPTION_PREFIX,
+                          USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN)) {
+            if (!strcmp(param, "true") || !strcmp(param, "TRUE") || 
+                !strcmp(param, "yes") || !strcmp(param, "YES") ||
+                !strcmp(param, "1")) {
+                useServerSideEncryption = 1;
+                anyPropertiesSet = 1;
+            }
+            else {
+                useServerSideEncryption = 0;
+            }
+        }
         else if (!strncmp(param, CANNED_ACL_PREFIX, CANNED_ACL_PREFIX_LEN)) {
             char *val = &(param[CANNED_ACL_PREFIX_LEN]);
             if (!strcmp(val, "private")) {
@@ -1785,7 +1820,8 @@ static void copy_object(int argc, char **argv, int optindex)
         expires,
         cannedAcl,
         metaPropertiesCount,
-        metaProperties
+        metaProperties,
+        useServerSideEncryption
     };
 
     S3ResponseHandler responseHandler =

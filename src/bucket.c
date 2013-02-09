@@ -266,7 +266,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         0,                                       // expires
         cannedAcl,                               // cannedAcl
         0,                                       // metaDataCount
-        0                                        // metaData
+        0,                                       // metaData
+        0                                        // useServerSideEncryption
     };
     
     // Set up the RequestParams
