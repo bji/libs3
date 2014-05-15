@@ -88,6 +88,11 @@ ifndef DESTDIR
     DESTDIR := /usr
 endif
 
+# --------------------------------------------------------------------------
+# Compiler CC handling
+ifndef CC
+    CC := gcc
+endif
 
 # --------------------------------------------------------------------------
 # Acquire configuration information for libraries that libs3 depends upon
@@ -196,18 +201,18 @@ uninstall:
 $(BUILD)/obj/%.o: src/%.c
 	$(QUIET_ECHO) $@: Compiling object
 	@ mkdir -p $(dir $(BUILD)/dep/$<)
-	@ gcc $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+	@ $(CC) $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
         -o $(BUILD)/dep/$(<:%.c=%.d) -c $<
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) gcc $(CFLAGS) -o $@ -c $<
+	$(VERBOSE_SHOW) $(CC) $(CFLAGS) -o $@ -c $<
 
 $(BUILD)/obj/%.do: src/%.c
 	$(QUIET_ECHO) $@: Compiling dynamic object
 	@ mkdir -p $(dir $(BUILD)/dep/$<)
-	@ gcc $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+	@ $(CC) $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
         -o $(BUILD)/dep/$(<:%.c=%.dd) -c $<
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) gcc $(CFLAGS) -fpic -fPIC -o $@ -c $< 
+	$(VERBOSE_SHOW) $(CC) $(CFLAGS) -fpic -fPIC -o $@ -c $< 
 
 
 # --------------------------------------------------------------------------
@@ -227,7 +232,7 @@ LIBS3_SOURCES := acl.c bucket.c error_parser.c general.c \
 $(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
 	$(QUIET_ECHO) $@: Building shared library
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) gcc -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) \
+	$(VERBOSE_SHOW) $(CC) -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) \
         -o $@ $^ $(LDFLAGS)
 
 $(LIBS3_STATIC): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.o)
@@ -245,7 +250,7 @@ s3: $(BUILD)/bin/s3
 $(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(LIBS3_SHARED)
 	$(QUIET_ECHO) $@: Building executable
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) gcc -o $@ $^ $(LDFLAGS)
+	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LDFLAGS)
 
 
 # --------------------------------------------------------------------------
@@ -269,7 +274,7 @@ test: $(BUILD)/bin/testsimplexml
 $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(LIBS3_STATIC)
 	$(QUIET_ECHO) $@: Building executable
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) gcc -o $@ $^ $(LIBXML2_LIBS)
+	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LIBXML2_LIBS)
 
 
 # --------------------------------------------------------------------------
