@@ -144,7 +144,7 @@ static char putenvBufG[256];
 
 // util ----------------------------------------------------------------------
 
-static void S3_init()
+static void S3_init(void)
 {
     S3Status status;
     const char *hostname = getenv("S3_HOSTNAME");
@@ -158,7 +158,7 @@ static void S3_init()
 }
 
 
-static void printError()
+static void printError(void)
 {
     if (statusG < S3StatusErrorAccessDenied) {
         fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(statusG));
@@ -680,7 +680,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
     return 1;
 }
 
-static int should_retry()
+static int should_retry(void)
 {
     if (retriesG--) {
         // Sleep before next retry; start out with a 1 second sleep
