@@ -280,6 +280,11 @@ clean:
 	$(QUIET_ECHO) $(BUILD): Cleaning
 	$(VERBOSE_SHOW) rm -rf $(BUILD)
 
+.PHONY: distclean
+distclean:
+	$(QUIET_ECHO) $(BUILD): Cleaning
+	$(VERBOSE_SHOW) rm -rf $(BUILD)
+
 
 # --------------------------------------------------------------------------
 # Clean dependencies target
