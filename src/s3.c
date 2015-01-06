@@ -381,7 +381,7 @@ static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
             }
             buf->size = 0;
             buf->start = 0;
-            if (*gb) {
+            if (*gb && (*gb)->prev) {
                 buf->prev = (*gb)->prev;
                 buf->next = *gb;
                 (*gb)->prev->next = buf;
