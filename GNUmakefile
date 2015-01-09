@@ -89,6 +89,12 @@ ifndef DESTDIR
 endif
 
 # --------------------------------------------------------------------------
+# LIBDIR directory
+ifndef LIBDIR
+    LIBDIR := ${DESTDIR}/lib
+endif
+
+# --------------------------------------------------------------------------
 # Compiler CC handling
 ifndef CC
     CC := gcc
@@ -162,19 +168,19 @@ install: exported
 	$(VERBOSE_SHOW) install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 \
                     $(DESTDIR)/bin/s3
 	$(QUIET_ECHO) \
-        $(DESTDIR)/lib/libs3.so.$(LIBS3_VER): Installing shared library
+        $(LIBDIR)/libs3.so.$(LIBS3_VER): Installing shared library
 	$(VERBOSE_SHOW) install -Dps -m u+rw,go+r \
                $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
-               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
+               $(LIBDIR)/libs3.so.$(LIBS3_VER)
 	$(QUIET_ECHO) \
-        $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR): Linking shared library
+        $(LIBDIR)/libs3.so.$(LIBS3_VER_MAJOR): Linking shared library
 	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER) \
-               $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR)
-	$(QUIET_ECHO) $(DESTDIR)/lib/libs3.so: Linking shared library
-	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(DESTDIR)/lib/libs3.so
-	$(QUIET_ECHO) $(DESTDIR)/lib/libs3.a: Installing static library
+               $(LIBDIR)/libs3.so.$(LIBS3_VER_MAJOR)
+	$(QUIET_ECHO) $(LIBDIR)/libs3.so: Linking shared library
+	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(LIBDIR)/libs3.so
+	$(QUIET_ECHO) $(LIBDIR)/libs3.a: Installing static library
 	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a \
-                    $(DESTDIR)/lib/libs3.a
+                    $(LIBDIR)/libs3.a
 	$(QUIET_ECHO) $(DESTDIR)/include/libs3.h: Installing header
 	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
                     $(DESTDIR)/include/libs3.h
