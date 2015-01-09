@@ -5,7 +5,7 @@ Section: libdevel
 Priority: extra
 Depends: libs3 (>= LIBS3_VERSION)
 Maintainer: Bryan Ischo <bryan@ischo.com>
-Homepage: http://libs3.ischo.com/index.html
+Homepage: https://github.com/bji/libs3
 Description: C Development Library for Amazon S3 Access
  This library provides an API for using Amazon's S3 service (see
  http://s3.amazonaws.com).  Its design goals are:
