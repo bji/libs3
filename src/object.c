@@ -6,8 +6,8 @@
  * This file is part of libs3.
  * 
  * libs3 is free software: you can redistribute it and/or modify it under the
- * terms of the GNU General Public License as published by the Free Software
- * Foundation, version 3 of the License.
+ * terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation, version 3 of the License.
  *
  * In addition, as a special exception, the copyright holders give
  * permission to link the code of this library and its programs with the
@@ -18,8 +18,8 @@
  * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
  * details.
  *
- * You should have received a copy of the GNU General Public License version 3
- * along with libs3, in a file named COPYING.  If not, see
+ * You should have received a copy of the GNU Lesser General Public License
+ * version 3 along with libs3, in a file named COPYING.  If not, see
  * <http://www.gnu.org/licenses/>.
  *
  ************************************************************************** **/
