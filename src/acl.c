@@ -127,7 +127,8 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken },             // securityToken
         key,                                          // key
         0,                                            // queryParams
         "acl",                                        // subResource
@@ -325,7 +326,8 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken },             // securityToken
         key,                                          // key
         0,                                            // queryParams
         "acl",                                        // subResource

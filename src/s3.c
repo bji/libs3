@@ -873,7 +873,7 @@ static void list_service(int allDetails)
     };
 
     do {
-        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 
+        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 0, 
                         &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -916,7 +916,7 @@ static void test_bucket(int argc, char **argv, int optindex)
 
     char locationConstraint[64];
     do {
-        S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
+        S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG, 0,
                        0, bucketName, sizeof(locationConstraint),
                        locationConstraint, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
@@ -1015,7 +1015,7 @@ static void create_bucket(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG,
+        S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, 0,
                          0, bucketName, cannedAcl, locationConstraint, 0,
                          &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
@@ -1056,7 +1056,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         0, bucketName, 0, &responseHandler, 0);
+                         0, 0, bucketName, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1212,7 +1212,8 @@ static void list_bucket(const char *bucketName, const char *prefix,
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ListBucketHandler listBucketHandler =
@@ -1332,7 +1333,8 @@ static void delete_object(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =
@@ -1606,7 +1608,8 @@ static void put_object(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3PutProperties putProperties =
@@ -1807,7 +1810,8 @@ static void copy_object(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3PutProperties putProperties =
@@ -1988,7 +1992,8 @@ static void get_object(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3GetConditions getConditions =
@@ -2062,7 +2067,8 @@ static void head_object(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =
@@ -2141,7 +2147,8 @@ static void generate_query_string(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE];
@@ -2243,7 +2250,8 @@ void get_acl(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =
@@ -2406,7 +2414,8 @@ void set_acl(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =
@@ -2498,7 +2507,8 @@ void get_logging(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =
@@ -2664,7 +2674,8 @@ void set_logging(int argc, char **argv, int optindex)
         protocolG,
         uriStyleG,
         accessKeyIdG,
-        secretAccessKeyG
+        secretAccessKeyG,
+        0
     };
 
     S3ResponseHandler responseHandler =

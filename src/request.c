@@ -359,6 +359,11 @@ static S3Status compose_amz_headers(const RequestParams *params,
         }
     }
 
+    // Add the x-amz-security-token header if necessary
+    if (params->bucketContext.securityToken) {
+        headers_append(1, "x-amz-security-token: %s", params->bucketContext.securityToken);
+    }
+
     return S3StatusOK;
 }
 

@@ -695,6 +695,11 @@ typedef struct S3BucketContext
      *  The Amazon Secret Access Key to use for access to the bucket
      **/
     const char *secretAccessKey;
+
+    /**
+     *  The Amazon Security Token used to generate Temporary Security Credentials
+     **/
+    const char *securityToken;
 } S3BucketContext;
 
 
@@ -1496,8 +1501,8 @@ S3Status S3_generate_authenticated_query_string
  *        all callbacks for this request
  **/
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
-                     const char *secretAccessKey, const char *hostName,
-                     S3RequestContext *requestContext,
+                     const char *secretAccessKey, const char *securityToken,
+                     const char *hostName, S3RequestContext *requestContext,
                      const S3ListServiceHandler *handler,
                      void *callbackData);
                          
@@ -1505,7 +1510,6 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
 /** **************************************************************************
  * Bucket Functions
  ************************************************************************** **/
-
 /**
  * Tests the existence of an S3 bucket, additionally returning the bucket's
  * location if it exists and is accessible.
@@ -1516,6 +1520,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param token gives the security token used to generate the Temporary 
+ *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the bucket name to test
@@ -1538,8 +1544,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
-                    const char *hostName, const char *bucketName,
-                    int locationConstraintReturnSize,
+                    const char *securityToken, const char *hostName, 
+                    const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
@@ -1568,9 +1574,9 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        all callbacks for this request
  **/
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *hostName,
-                      const char *bucketName, S3CannedAcl cannedAcl,
-                      const char *locationConstraint,
+                      const char *secretAccessKey, const char *securityToken,
+                      const char *hostName, const char *bucketName,
+                      S3CannedAcl cannedAcl, const char *locationConstraint,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
@@ -1598,8 +1604,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
-                      const char *hostName, const char *bucketName,
-                      S3RequestContext *requestContext,
+                      const char *securityToken, const char *hostName, 
+                      const char *bucketName, S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
 

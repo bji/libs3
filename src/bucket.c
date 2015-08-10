@@ -104,11 +104,10 @@ static void testBucketCompleteCallback(S3Status requestStatus,
     free(tbData);
 }
 
-
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
-                    const char *hostName, const char *bucketName,
-                    int locationConstraintReturnSize,
+                    const char *securityToken, const char *hostName,
+                    const char *bucketName, int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData)
@@ -140,7 +139,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
           protocol,                                   // protocol
           uriStyle,                                   // uriStyle
           accessKeyId,                                // accessKeyId
-          secretAccessKey },                          // secretAccessKey
+          secretAccessKey,                            // secretAccessKey
+          securityToken },                            // securityToken
         0,                                            // key
         0,                                            // queryParams
         "location",                                   // subResource
@@ -225,9 +225,9 @@ static void createBucketCompleteCallback(S3Status requestStatus,
 
 
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *hostName,
-                      const char *bucketName, S3CannedAcl cannedAcl,
-                      const char *locationConstraint,
+                      const char *secretAccessKey, const char *securityToken,
+                      const char *hostName, const char *bucketName,
+                      S3CannedAcl cannedAcl, const char *locationConstraint,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData)
 {
@@ -279,7 +279,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
           protocol,                                   // protocol
           S3UriStylePath,                             // uriStyle
           accessKeyId,                                // accessKeyId
-          secretAccessKey },                          // secretAccessKey
+          secretAccessKey,                            // secretAccessKey
+          securityToken },                            // securityToken
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
@@ -337,8 +338,8 @@ static void deleteBucketCompleteCallback(S3Status requestStatus,
 
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
-                      const char *hostName, const char *bucketName,
-                      S3RequestContext *requestContext,
+                      const char *securityToken, const char *hostName, 
+                      const char *bucketName, S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -362,7 +363,8 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
           protocol,                                   // protocol
           uriStyle,                                   // uriStyle
           accessKeyId,                                // accessKeyId
-          secretAccessKey },                          // secretAccessKey
+          secretAccessKey,                            // secretAccessKey
+          securityToken },                            // securityToken
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource
@@ -721,7 +723,8 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey },           // secretAccessKey
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken },             // securityToken
         0,                                            // key
         queryParams[0] ? queryParams : 0,             // queryParams
         0,                                            // subResource
