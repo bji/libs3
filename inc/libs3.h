@@ -1490,6 +1490,8 @@ S3Status S3_generate_authenticated_query_string
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param token gives the security token used to generate the Temporary 
+ *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
@@ -1559,6 +1561,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param token gives the security token used to generate the Temporary 
+ *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be created
@@ -1591,6 +1595,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
+ * @param token gives the security token used to generate the Temporary 
+ *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be deleted
