@@ -2150,7 +2150,7 @@ static void put_object(int argc, char **argv, int optindex)
 
     const char *bucketName = argv[optindex++];
     const char *key = slash;
-    const char *uploadId;
+    const char *uploadId = 0;
     const char *filename = 0;
     uint64_t contentLength = 0;
     const char *cacheControl = 0, *contentType = 0, *md5 = 0;
