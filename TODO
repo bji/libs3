@@ -45,16 +45,6 @@
 This is Amazon's "user" management API; not part of S3 although IAM users can be referenced in S3 Bucket Policies.  Not intending to support IAM account management since the creation and management of users is not S3 functionality.
 
 
-=== Multipart Upload ===
-
-- Investigate whether to expose multi-part upload as a new API or just fold its functionality into existing PUT API but hiding the multi-upload details (and allowing an option to specify the maximum upload concurrency to control this)
-
-- If forcing users to manage multi-part upload: 30 hours
-- If managing multi-part upload behind the scenes: 50 hours
-
-- Provide API for listing multi-part uploads and aborting them as necessary: 12 hours
-
-
 === Response Header API Support ===
 
 - Allows HTTP response headers to be specified on a per-object basis
