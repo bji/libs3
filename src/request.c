@@ -682,6 +682,8 @@ static void canonicalize_resource(const char *bucketName,
 static const char *http_request_type_to_verb(HttpRequestType requestType)
 {
     switch (requestType) {
+    case HttpRequestTypePOST:
+        return "POST";
     case HttpRequestTypeGET:
         return "GET";
     case HttpRequestTypeHEAD:
@@ -888,7 +890,7 @@ static S3Status setup_curl(Request *request,
     }
 
     // Would use CURLOPT_INFILESIZE_LARGE, but it is buggy in libcurl
-    if (params->httpRequestType == HttpRequestTypePUT) {
+    if (params->httpRequestType == HttpRequestTypePUT || params->httpRequestType == HttpRequestTypePOST) {
         char header[256];
         snprintf(header, sizeof(header), "Content-Length: %llu",
                  (unsigned long long) params->toS3CallbackTotalSize);
@@ -930,14 +932,19 @@ static S3Status setup_curl(Request *request,
     // Set request type.
     switch (params->httpRequestType) {
     case HttpRequestTypeHEAD:
-    curl_easy_setopt_safe(CURLOPT_NOBODY, 1);
+        curl_easy_setopt_safe(CURLOPT_NOBODY, 1);
         break;
+    case HttpRequestTypePOST:
+        curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "POST");
+        curl_easy_setopt_safe(CURLOPT_UPLOAD, 1);
+        break;
+
     case HttpRequestTypePUT:
     case HttpRequestTypeCOPY:
         curl_easy_setopt_safe(CURLOPT_UPLOAD, 1);
         break;
     case HttpRequestTypeDELETE:
-    curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "DELETE");
+        curl_easy_setopt_safe(CURLOPT_CUSTOMREQUEST, "DELETE");
         break;
     default: // HttpRequestTypeGET
         break;

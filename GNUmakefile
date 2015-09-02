@@ -233,7 +233,7 @@ libs3: $(LIBS3_SHARED) $(LIBS3_STATIC)
 LIBS3_SOURCES := acl.c bucket.c error_parser.c general.c \
                  object.c request.c request_context.c \
                  response_headers_handler.c service_access_logging.c \
-                 service.c simplexml.c util.c
+                 service.c simplexml.c util.c multipart.c
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
 	$(QUIET_ECHO) $@: Building shared library

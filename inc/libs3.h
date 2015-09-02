@@ -747,6 +747,59 @@ typedef struct S3ListBucketContent
 
 
 /**
+ * This is a single entry supplied to the list bucket callback by a call to
+ * S3_list_bucket.  It identifies a single matching key from the list
+ * operation.
+ **/
+typedef struct S3ListMultipartUpload
+{
+    /**
+     * This is the next key in the list bucket results.
+     **/
+    const char *key;
+
+    const char *uploadId;
+    const char *initiatorId;
+    const char *initiatorDisplayName;
+
+    /**
+     * This is the ID of the owner of the key; it is present only if access
+     * permissions allow it to be viewed.
+     **/
+    const char *ownerId;
+
+    /**
+     * This is the display name of the owner of the key; it is present only if
+     * access permissions allow it to be viewed.
+     **/
+    const char *ownerDisplayName;
+    
+    const char *storageClass;
+
+    /**
+     * This is the number of seconds since UNIX epoch of the last modified
+     * date of the object identified by the key. 
+     **/
+    int64_t initiated;
+    
+} S3ListMultipartUpload;
+
+
+typedef struct S3ListPart
+{   
+    const char *eTag;
+
+    /**
+     * This is the number of seconds since UNIX epoch of the last modified
+     * date of the object identified by the key. 
+     **/
+    int64_t lastModified;
+    uint64_t partNumber;
+    uint64_t size;
+} S3ListPart;
+
+
+/**
  * S3PutProperties is the set of properties that may optionally be set by the
  * user when putting objects to S3.  Each field of this structure is optional
  * and may or may not be present.
@@ -1059,6 +1112,36 @@ typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
                                            void *callbackData);
                                        
 
+
+typedef S3Status (S3MultipartCommitResponseCallback)(const char * location, const char * etag, void * callbackData);
+
+
+
+typedef S3Status (S3MultipartInitialResponseCallback)(const char * upload_id, void * callbackData);
+
+
+typedef S3Status (S3ListMultipartUploadsResponseCallback)(int isTruncated,
+                                        const char *nextKeyMarker,
+                                        const char *nextUploadIdMarker,
+                                        int uploadsCount, 
+                                        const S3ListMultipartUpload *uploads,
+                                        int commonPrefixesCount,
+                                        const char **commonPrefixes,
+                                        void *callbackData);
+
+
+typedef S3Status (S3ListPartsResponseCallback)(int isTruncated,
+                                        const char *nextPartNumberMarker,
+                                        const char *initiatorId,
+                                        const char *initiatorDisplayName,
+                                        const char *ownerId,
+                                        const char *ownerDisplayName,
+                                        const char *storageClass,
+                                        int partsCount,
+                                        int lastPartNumber,
+                                        const S3ListPart *parts,
+                                        void *callbackData);
+
 /** **************************************************************************
  * Callback Structures
  ************************************************************************** **/
@@ -1169,6 +1252,61 @@ typedef struct S3GetObjectHandler
     S3GetObjectDataCallback *getObjectDataCallback;
 } S3GetObjectHandler;
 
+
+typedef struct S3MultipartInitialHander {
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    S3MultipartInitialResponseCallback *responseXmlCallback;
+} S3MultipartInitialHander;
+
+typedef struct S3MultipartCommitHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+
+    /**
+     * The putObjectDataCallback is called to acquire data to send to S3 as
+     * the contents of the put_object request.  It is made repeatedly until it
+     * returns a negative number (indicating that the request should be
+     * aborted), or 0 (indicating that all data has been supplied).
+     **/
+    S3PutObjectDataCallback *putObjectDataCallback;
+    S3MultipartCommitResponseCallback *responseXmlCallback;
+} S3MultipartCommitHandler;
+
+typedef struct S3ListMultipartUploadsHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+    
+    S3ListMultipartUploadsResponseCallback *responseXmlCallback;
+} S3ListMultipartUploadsHandler;
+
+typedef struct S3ListPartsHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+    
+    S3ListPartsResponseCallback *responseXmlCallback;
+} S3ListPartsHandler;
+
+typedef struct S3AbortMultipartUploadHandler
+{
+    /**
+     * responseHandler provides the properties and complete callback
+     **/
+    S3ResponseHandler responseHandler;
+    
+} S3AbortMultipartUploadHandler;
 
 /** **************************************************************************
  * General Library Functions
@@ -1936,7 +2074,177 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
                                   S3RequestContext *requestContext,
                                   const S3ResponseHandler *handler,
                                   void *callbackData);
+
                                   
+/**
+ * This operation initiates a multipart upload and returns an upload ID. 
+ * This upload ID is used to associate all the parts in the specific 
+ * multipart upload. You specify this upload ID in each of your subsequent 
+ * upload part requests
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param key is the source key
+ * @param putProperties optionally provides additional properties to apply to
+ *        the object that is being put to
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key, 
+                                    S3PutProperties *putProperties,
+                                    S3MultipartInitialHander *handler,
+                                    S3RequestContext *requestContext,
+                                    void *callbackData); 
+
+
+/**
+ * This operation uploads a part in a multipart upload.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param key is the source key
+ * @param putProperties optionally provides additional properties to apply to
+ *        the object that is being put to
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed 
+ * @param seq is a part number uniquely identifies a part and also 
+ *        defines its position within the object being created. 
+ * @param upload_id get from S3_initiate_multipart return 
+ * @param partContentLength gives the size of the part, in bytes 
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_upload_part(S3BucketContext *bucketContext, const char *key, 
+                            S3PutProperties * putProperties, S3PutObjectHandler *handler, 
+                            int seq, const char *upload_id, int partContentLength, 
+                            S3RequestContext *requestContext,
+                            void *callbackData);
+
+
+/**
+ * This operation completes a multipart upload by assembling previously 
+ * uploaded parts.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param key is the source key
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param upload_id get from S3_initiate_multipart return 
+ * @param ContentLength gives the total size of the commit message, in bytes 
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_complete_multipart_upload(S3BucketContext *bucketContext, 
+                                    const char *key, 
+                                    S3MultipartCommitHandler *handler, 
+                                    const char *upload_id, 
+                                    int contentLength, 
+                                    S3RequestContext *requestContext,
+                                    void *callbackData);
+
+
+/**
+ * This operation lists the parts that have been uploaded for a specific 
+ * multipart upload.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param key is the source key
+ * @param partnumbermarker Specifies the part after which listing should begin. 
+ *        Only parts with higher part numbers will be listed.
+ * @param uploadid identifying the multipart upload whose parts are being listed. 
+ * @param upload_id get from S3_initiate_multipart return 
+ * @param encodingtype Requests Amazon S3 to encode the response and specifies 
+ *        the encoding method to use.
+ * @param maxparts Sets the maximum number of parts to return in the response 
+ *        body. Default: 1,000
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_list_parts(S3BucketContext *bucketContext, const char *key,
+                               const char *partnumbermarker, const char *uploadid,
+                               const char *encodingtype, 
+                               int maxparts,
+                               S3RequestContext *requestContext,
+                               const S3ListPartsHandler *handler,
+                               void *callbackData);
+
+
+/**
+ * This operation aborts a multipart upload. After a multipart upload is 
+ * aborted, no additional parts can be uploaded using that upload ID. 
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param key is the source key
+ * @param uploadid identifying the multipart upload whose parts are being listed. 
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ **/
+void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char* key,
+                                              const char *uploadId,
+                                              S3AbortMultipartUploadHandler* handler) ;
+
+
+/**
+ * This operation lists in-progress multipart uploads. An in-progress 
+ * multipart upload is a multipart upload that has been initiated, 
+ * using the Initiate Multipart Upload request, but has not yet been 
+ * completed or aborted.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request; this is the bucket for which service access logging is
+ *        being set
+ * @param Lists in-progress uploads only for those keys that begin with 
+ *        the specified prefix. 
+ * @param Together with upload-id-marker, this parameter specifies the 
+ *        multipart upload after which listing should begin.
+ * @param Together with key-marker, specifies the multipart upload 
+ *        after which listing should begin. 
+ * @param encodingtype Requests Amazon S3 to encode the response and specifies 
+ *        the encoding method to use.
+ * @param delimiter Character you use to group keys.  
+ * @param maxuploads Sets the maximum number of multipart uploads, 
+ *        from 1 to 1,000, to return in the response body. 
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/                          
+void S3_list_multipart_uploads(S3BucketContext *bucketContext, 
+                               const char *prefix,
+                               const char *keymarker, const char *uploadidmarker,
+                               const char *encodingtype,
+                               const char *delimiter, 
+                               int maxuploads,
+                               S3RequestContext *requestContext,
+                               const S3ListMultipartUploadsHandler *handler,
+                               void *callbackData);
 
 #ifdef __cplusplus
 }
