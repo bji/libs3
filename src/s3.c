@@ -767,7 +767,7 @@ static S3Status responsePropertiesCallback
     print_nonnull("Request-Id", requestId);
     print_nonnull("Request-Id-2", requestId2);
     if (properties->contentLength > 0) {
-        printf("Content-Length: %lld\n", 
+        printf("Content-Length: %llu\n",
                (unsigned long long) properties->contentLength);
     }
     print_nonnull("Server", server);
@@ -1610,10 +1610,9 @@ static S3Status listPartsCallback(int isTruncated,
             strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
                      gmtime(&t));
             printf("%-30s", timebuf);
-            printf("%-15lu", part->partNumber);            
-            printf("%-45s", part->eTag);            
-            printf("%-15lu\n", part->size);
-
+            printf("%-15llu", (unsigned long long) part->partNumber);
+            printf("%-45s", part->eTag);
+            printf("%-15llu\n", (unsigned long long) part->size);
         }
     }
 
