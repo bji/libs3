@@ -29,7 +29,7 @@
  * calls to libs3 functions, and prints the results.
  **/
 
-#define _XOPEN_SOURCE 500
+#define _XOPEN_SOURCE 600
 #include <ctype.h>
 #include <getopt.h>
 #include <stdio.h>
