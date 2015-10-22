@@ -2395,7 +2395,7 @@ static void put_object(int argc, char **argv, int optindex)
         MultipartPartData partData;
         int partContentLength = 0;
 
-        S3MultipartInitialHander handler = {
+        S3MultipartInitialHandler handler = {
             {
                 &responsePropertiesCallback,
                 &responseCompleteCallback

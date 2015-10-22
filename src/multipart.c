@@ -35,7 +35,7 @@ typedef struct InitialMultipartData
 {
     SimpleXml simpleXml;
     int len;
-    S3MultipartInitialHander *handler;
+    S3MultipartInitialHandler *handler;
     string_buffer(upload_id, 128);
     void * userdata;
 } InitialMultipartData;
@@ -92,7 +92,7 @@ static S3Status initialMultipartXmlCallback(const char *elementPath,
 
 void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
                           S3PutProperties *putProperties, 
-                          S3MultipartInitialHander* handler, 
+                          S3MultipartInitialHandler* handler, 
                           S3RequestContext * requestContext, 
                           void * callbackData) 
 {
