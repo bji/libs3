@@ -1253,14 +1253,14 @@ typedef struct S3GetObjectHandler
 } S3GetObjectHandler;
 
 
-typedef struct S3MultipartInitialHander {
+typedef struct S3MultipartInitialHandler {
     /**
      * responseHandler provides the properties and complete callback
      **/
     S3ResponseHandler responseHandler;
 
     S3MultipartInitialResponseCallback *responseXmlCallback;
-} S3MultipartInitialHander;
+} S3MultipartInitialHandler;
 
 typedef struct S3MultipartCommitHandler
 {
@@ -2098,7 +2098,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
  **/
 void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key, 
                                     S3PutProperties *putProperties,
-                                    S3MultipartInitialHander *handler,
+                                    S3MultipartInitialHandler *handler,
                                     S3RequestContext *requestContext,
                                     void *callbackData); 
 
