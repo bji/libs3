@@ -1,20 +1,20 @@
 Summary: C Library and Tools for Amazon S3 Access
 Name: libs3
-Version: 2.1
-Release: 1vsm
+Version: %{_version}
+Release: vsm%{?dist}
 License: LGPL
 Group: Networking/Utilities
 URL: http://sourceforge.net/projects/reallibs3
-Source0: libs3-%{version}.tar.gz
+Source0: %{name}-%{version}.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
 # Want to include curl dependencies, but older Fedora Core uses curl-devel,
 # and newer Fedora Core uses libcurl-devel ... have to figure out how to
 # handle this problem, but for now, just don't check for any curl libraries
-# Buildrequires: curl-devel
+Buildrequires: libcurl-devel
 Buildrequires: libxml2-devel
 Buildrequires: openssl-devel
 Buildrequires: make
-# Requires: libcurl
+Requires: libcurl
 Requires: libxml2
 Requires: openssl
 
@@ -51,7 +51,7 @@ http://s3.amazonaws.com).  Its design goals are:
 
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}
 
 %build
 BUILD=$RPM_BUILD_ROOT/build make exported
