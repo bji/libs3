@@ -168,6 +168,15 @@ $S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new
 diff acl acl_new
 rm -f acl acl_new
 
+# Check multipart file upload (>15MB)
+dd if=/dev/zero of=mpfile bs=1024k count=30
+echo "$S3_COMMAND put $TEST_BUCKET/mpfile filename=mpfile"
+$S3_COMMAND put $TEST_BUCKET/mpfile filename=mpfile
+echo "$S3_COMMAND get $TEST_BUCKET/mpfile filename=mpfile.get"
+$S3_COMMAND get $TEST_BUCKET/mpfile filename=mpfile.get
+diff mpfile mpfile.get
+rm -f mpfile mpfile.get
+
 # Remove the test file
 echo "$S3_COMMAND delete $TEST_BUCKET/aclkey"
 $S3_COMMAND delete $TEST_BUCKET/aclkey
