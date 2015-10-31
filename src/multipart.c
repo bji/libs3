@@ -36,7 +36,7 @@ typedef struct InitialMultipartData
     SimpleXml simpleXml;
     int len;
     S3MultipartInitialHandler *handler;
-    string_buffer(upload_id, 128);
+    string_buffer(upload_id, 256);
     void * userdata;
 } InitialMultipartData;
 

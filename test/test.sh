@@ -4,8 +4,10 @@
 # S3_ACCESS_KEY_ID - must be set to S3 Access Key ID
 # S3_SECRET_ACCESS_KEY - must be set to S3 Secret Access Key
 # TEST_BUCKET_PREFIX - must be set to the test bucket prefix to use
-# S3_COMMAND - may be set to s3 command to use (i.e. valgrind s3); defaults
-#              to "s3"
+# S3_COMMAND - may be set to s3 command to use, examples:
+#              "valgrind s3"
+#              "s3 -h" (for aws s3)
+#              default: "s3"
 
 if [ -z "$S3_ACCESS_KEY_ID" ]; then
     echo "S3_ACCESS_KEY_ID required"
@@ -28,8 +30,8 @@ fi
 
 TEST_BUCKET=${TEST_BUCKET_PREFIX}.testbucket
 
-# Create the test bucket in EU
-echo "$S3_COMMAND create $TEST_BUCKET locationConstraint=EU"
+# Create the test bucket
+echo "$S3_COMMAND create $TEST_BUCKET"
 $S3_COMMAND create $TEST_BUCKET
 
 # List to find it
@@ -80,8 +82,8 @@ for i in `seq 0 9`; do
 done
 
 # List with all details
-echo "$S3_COMMAND list $TEST_BUCKET allDetails=1"
-$S3_COMMAND list $TEST_BUCKET allDetails=1
+echo "$S3_COMMAND list $TEST_BUCKET"
+$S3_COMMAND list $TEST_BUCKET
 
 COPY_BUCKET=${TEST_BUCKET_PREFIX}.copybucket
 
@@ -94,8 +96,8 @@ EOF
 $S3_COMMAND copy $TEST_BUCKET/key_5 $COPY_BUCKET/copykey
 
 # List the copy bucket
-echo "$S3_COMMAND list $COPY_BUCKET allDetails=1"
-$S3_COMMAND list $COPY_BUCKET allDetails=1
+echo "$S3_COMMAND list $COPY_BUCKET"
+$S3_COMMAND list $COPY_BUCKET
 
 # Compare the files
 rm -f key_5 copykey
@@ -124,8 +126,8 @@ $S3_COMMAND put $TEST_BUCKET/aclkey < /dev/null
 
 # Get the bucket acl
 rm -f acl
-echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl allDetails=1"
-$S3_COMMAND getacl $TEST_BUCKET filename=acl allDetails=1
+echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl"
+$S3_COMMAND getacl $TEST_BUCKET filename=acl
 
 # Add READ for all AWS users, and READ_ACP for everyone
 echo <<EOF >> acl
@@ -139,15 +141,15 @@ $S3_COMMAND setacl $TEST_BUCKET filename=acl
 
 # Test to make sure that it worked
 rm -f acl_new
-echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl_new allDetails=1"
-$S3_COMMAND getacl $TEST_BUCKET filename=acl_new allDetails=1
+echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl_new"
+$S3_COMMAND getacl $TEST_BUCKET filename=acl_new
 diff acl acl_new
 rm -f acl acl_new
 
 # Get the key acl
 rm -f acl
-echo "$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl allDetails=1"
-$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl allDetails=1
+echo "$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl"
+$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl
 
 # Add READ for all AWS users, and READ_ACP for everyone
 echo <<EOF >> acl
@@ -161,10 +163,19 @@ $S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl
 
 # Test to make sure that it worked
 rm -f acl_new
-echo "$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new allDetails=1"
-$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new allDetails=1
+echo "$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new"
+$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new
 diff acl acl_new
 rm -f acl acl_new
+
+# Check multipart file upload (>15MB)
+dd if=/dev/zero of=mpfile bs=1024k count=30
+echo "$S3_COMMAND put $TEST_BUCKET/mpfile filename=mpfile"
+$S3_COMMAND put $TEST_BUCKET/mpfile filename=mpfile
+echo "$S3_COMMAND get $TEST_BUCKET/mpfile filename=mpfile.get"
+$S3_COMMAND get $TEST_BUCKET/mpfile filename=mpfile.get
+diff mpfile mpfile.get
+rm -f mpfile mpfile.get
 
 # Remove the test file
 echo "$S3_COMMAND delete $TEST_BUCKET/aclkey"
