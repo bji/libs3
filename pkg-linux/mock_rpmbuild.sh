@@ -120,6 +120,12 @@ build_centos_65() {
     common_build
 }
 
+# Centos 6.6
+build_centos_66() {
+    MOCK_CONFIG=${MOCK_CONFIG:-"centos-6.6-x86_64"}
+    common_build
+}
+
 # Centos 6.x (latest), currently 6.6
 build_centos_6x() {
     MOCK_CONFIG=${MOCK_CONFIG:-"epel-6-x86_64"}
@@ -136,12 +142,14 @@ case "$DISTRO_VERS" in
  "6.5")
     build_centos_65
     ;;
+ "6.6")
+    build_centos_66
+    ;;
  "6.x")
     build_centos_6x
     ;;
  *)
     DISTRO_VERS="default"
-     # Centos 6.6 is current default
-    build_centos_6x
+    build_centos_66
     ;;
 esac
