@@ -32,8 +32,13 @@ MARKER = $(DEPTH)/MARKER
 RPM_DIR = $(HOME)/rpmbuild
 
 # fix up source name to be proper and polite
-PKG_SOURCE_VERSION = $(PKG_VERSION)
-RPM_NAME = $(PKG_VERSION).*.rpm
+ifneq ("$(VSM_PATCH)", "")
+    PKG_SOURCE_VERSION = $(PKG_VERSION)-$(VSM_PATCH)
+    RPM_NAME = $(PKG_VERSION)*$(VSM_PATCH).*.rpm
+else
+    PKG_SOURCE_VERSION = $(PKG_VERSION)
+    RPM_NAME = $(PKG_VERSION).*.rpm
+endif
 
 .PHONY: dist devdist
 dist:

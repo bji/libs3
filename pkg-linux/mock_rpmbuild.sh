@@ -9,11 +9,22 @@
 #
 #    VSM_notice_end
 
-set -e
+set -ex
 
-PKG_VERSION=${PKG_VERSION:-"2.0.`git rev-parse --short HEAD`"}
+# upstream +1 from where we started, as we have changes not upstream yet
+PKG_VERSION=${PKG_VERSION:-"2.1"}
 
-RESULT_DIR=${RESULT_DIR:-"$(pwd)/libs3-${PKG_VERSION}"}
+# VSM_PATCH is optional, mostly for developers
+# it replaces the release field in the code, but in the RPM
+# it is added after a "." to ensure RPM version correctness
+
+VSM_PATCH=${VSM_PATCH:-"$(git rev-parse --short HEAD)"}
+VSM_SOURCE_EXTRA="-${VSM_PATCH}"
+
+# env flags to change RPM build behavior
+DEV_BUILD=${DEV_BUILD:-"no"}
+
+RESULT_DIR=${RESULT_DIR:-"$(pwd)/libs3-${PKG_VERSION}${VSM_SOURCE_EXTRA}"}
 mkdir -p ${RESULT_DIR}
 
 RPM_DIR=${RPM_DIR:-"${HOME}/rpmbuild"}
@@ -51,6 +62,7 @@ print_vars_and_flags() {
     echo "MOCK_CONFIG: -> '$MOCK_CONFIG'"
     echo "RESULT_DIR: -> '$RESULT_DIR'"
     echo "RPM_DIR: -> '$RPM_DIR'"
+    echo "VSM_PATCH: -> '$VSM_PATCH'"
     echo
 
 }
@@ -60,9 +72,15 @@ mock_init() {
 }
 
 mock_build () {
+    # TODO would be nice to have a find + xargs + latest mtime
+    #  and then only make dist if needed
     OPTARGS="--define '_version ${PKG_VERSION}'"
 
-    gmake PKG_VERSION=${PKG_VERSION} dist
+    if [ "${VSM_PATCH}" != "" ]; then
+        OPTARGS="$OPTARGS --define 'vsm_patch ${VSM_PATCH}'"
+    fi
+
+    gmake PKG_VERSION=${PKG_VERSION} VSM_PATCH=${VSM_PATCH} dist
 
     # other macros to add
     OPTARGS="$OPTARGS --define 'vendor ${VENDOR}'"
@@ -79,7 +97,7 @@ mock_build () {
     eval mock --rebuild ${MOCK_OPTS} \
     ${OPTARGS} \
     --resultdir ${RESULT_DIR} --no-clean \
-    ${RESULT_DIR}/libs3-${PKG_VERSION}*.src.rpm
+    ${RESULT_DIR}/libs3-${PKG_VERSION}*${VSM_PATCH}*.src.rpm
 }
 
 common_build () {
