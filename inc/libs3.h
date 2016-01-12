@@ -211,6 +211,11 @@ extern "C" {
  * Microsoft Windows platforms.
  **/
 #define S3_INIT_WINSOCK                    1
+/**
+ * This constant is used by the S3_initialize() function, to verify
+ * the peer SSL certificate by default.
+ */
+#define S3_INIT_VERIFY_PEER                2
 
 
 /**
@@ -1583,6 +1588,18 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
  *         could wait a shorter time if they wish, but not longer.
  **/
 int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
+
+/**
+ * This function enables SSL peer certificate verification on a per-request
+ * context basis. If this is called, the context's value of verifyPeer will
+ * be used when processing requests. Otherwise, the default set by the
+ * flags to S3_initialize() are used.
+ *
+ * @param requestContext the S3RequestContext to set the verifyPeer flag on.
+ * @param verifyPeer a boolean value indicating whether to verify the peer
+ *        certificate or not.
+ */
+void S3_set_request_context_verify_peer(S3RequestContext *requestContext, int verifyPeer);
 
 
 /** **************************************************************************
