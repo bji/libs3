@@ -1,6 +1,6 @@
 /** **************************************************************************
- * libs3.h
- * 
+ * @file libs3.h
+ * @details
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
  * 
  * This file is part of libs3.
@@ -37,6 +37,7 @@ extern "C" {
 
 
 /** **************************************************************************
+ * @mainpage
  * Overview
  * --------
  *
@@ -49,9 +50,11 @@ extern "C" {
  *     - HTTP
  *     - XML
  *     - SSL
+ *
  *   In other words, this API is meant to stand on its own, without requiring
  *   any implicit knowledge of how S3 services are accessed using HTTP
  *   protocols.
+ *
  * - To be usable from multithreaded code
  * - To be usable by code which wants to process multiple S3 requests
  *   simultaneously from a single thread
@@ -1338,7 +1341,7 @@ typedef struct S3AbortMultipartUploadHandler
  *        all necessary initialization; however, be warned that things may
  *        break if your application re-initializes the dependent libraries
  *        later.
- * @param defaultS3Hostname is a string the specifies the default S3 server
+ * @param defaultS3HostName is a string the specifies the default S3 server
  *        hostname to use when making S3 requests; this value is used
  *        whenever the hostName of an S3BucketContext is NULL.  If NULL is
  *        passed here then the default of S3_DEFAULT_HOSTNAME will be used.
@@ -1499,7 +1502,7 @@ void S3_destroy_request_context(S3RequestContext *requestContext);
  * @param requestContext is the S3RequestContext to run until all requests
  *            within it have completed or until an error occurs
  * @return One of:
- *         S3Status if all requests were successfully run to completion
+ *         S3StatusOK if all requests were successfully run to completion
  *         S3StatusInternalError if an internal error prevented the
  *             S3RequestContext from running one or more requests
  *         S3StatusOutOfMemory if requests could not be run to completion
@@ -1628,7 +1631,7 @@ S3Status S3_generate_authenticated_query_string
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
- * @param token gives the security token used to generate the Temporary 
+ * @param securityToken gives the security token used to generate the Temporary 
  *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
@@ -1660,7 +1663,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
- * @param token gives the security token used to generate the Temporary 
+ * @param securityToken gives the security token used to generate the Temporary 
  *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
@@ -1699,7 +1702,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
- * @param token gives the security token used to generate the Temporary 
+ * @param securityToken gives the security token used to generate the Temporary 
  *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
@@ -1733,7 +1736,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  *        buckets
  * @param secretAccessKey gives the Amazon Secret Access Key for which to list
  *        owned buckets
- * @param token gives the security token used to generate the Temporary 
+ * @param securityToken gives the security token used to generate the Temporary 
  *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
@@ -2142,7 +2145,7 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param upload_id get from S3_initiate_multipart return 
- * @param ContentLength gives the total size of the commit message, in bytes 
+ * @param contentLength gives the total size of the commit message, in bytes 
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -2169,7 +2172,6 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
  * @param partnumbermarker Specifies the part after which listing should begin. 
  *        Only parts with higher part numbers will be listed.
  * @param uploadid identifying the multipart upload whose parts are being listed. 
- * @param upload_id get from S3_initiate_multipart return 
  * @param encodingtype Requests Amazon S3 to encode the response and specifies 
  *        the encoding method to use.
  * @param maxparts Sets the maximum number of parts to return in the response 
@@ -2199,7 +2201,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
  *        request; this is the bucket for which service access logging is
  *        being set
  * @param key is the source key
- * @param uploadid identifying the multipart upload whose parts are being listed. 
+ * @param uploadId identifying the multipart upload whose parts are being listed. 
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  **/
@@ -2217,12 +2219,12 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char* key,
  * @param bucketContext gives the bucket and associated parameters for this
  *        request; this is the bucket for which service access logging is
  *        being set
- * @param Lists in-progress uploads only for those keys that begin with 
+ * @param prefix Lists in-progress uploads only for those keys that begin with 
  *        the specified prefix. 
- * @param Together with upload-id-marker, this parameter specifies the 
- *        multipart upload after which listing should begin.
- * @param Together with key-marker, specifies the multipart upload 
- *        after which listing should begin. 
+ * @param keymarker Together with upload-id-marker, this parameter specifies
+ *        the multipart upload after which listing should begin.
+ * @param uploadidmarker Together with key-marker, specifies the multipart
+ *        upload after which listing should begin. 
  * @param encodingtype Requests Amazon S3 to encode the response and specifies 
  *        the encoding method to use.
  * @param delimiter Character you use to group keys.  
