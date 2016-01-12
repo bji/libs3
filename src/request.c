@@ -37,6 +37,7 @@
 
 #define USER_AGENT_SIZE 256
 #define REQUEST_STACK_SIZE 32
+static int verifyPeer;
 
 static char userAgentG[USER_AGENT_SIZE];
 
@@ -861,10 +862,9 @@ static S3Status setup_curl(Request *request,
     // Don't use Curl's 'netrc' feature
     curl_easy_setopt_safe(CURLOPT_NETRC, CURL_NETRC_IGNORED);
 
-    // Don't verify S3's certificate, there are known to be issues with
-    // them sometimes
-    // xxx todo - support an option for verifying the S3 CA (default false)
-    curl_easy_setopt_safe(CURLOPT_SSL_VERIFYPEER, 0);
+    // Don't verify S3's certificate unless S3_INIT_VERIFY_PEER is set.
+    // The request_context may be set to override this
+    curl_easy_setopt_safe(CURLOPT_SSL_VERIFYPEER, verifyPeer);
 
     // Follow any redirection directives that S3 sends
     curl_easy_setopt_safe(CURLOPT_FOLLOWLOCATION, 1);
@@ -1091,6 +1091,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
         != CURLE_OK) {
         return S3StatusInternalError;
     }
+    verifyPeer = (flags & S3_INIT_VERIFY_PEER) != 0;
 
     if (!defaultHostName) {
         defaultHostName = S3_DEFAULT_HOSTNAME;
@@ -1195,6 +1196,12 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
 
     // If a RequestContext was provided, add the request to the curl multi
     if (context) {
+        if (context->verifyPeerSet) {
+            CURLcode curlstatus;
+            if ((curlstatus = curl_easy_setopt(request->curl, CURLOPT_SSL_VERIFYPEER, context->verifyPeer)) != CURLE_OK) {
+                return_status(S3StatusFailedToInitializeRequest);
+            }
+        }
         CURLMcode code = curl_multi_add_handle(context->curlm, request->curl);
         if (code == CURLM_OK) {
             if (context->requests) {

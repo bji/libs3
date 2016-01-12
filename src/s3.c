@@ -63,6 +63,7 @@ static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
+static int verifyPeerG = 0;
 
 
 // Environment variables, saved as globals ----------------------------------
@@ -164,7 +165,7 @@ static void S3_init()
     S3Status status;
     const char *hostname = getenv("S3_HOSTNAME");
     
-    if ((status = S3_initialize("s3", S3_INIT_ALL, hostname))
+    if ((status = S3_initialize("s3", verifyPeerG|S3_INIT_ALL, hostname))
         != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
                 S3_get_status_name(status));
@@ -199,6 +200,7 @@ static void usageExit(FILE *out)
 "   -s/--show-properties : show response properties on stdout\n"
 "   -r/--retries         : retry retryable failures this number of times\n"
 "                          (default is 5)\n"
+"   -v/--verify-peer     : verify peer SSL certificate (default is no)\n"
 "\n"
 "   Environment:\n"
 "\n"
@@ -739,6 +741,7 @@ static struct option longOptionsG[] =
     { "unencrypted",          no_argument,        0,  'u' },
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
+    { "verify-peer",          no_argument,        0,  'v' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -3543,7 +3546,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "fhusr:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3571,6 +3574,9 @@ int main(int argc, char **argv)
                 retriesG += *v - '0';
                 v++;
             }
+            break;
+        case 'v':
+            verifyPeerG = S3_INIT_VERIFY_PEER;
             break;
         }
         default:
