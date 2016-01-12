@@ -740,28 +740,28 @@ static S3Status listPartsXmlCallback(const char *elementPath,
     ListPartsData *lpData = (ListPartsData *) callbackData;
     int fit;
     if (data) {
-        if (!strcmp(elementPath, "ListMultipartUploadResult/IsTruncated")) {
+        if (!strcmp(elementPath, "ListPartsResult/IsTruncated")) {
             string_buffer_append(lpData->isTruncated, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/NextPartNumberMarker")) {
+        else if (!strcmp(elementPath, "ListPartsResult/NextPartNumberMarker")) {
             string_buffer_append(lpData->nextPartNumberMarker, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/StorageClass")) {
+        else if (!strcmp(elementPath, "ListPartsResult/StorageClass")) {
             string_buffer_append(lpData->storageClass, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Initiator/ID")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Initiator/ID")) {
             string_buffer_append(lpData->initiatorId, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Initiator/DisplayName")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Initiator/DisplayName")) {
             string_buffer_append(lpData->initiatorDisplayName, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Owner/ID")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Owner/ID")) {
             string_buffer_append(lpData->ownerId, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Owner/DisplayName")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Owner/DisplayName")) {
             string_buffer_append(lpData->ownerDisplayName, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Part/PartNumber")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Part/PartNumber")) {
             ListPart *parts = 
                 &(lpData->parts[lpData->partsCount]);
             string_buffer_append(parts->partNumber, data, dataLen, fit);
@@ -769,17 +769,17 @@ static S3Status listPartsXmlCallback(const char *elementPath,
 
         }
         else if (!strcmp(elementPath, 
-                         "ListMultipartUploadResult/Part/LastModified")) {
+                         "ListPartsResult/Part/LastModified")) {
             ListPart *parts = 
                 &(lpData->parts[lpData->partsCount]);
             string_buffer_append(parts->lastModified, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Part/ETag")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Part/ETag")) {
             ListPart *parts = 
                 &(lpData->parts[lpData->partsCount]);
             string_buffer_append(parts->eTag, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListMultipartUploadResult/Part/Size")) {
+        else if (!strcmp(elementPath, "ListPartsResult/Part/Size")) {
             ListPart *parts = 
                 &(lpData->parts[lpData->partsCount]);
             string_buffer_append(parts->size, data, dataLen, fit);
@@ -787,7 +787,7 @@ static S3Status listPartsXmlCallback(const char *elementPath,
         
     }
     else {
-        if (!strcmp(elementPath, "ListMultipartUploadResult/Part")) {
+        if (!strcmp(elementPath, "ListPartsResult/Part")) {
             // Finished a Contents
             lpData->partsCount++;
             if (lpData->partsCount == MAX_PARTS) {
