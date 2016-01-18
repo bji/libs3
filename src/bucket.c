@@ -677,13 +677,13 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
 
 
     int amp = 0;
-    if (prefix) {
+    if (prefix && *prefix) {
         safe_append("prefix", prefix);
     }
-    if (marker) {
+    if (marker && *marker) {
         safe_append("marker", marker);
     }
-    if (delimiter) {
+    if (delimiter && *delimiter) {
         safe_append("delimiter", delimiter);
     }
     if (maxkeys) {
