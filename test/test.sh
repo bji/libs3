@@ -226,10 +226,49 @@ ok "Check multipart file upload (>15MB)" "
         || myfail=\$((\$myfail + 1));
     diff mpfile mpfile.get
         || myfail=\$((\$myfail + 1));
-    rm -f mpfile mpfile.get
+    rm -f mpfile.get;
+    return \$myfail;
+"
+ok "Remove the test file" "$S3_COMMAND delete $TEST_BUCKET/mpfile"
+
+ok "Interrupt and resume multipart upload (>15MB)" "
+    rm -f test.pid;
+    myfail=0;
+    ($S3_COMMAND put $TEST_BUCKET/mpfile filename=mpfile& pid=\$!; echo \$pid > test.pid; wait \$pid) | 
+    while read line; do
+        echo \"\$line\";
+        if expr \"\$line\" : \"Sending Part Seq 2\" > /dev/null; then 
+            while [ ! -s test.pid ]; do 
+                : ; \
+            done; \
+            kill \$(cat test.pid); 
+	    break; 
+        fi; 
+    done;
+    upload_id=\"\$(
+            $S3_COMMAND listmultiparts $TEST_BUCKET | \
+            awk '/Key:/ { key=\$2 }
+                 key ~ 'mpfile' && /UploadId:/ { print \$2; exit }'
+            )\";
+    echo \"upload_id=\$upload_id\" 1>&2 ;
+    if [ -n \"\$upload_id\" ]; then
+        echo \"Resuming upload\";
+        $S3_COMMAND put $TEST_BUCKET/mpfile upload-id=\$upload_id filename=mpfile \
+            || myfail=\$((\$myfail + 1));
+        echo \"Fetching file\";
+        $S3_COMMAND get $TEST_BUCKET/mpfile filename=mpfile.get \
+            || myfail=\$((\$myfail + 1));
+        echo \"comparing with original\";
+        diff mpfile mpfile.get || myfail=\$((\$myfail + 1)) \
+            || myfail=\$((\$myfail + 1));
+    else
+        myfail=\$((\$myfail + 1));
+    fi;
+    rm -f mpfile mpfile.get test.pid;
+    return \$myfail;
 "
 
-ok "Remove the test file" "$S3_COMMAND delete $TEST_BUCKET/mpfile"
+ok "Remove the new test file" "$S3_COMMAND delete $TEST_BUCKET/mpfile"
 
 ok "Remove the test bucket" "$S3_COMMAND delete $TEST_BUCKET"
 
