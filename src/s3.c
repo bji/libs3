@@ -2450,6 +2450,7 @@ static void put_object(int argc, char **argv, int optindex)
         }
 
 upload: 
+        todoContentLength -= MULTIPART_CHUNK_SIZE * manager.next_etags_pos;
         for(seq = manager.next_etags_pos+1 ; seq <= totalSeq ; seq ++) {
             memset(&partData, 0, sizeof(MultipartPartData));
             partData.manager = &manager;
