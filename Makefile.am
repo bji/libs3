@@ -17,7 +17,13 @@ EXTRA_DIST = \
 	libs3.spec \
 	mswin/libs3.def \
 	mswin/rmrf.bat \
-        test/test.sh
+        test/test.sh \
+        test/testsimplexml.sh \
+	test/badxml_01.xml \
+	test/goodxml_01.xml \
+	test/goodxml_02.xml \
+	test/goodxml_03.xml
+	
 
 AM_CPPFLAGS = -I$(srcdir)/inc \
           $(CURL_CFLAGS) $(XML_CPPFLAGS) \
@@ -69,13 +75,18 @@ libs3_la_SOURCES += \
 endif
 
 libs3_la_LDFLAGS = -no-undefined \
-        -version-info ${LIBS3_VER_MAJOR}:${LIBS3_VER_MINOR}:0 \
+        -version-info 0:1:0 \
 	$(AM_LDFLAGS)
 
 s3_SOURCES = src/s3.c
 s3_LDADD = libs3.la $(AM_LDFLAGS)
 
-TESTS = test/test.sh
+check_PROGRAMS = testsimplexml
+testsimplexml_SOURCES = src/testsimplexml.c
+testsimplexml_LDADD = libs3.la $(AM_LDFLAGS)
+
+TESTS = test/test.sh test/testsimplexml.sh
+TESTS_ENVIRONMENT = export PATH="$(abs_builddir):$${PATH}"; export top_srcdir="${top_srcdir}";
 
 if DOXYGEN
 doc: doc-stamp

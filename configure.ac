@@ -1,0 +1,31 @@
+AC_INIT([libs3], [2.0], [https://github.com/bji/libs3])
+AC_CONFIG_AUX_DIR([build-aux])
+AM_INIT_AUTOMAKE([1.11 foreign subdir-objects])
+AC_CONFIG_MACRO_DIRS([m4])
+LT_INIT([win32-dll])
+
+AC_CANONICAL_HOST
+
+LIBS3_VER_MAJOR=2
+LIBS3_VER_MINOR=0
+LIBS3_VER="$LIBS3_VER_MAJOR.$LIBS3_VER_MINOR"
+
+AC_SUBST(LIBS3_VER_MAJOR)
+AC_SUBST(LIBS3_VER_MINOR)
+AC_SUBST(LIBS3_VER)
+
+AM_PROG_CC_C_O
+AC_PROG_CC_C99
+
+AC_PATH_PROG([DOXYGEN], [doxygen], [no])
+AM_CONDITIONAL([DOXYGEN], [test "x$DOXYGEN" != "xno"])
+AM_CONDITIONAL([MINGW], [expr $host_os : 'mingw.*' > /dev/null])
+
+AM_PATH_XML2
+LIBCURL_CHECK_CONFIG
+
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
+
+AC_CONFIG_FILES([Makefile libs3.pc])
+
+AC_OUTPUT
