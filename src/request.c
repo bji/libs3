@@ -365,7 +365,8 @@ static S3Status compose_amz_headers(const RequestParams *params,
 
     // Add the x-amz-security-token header if necessary
     if (params->bucketContext.securityToken) {
-        headers_append(1, "x-amz-security-token: %s", params->bucketContext.securityToken);
+        headers_append(1, "x-amz-security-token: %s",
+                       params->bucketContext.securityToken);
     }
 
     return S3StatusOK;
@@ -442,8 +443,9 @@ static S3Status compose_standard_headers(const RequestParams *params,
         const char *requestHostName = params->bucketContext.hostName
                 ? params->bucketContext.hostName : defaultHostNameG;
 
-        size_t len = snprintf(values->hostHeader, sizeof(values->hostHeader), "Host: %s.%s",
-                        params->bucketContext.bucketName, requestHostName);
+        size_t len = snprintf(values->hostHeader, sizeof(values->hostHeader),
+                              "Host: %s.%s", params->bucketContext.bucketName,
+                              requestHostName);
         if (len >= sizeof(values->hostHeader)) {
             return S3StatusUriTooLong;
         }
@@ -916,7 +918,8 @@ static S3Status setup_curl(Request *request,
     }
 
     // Would use CURLOPT_INFILESIZE_LARGE, but it is buggy in libcurl
-    if (params->httpRequestType == HttpRequestTypePUT || params->httpRequestType == HttpRequestTypePOST) {
+    if ((params->httpRequestType == HttpRequestTypePUT) ||
+        (params->httpRequestType == HttpRequestTypePOST)) {
         char header[256];
         snprintf(header, sizeof(header), "Content-Length: %llu",
                  (unsigned long long) params->toS3CallbackTotalSize);
@@ -1224,7 +1227,10 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     }
     // Allow per-context override of verifyPeer
     if (verifyPeerRequest != verifyPeer) {
-            if ((curlstatus = curl_easy_setopt(request->curl, CURLOPT_SSL_VERIFYPEER, context->verifyPeer)) != CURLE_OK) {
+            if ((curlstatus = curl_easy_setopt(request->curl, 
+                                               CURLOPT_SSL_VERIFYPEER, 
+                                               context->verifyPeer))
+                != CURLE_OK) {
                 return_status(S3StatusFailedToInitializeRequest);
             }
     }
