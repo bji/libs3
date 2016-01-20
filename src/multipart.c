@@ -862,19 +862,19 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext, const char *prefi
     
     
         int amp = 0;
-        if (prefix) {
+        if (prefix && *prefix) {
             safe_append("prefix", prefix);
         }
-        if (keymarker) {
+        if (keymarker && *keymarker) {
             safe_append("key-marker", keymarker);
         }
-        if (delimiter) {
+        if (delimiter && *delimiter) {
             safe_append("delimiter", delimiter);
         }
-        if (uploadidmarker) {
+        if (uploadidmarker && *uploadidmarker) {
             safe_append("upload-id-marker", uploadidmarker);
         }
-        if (encodingtype) {
+        if (encodingtype && *encodingtype) {
             safe_append("encoding-type", encodingtype);
         }
         if (maxuploads) {
@@ -991,10 +991,10 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
         snprintf(subResource, 512, "uploadId=%s", uploadid);   
         int amp = 0;
 
-        if (partnumbermarker) {
+        if (partnumbermarker && *partnumbermarker) {
             safe_append("part-number-marker", partnumbermarker);
         }
-        if (encodingtype) {
+        if (encodingtype && *encodingtype) {
             safe_append("encoding-type", encodingtype);
         }
         if (maxparts) {
