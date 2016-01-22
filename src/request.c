@@ -346,7 +346,8 @@ static S3Status compose_amz_headers(const RequestParams *params,
     // Add the x-amz-date header
     time_t now = time(NULL);
     char date[64];
-    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
+    struct tm gmt;
+    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", gmtime_r(&now, &gmt));
     headers_append(1, "x-amz-date: %s", date);
 
     if (params->httpRequestType == HttpRequestTypeCOPY) {
@@ -481,8 +482,9 @@ static S3Status compose_standard_headers(const RequestParams *params,
     // Expires
     if (params->putProperties && (params->putProperties->expires >= 0)) {
         time_t t = (time_t) params->putProperties->expires;
+        struct tm gmt;
         strftime(values->expiresHeader, sizeof(values->expiresHeader),
-                 "Expires: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
+                 "Expires: %a, %d %b %Y %H:%M:%S UTC", gmtime_r(&t, &gmt));
     }
     else {
         values->expiresHeader[0] = 0;
@@ -492,9 +494,10 @@ static S3Status compose_standard_headers(const RequestParams *params,
     if (params->getConditions &&
         (params->getConditions->ifModifiedSince >= 0)) {
         time_t t = (time_t) params->getConditions->ifModifiedSince;
+        struct tm gmt;
         strftime(values->ifModifiedSinceHeader,
                  sizeof(values->ifModifiedSinceHeader),
-                 "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
+                 "If-Modified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime_r(&t, &gmt));
     }
     else {
         values->ifModifiedSinceHeader[0] = 0;
@@ -504,9 +507,10 @@ static S3Status compose_standard_headers(const RequestParams *params,
     if (params->getConditions &&
         (params->getConditions->ifNotModifiedSince >= 0)) {
         time_t t = (time_t) params->getConditions->ifNotModifiedSince;
+        struct tm gmt;
         strftime(values->ifUnmodifiedSinceHeader,
                  sizeof(values->ifUnmodifiedSinceHeader),
-                 "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime(&t));
+                 "If-Unmodified-Since: %a, %d %b %Y %H:%M:%S UTC", gmtime_r(&t, &gmt));
     }
     else {
         values->ifUnmodifiedSinceHeader[0] = 0;
