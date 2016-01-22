@@ -32,6 +32,9 @@
 struct S3RequestContext
 {
     CURLM *curlm;
+    
+    int verifyPeerSet;
+    long verifyPeer;
 
     struct Request *requests;
 };

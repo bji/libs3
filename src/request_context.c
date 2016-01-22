@@ -46,6 +46,8 @@ S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
     }
 
     (*requestContextReturn)->requests = 0;
+    (*requestContextReturn)->verifyPeer = 0;
+    (*requestContextReturn)->verifyPeerSet = 0;
 
     return S3StatusOK;
 }
@@ -187,4 +189,11 @@ int64_t S3_get_request_context_timeout(S3RequestContext *requestContext)
     }
     
     return timeout;
+}
+
+void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
+                                        int verifyPeer)
+{
+    requestContext->verifyPeerSet = 1;
+    requestContext->verifyPeer = (verifyPeer != 0);
 }

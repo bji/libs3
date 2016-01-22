@@ -211,6 +211,14 @@ extern "C" {
  * Microsoft Windows platforms.
  **/
 #define S3_INIT_WINSOCK                    1
+/**
+ * This constant is used by the S3_initialize() function, to enable peer SSL
+ * certificate by default for all requests.  If this is not set in the
+ * flags passed to S3_initialize(), then the SSL certificate of the peer
+ * will NOT be verified by default (but can still be enabled on a per request
+ * basis by calling S3_set_request_context_verify_peer).
+ */
+#define S3_INIT_VERIFY_PEER                2
 
 
 /**
@@ -1115,35 +1123,107 @@ typedef S3Status (S3GetObjectDataCallback)(int bufferSize, const char *buffer,
                                            void *callbackData);
                                        
 
+/**
+ * This callback is made after initiation of a multipart upload operation.  It
+ * indicates that the multi part upload has been created and provides the
+ * id that can be used to associate multi upload parts with the multi upload
+ * operation
+ *
+ * @param upload_id is the unique identifier if this multi part upload
+ *        operation, to be used in calls to S3_upload_part and
+ *        S3_complete_multipart_upload
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
+ **/
+typedef S3Status (S3MultipartInitialResponseCallback)(const char *upload_id,
+                                                      void *callbackData);
 
-typedef S3Status (S3MultipartCommitResponseCallback)(const char * location, const char * etag, void * callbackData);
+
+/**
+ * This callback is made after completion of a part of a multipart upload
+ * operation.  It is a status callback indicating that the multipart upload is
+ * in progress and that some sub-set of the parts have completed upload.  The
+ * multipart upload is not considered fully complete in total until the commit
+ * response callback is made.
+ *
+ * @param isTruncated is ??? someone document this please
+ * @param nextKeyMarker is ??? someone document this please
+ * @param nextUploadIdMarker is ??? someone document this please
+ * @param uploadsCount is the number of elements in the [uploads] array
+ * @param uploads is an array of ??? someone document this please
+ * @param commonPrefixesCount is the number of elements in the
+ *        [commonPrefixes] array
+ * @param commonPrefixes is ??? someone document this please
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
+ **/
+typedef S3Status (S3ListMultipartUploadsResponseCallback)
+    (int isTruncated, const char *nextKeyMarker,
+     const char *nextUploadIdMarker, int uploadsCount, 
+     const S3ListMultipartUpload *uploads, int commonPrefixesCount,
+     const char **commonPrefixes, void *callbackData);
 
 
+/**
+ * This callback is made with the result of a succesful "list parts" request
+ * to list the parts of a multi part upload (in progress???).
+ *
+ * @param isTruncated is ??? someone document this please
+ * @param nextPartNumberMarker is ??? someone document this please
+ * @param intiatorId is ??? someone document this please
+ * @param initiatorDisplayName is ??? someone document this please
+ * @param ownerId is ??? someone document this please
+ * @param ownerDisplayName is ??? someone document this please
+ * @param storageClass is ??? someone document this please
+ * @param partsCount is ??? someone document this please
+ * @param lastPartNumber is ??? someone document this please
+ * @param parts is ??? someone document this please
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
+ **/
+typedef S3Status (S3ListPartsResponseCallback)
+    (int isTruncated, const char *nextPartNumberMarker,
+     const char *initiatorId, const char *initiatorDisplayName,
+     const char *ownerId, const char *ownerDisplayName,
+     const char *storageClass, int partsCount, int lastPartNumber,
+     const S3ListPart *parts, void *callbackData);
 
-typedef S3Status (S3MultipartInitialResponseCallback)(const char * upload_id, void * callbackData);
 
+/**
+ * This callback is made after commit of a multipart upload operation.  It
+ * indicates that the data uploaded via the multipart upload operation has
+ * been committed.
+ *
+ * @param location is ??? someone please document this
+ * @param etag is the S3 etag of the complete object after the multipart
+ *        upload
+ * @param callbackData is the callback data as specified when the request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
+ **/
+typedef S3Status (S3MultipartCommitResponseCallback)(const char *location,
+                                                     const char *etag,
+                                                     void *callbackData);
 
-typedef S3Status (S3ListMultipartUploadsResponseCallback)(int isTruncated,
-                                        const char *nextKeyMarker,
-                                        const char *nextUploadIdMarker,
-                                        int uploadsCount, 
-                                        const S3ListMultipartUpload *uploads,
-                                        int commonPrefixesCount,
-                                        const char **commonPrefixes,
-                                        void *callbackData);
-
-
-typedef S3Status (S3ListPartsResponseCallback)(int isTruncated,
-                                        const char *nextPartNumberMarker,
-                                        const char *initiatorId,
-                                        const char *initiatorDisplayName,
-                                        const char *ownerId,
-                                        const char *ownerDisplayName,
-                                        const char *storageClass,
-                                        int partsCount,
-                                        int lastPartNumber,
-                                        const S3ListPart *parts,
-                                        void *callbackData);
 
 /** **************************************************************************
  * Callback Structures
@@ -1395,6 +1475,10 @@ const char *S3_get_status_name(S3Status status);
  *        It is advisable to always use S3UriStyleVirtuallHost.
  * @return One of:
  *         S3StatusOK if the bucket name was validates successfully
+ *         S3StatusConnectionFailed if the socket connection to the server
+ *             failed
+ *         S3StatusServerFailedVerification if the SSL certificate of the
+ *             server could not be verified.
  *         S3StatusInvalidBucketNameTooLong if the bucket name exceeded the
  *             length limitation for the URI style, which is 255 bytes for
  *             path style URIs and 63 bytes for virtual host type URIs
@@ -1503,6 +1587,10 @@ void S3_destroy_request_context(S3RequestContext *requestContext);
  *            within it have completed or until an error occurs
  * @return One of:
  *         S3StatusOK if all requests were successfully run to completion
+ *         S3StatusConnectionFailed if the socket connection to the server
+ *             failed
+ *         S3StatusServerFailedVerification if the SSL certificate of the
+ *             server could not be verified.
  *         S3StatusInternalError if an internal error prevented the
  *             S3RequestContext from running one or more requests
  *         S3StatusOutOfMemory if requests could not be run to completion
@@ -1524,6 +1612,10 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext);
  *            function returns.
  * @return One of:
  *         S3StatusOK if request processing proceeded without error
+ *         S3StatusConnectionFailed if the socket connection to the server
+ *             failed
+ *         S3StatusServerFailedVerification if the SSL certificate of the
+ *             server could not be verified.
  *         S3StatusInternalError if an internal error prevented the
  *             S3RequestContext from running one or more requests
  *         S3StatusOutOfMemory if requests could not be processed due to
@@ -1583,6 +1675,19 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
  *         could wait a shorter time if they wish, but not longer.
  **/
 int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
+
+/**
+ * This function enables SSL peer certificate verification on a per-request
+ * context basis. If this is called, the context's value of verifyPeer will
+ * be used when processing requests. Otherwise, the default set by the
+ * flags to S3_initialize() are used.
+ *
+ * @param requestContext the S3RequestContext to set the verifyPeer flag on.
+ * @param verifyPeer a boolean value indicating whether to verify the peer
+ *        certificate or not.
+ */
+void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
+                                        int verifyPeer);
 
 
 /** **************************************************************************
@@ -1761,12 +1866,12 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *
  * @param bucketContext gives the bucket and associated parameters for this
  *        request
- * @param prefix if present, gives a prefix for matching keys
- * @param marker if present, only keys occuring after this value will be
- *        listed
- * @param delimiter if present, causes keys that contain the same string
- *        between the prefix and the first occurrence of the delimiter to be
- *        rolled up into a single result element
+ * @param prefix if present and non-empty, gives a prefix for matching keys
+ * @param marker if present and non-empty, only keys occuring after this value
+ *        will be listed
+ * @param delimiter if present and non-empty, causes keys that contain the
+ *        same string between the prefix and the first occurrence of the
+ *        delimiter to be rolled up into a single result element
  * @param maxkeys is the maximum number of keys to return
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
@@ -2099,11 +2204,11 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key, 
-                                    S3PutProperties *putProperties,
-                                    S3MultipartInitialHandler *handler,
-                                    S3RequestContext *requestContext,
-                                    void *callbackData); 
+void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
+                           S3PutProperties *putProperties,
+                           S3MultipartInitialHandler *handler,
+                           S3RequestContext *requestContext,
+                           void *callbackData);
 
 
 /**
@@ -2127,11 +2232,11 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_upload_part(S3BucketContext *bucketContext, const char *key, 
-                            S3PutProperties * putProperties, S3PutObjectHandler *handler, 
-                            int seq, const char *upload_id, int partContentLength, 
-                            S3RequestContext *requestContext,
-                            void *callbackData);
+void S3_upload_part(S3BucketContext *bucketContext, const char *key,
+                    S3PutProperties * putProperties,
+                    S3PutObjectHandler *handler,
+                    int seq, const char *upload_id, int partContentLength,
+                    S3RequestContext *requestContext, void *callbackData);
 
 
 /**
@@ -2153,12 +2258,12 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
  *        all callbacks for this request
  **/
 void S3_complete_multipart_upload(S3BucketContext *bucketContext, 
-                                    const char *key, 
-                                    S3MultipartCommitHandler *handler, 
-                                    const char *upload_id, 
-                                    int contentLength, 
-                                    S3RequestContext *requestContext,
-                                    void *callbackData);
+                                  const char *key,
+                                  S3MultipartCommitHandler *handler,
+                                  const char *upload_id,
+                                  int contentLength,
+                                  S3RequestContext *requestContext,
+                                  void *callbackData);
 
 
 /**
@@ -2169,11 +2274,13 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
  *        request; this is the bucket for which service access logging is
  *        being set
  * @param key is the source key
- * @param partnumbermarker Specifies the part after which listing should begin. 
- *        Only parts with higher part numbers will be listed.
- * @param uploadid identifying the multipart upload whose parts are being listed. 
- * @param encodingtype Requests Amazon S3 to encode the response and specifies 
- *        the encoding method to use.
+ * @param partnumbermarker if present and non-empty, specifies the part after
+ *        which listing should begin.  Only parts with higher part numbers
+ *        will be listed.
+ * @param uploadid identifying the multipart upload whose parts are being
+ *        listed. 
+ * @param encodingtype if present and non-empty, requests Amazon S3 to encode
+ *        the response and specifies the encoding method to use.
  * @param maxparts Sets the maximum number of parts to return in the response 
  *        body. Default: 1,000
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
@@ -2185,12 +2292,10 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
  *        all callbacks for this request
  **/
 void S3_list_parts(S3BucketContext *bucketContext, const char *key,
-                               const char *partnumbermarker, const char *uploadid,
-                               const char *encodingtype, 
-                               int maxparts,
-                               S3RequestContext *requestContext,
-                               const S3ListPartsHandler *handler,
-                               void *callbackData);
+                   const char *partnumbermarker,
+                   const char *uploadid, const char *encodingtype, 
+                   int maxparts, S3RequestContext *requestContext,
+                   const S3ListPartsHandler *handler, void *callbackData);
 
 
 /**
@@ -2201,13 +2306,14 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
  *        request; this is the bucket for which service access logging is
  *        being set
  * @param key is the source key
- * @param uploadId identifying the multipart upload whose parts are being listed. 
+ * @param uploadId identifying the multipart upload whose parts are being
+ *        listed. 
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  **/
-void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char* key,
-                                              const char *uploadId,
-                                              S3AbortMultipartUploadHandler* handler) ;
+void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
+                               const char *uploadId,
+                               S3AbortMultipartUploadHandler *handler);
 
 
 /**
@@ -2219,16 +2325,18 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char* key,
  * @param bucketContext gives the bucket and associated parameters for this
  *        request; this is the bucket for which service access logging is
  *        being set
- * @param prefix Lists in-progress uploads only for those keys that begin with 
- *        the specified prefix. 
- * @param keymarker Together with upload-id-marker, this parameter specifies
- *        the multipart upload after which listing should begin.
- * @param uploadidmarker Together with key-marker, specifies the multipart
- *        upload after which listing should begin. 
- * @param encodingtype Requests Amazon S3 to encode the response and specifies 
- *        the encoding method to use.
- * @param delimiter Character you use to group keys.  
- * @param maxuploads Sets the maximum number of multipart uploads, 
+ * @param prefix if present and non-empty, lists in-progress uploads only for
+ *        those keys that begin with the specified prefix.
+ * @param keymarker if present and non-empty, together with upload-id-marker,
+ *        this parameter specifies the multipart upload after which listing
+ *        should begin.
+ * @param uploadidmarker if present and non-empty, together with key-marker,
+ *        specifies the multipart upload after which listing should begin.
+ * @param encodingtype if present and non-empty, requests Amazon S3 to encode
+ *        the response and specifies the encoding method to use.
+ * @param delimiter if present and non-empty, is the character you use to
+ *        group keys.  
+ * @param maxuploads sets the maximum number of multipart uploads, 
  *        from 1 to 1,000, to return in the response body. 
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
@@ -2239,12 +2347,10 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char* key,
  *        all callbacks for this request
  **/                          
 void S3_list_multipart_uploads(S3BucketContext *bucketContext, 
-                               const char *prefix,
-                               const char *keymarker, const char *uploadidmarker,
-                               const char *encodingtype,
-                               const char *delimiter, 
-                               int maxuploads,
-                               S3RequestContext *requestContext,
+                               const char *prefix, const char *keymarker,
+                               const char *uploadidmarker,
+                               const char *encodingtype, const char *delimiter, 
+                               int maxuploads, S3RequestContext *requestContext,
                                const S3ListMultipartUploadsHandler *handler,
                                void *callbackData);
 
