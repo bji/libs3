@@ -191,7 +191,8 @@ int64_t S3_get_request_context_timeout(S3RequestContext *requestContext)
     return timeout;
 }
 
-void S3_set_request_context_verify_peer(S3RequestContext *requestContext, int verifyPeer)
+void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
+                                        int verifyPeer)
 {
     requestContext->verifyPeerSet = 1;
     requestContext->verifyPeer = (verifyPeer != 0);
