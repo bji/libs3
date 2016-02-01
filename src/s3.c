@@ -1988,6 +1988,7 @@ typedef struct put_object_callback_data
     FILE *infile;
     growbuffer *gb;
     uint64_t contentLength, originalContentLength;
+    uint64_t totalContentLength, totalOriginalContentLength;
     int noStatus;
 } put_object_callback_data;
 
@@ -2012,16 +2013,17 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     }
 
     data->contentLength -= ret;
+    data->totalContentLength -= ret;
 
     if (data->contentLength && !data->noStatus) {
         // Avoid a weird bug in MingW, which won't print the second integer
         // value properly when it's in the same call, so print separately
         printf("%llu bytes remaining ", 
-               (unsigned long long) data->contentLength);
+               (unsigned long long) data->totalContentLength);
         printf("(%d%% complete) ...\n",
-               (int) (((data->originalContentLength - 
-                        data->contentLength) * 100) /
-                      data->originalContentLength));
+               (int) (((data->totalOriginalContentLength - 
+                        data->totalContentLength) * 100) /
+                      data->totalOriginalContentLength));
     }
 
     return ret;
@@ -2324,7 +2326,11 @@ static void put_object(int argc, char **argv, int optindex)
         }
     }
 
-    data.contentLength = data.originalContentLength = contentLength;
+    data.totalContentLength =
+    data.totalOriginalContentLength = 
+    data.contentLength =
+    data.originalContentLength =
+            contentLength;
 
     S3_init();
     
@@ -2381,7 +2387,8 @@ static void put_object(int argc, char **argv, int optindex)
         }
     }
     else {
-        
+        uint64_t totalContentLength = contentLength;
+        uint64_t todoContentLength = contentLength;
         UploadManager manager;
         manager.upload_id = 0;
         manager.gb = 0;
@@ -2440,6 +2447,7 @@ static void put_object(int argc, char **argv, int optindex)
         }
 
 upload: 
+        todoContentLength -= MULTIPART_CHUNK_SIZE * manager.next_etags_pos;
         for (seq = manager.next_etags_pos + 1; seq <= totalSeq; seq++) {
             memset(&partData, 0, sizeof(MultipartPartData));
             partData.manager = &manager;
@@ -2449,6 +2457,9 @@ upload:
                                  MULTIPART_CHUNK_SIZE : contentLength);
             printf("Sending Part Seq %d, length=%d\n", seq, partContentLength);
             partData.put_object_data.contentLength = partContentLength;
+            partData.put_object_data.originalContentLength = partContentLength;
+            partData.put_object_data.totalContentLength = todoContentLength;
+            partData.put_object_data.totalOriginalContentLength = totalContentLength;
             putProperties.md5 = 0;
             do {
                 S3_upload_part(&bucketContext, key, &putProperties,
@@ -2460,6 +2471,7 @@ upload:
                 goto clean;
             }
             contentLength -= MULTIPART_CHUNK_SIZE;
+            todoContentLength -= MULTIPART_CHUNK_SIZE;
         }
        
         int i;
