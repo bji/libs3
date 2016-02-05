@@ -39,12 +39,12 @@ if !MINGW
 AM_LDFLAGS += -lpthread
 endif
 
-include_HEADERS = inc/libs3.h
-lib_LTLIBRARIES = libs3.la
+include_HEADERS = inc/libs3.h inc/rgadmin.h
+lib_LTLIBRARIES = libs3.la librgadmin.la
 bin_PROGRAMS = s3
 
 pkgconfdir = $(libdir)/pkgconfig
-pkgconf_DATA = libs3.pc
+pkgconf_DATA = libs3.pc librgadmin.pc
 
 libs3_la_SOURCES = \
 	inc/error_parser.h \
@@ -68,6 +68,14 @@ libs3_la_SOURCES = \
         src/service_access_logging.c \
         src/simplexml.c \
         src/util.c
+
+librgadmin_la_SOURCES = \
+        inc/libs3.h \
+        inc/request.h \
+        inc/simplexml.h \
+        inc/rgadmin.h \
+        src/rgadmin.c
+
 if MINGW
 libs3_la_SOURCES += \
         src/mingw_functions.c \
@@ -77,6 +85,10 @@ endif
 libs3_la_LDFLAGS = -no-undefined \
         -version-info 0:1:0 \
 	$(AM_LDFLAGS)
+librgadmin_la_LDFLAGS = -no-undefined \
+        -version-info 0:0:0 \
+        $(AM_LDFLAGS)
+librgadmin_la_LIBADD = libs3.la
 
 s3_SOURCES = src/s3.c
 s3_LDADD = libs3.la $(AM_LDFLAGS)

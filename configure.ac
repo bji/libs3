@@ -26,6 +26,6 @@ LIBCURL_CHECK_CONFIG
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
 
-AC_CONFIG_FILES([Makefile libs3.pc])
+AC_CONFIG_FILES([Makefile libs3.pc librgadmin.pc])
 
 AC_OUTPUT
