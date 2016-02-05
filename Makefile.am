@@ -40,13 +40,13 @@ AM_LDFLAGS += -lpthread
 endif
 
 include_HEADERS = inc/libs3.h inc/rgadmin.h
-lib_LTLIBRARIES = libs3.la librgadmin.la
+lib_LTLIBRARIES = libglobus_s3.la libglobus_rgadmin.la
 bin_PROGRAMS = s3
 
 pkgconfdir = $(libdir)/pkgconfig
-pkgconf_DATA = libs3.pc librgadmin.pc
+pkgconf_DATA = libglobus_s3.pc libglobus_rgadmin.pc
 
-libs3_la_SOURCES = \
+libglobus_s3_la_SOURCES = \
 	inc/error_parser.h \
 	inc/libs3.h \
 	inc/request.h \
@@ -69,7 +69,7 @@ libs3_la_SOURCES = \
         src/simplexml.c \
         src/util.c
 
-librgadmin_la_SOURCES = \
+libglobus_rgadmin_la_SOURCES = \
         inc/libs3.h \
         inc/request.h \
         inc/simplexml.h \
@@ -77,7 +77,7 @@ librgadmin_la_SOURCES = \
         src/rgadmin.c
 
 if MINGW
-libs3_la_SOURCES += \
+libglobus_s3_la_SOURCES += \
         src/mingw_functions.c \
         src/mingw_s3_functions.c
 endif
@@ -85,17 +85,17 @@ endif
 libs3_la_LDFLAGS = -no-undefined \
         -version-info 0:1:0 \
 	$(AM_LDFLAGS)
-librgadmin_la_LDFLAGS = -no-undefined \
+libglobus_rgadmin_la_LDFLAGS = -no-undefined \
         -version-info 0:0:0 \
         $(AM_LDFLAGS)
-librgadmin_la_LIBADD = libs3.la
+libglobus_rgadmin_la_LIBADD = libglobus_s3.la
 
 s3_SOURCES = src/s3.c
-s3_LDADD = libs3.la $(AM_LDFLAGS)
+s3_LDADD = libglobus_s3.la $(AM_LDFLAGS)
 
 check_PROGRAMS = testsimplexml
 testsimplexml_SOURCES = src/testsimplexml.c
-testsimplexml_LDADD = libs3.la $(AM_LDFLAGS)
+testsimplexml_LDADD = libglobus_s3.la $(AM_LDFLAGS)
 
 TESTS = test/test.sh test/testsimplexml.sh
 TESTS_ENVIRONMENT = export PATH="$(abs_builddir):$${PATH}"; export top_srcdir="${top_srcdir}";
