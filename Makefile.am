@@ -82,7 +82,7 @@ libglobus_s3_la_SOURCES += \
         src/mingw_s3_functions.c
 endif
 
-libs3_la_LDFLAGS = -no-undefined \
+libglobus_s3_la_LDFLAGS = -no-undefined \
         -version-info 0:1:0 \
 	$(AM_LDFLAGS)
 libglobus_rgadmin_la_LDFLAGS = -no-undefined \
