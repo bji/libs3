@@ -1,6 +1,7 @@
 # Contributor: Bryan Ischo <bryan@ischo.com>
-pkgname=libs3
-pkgver=trunk
+pkgname=libs3-git
+_gitname=libs3
+pkgver=master
 pkgrel=1
 pkgdesc="C Library and Tools for Amazon S3 Access"
 arch=('i686' 'x86_64')
@@ -15,14 +16,18 @@ replaces=()
 backup=()
 options=()
 install=
-source=(http://libs3.ischo.com/$pkgname-$pkgver.tar.gz)
+source=("git://github.com/bji/${_gitname}.git")
 noextract=()
-md5sums=('source md5') #generate with 'makepkg -g'
+md5sums=('SKIP')
 
-build() {
-  cd "$srcdir/$pkgname-$pkgver"
 
-  DESTDIR=$pkgdir/usr make install || return 1
+pkgver() {
+  cd "$_gitname"
+  echo $(git rev-list --count HEAD).$(git rev-parse --short HEAD)
 }
 
+package() {
+  cd "$_gitname"
+  DESTDIR=$pkgdir/usr make install || return 1
+}
 # vim:set ts=2 sw=2 et:
