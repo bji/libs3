@@ -1,4 +1,4 @@
-AC_INIT([libs3], [0.0], [https://github.com/globus/libs3])
+AC_INIT([libglobus_s3], [0.0], [https://github.com/globus/libs3])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.11 foreign subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
