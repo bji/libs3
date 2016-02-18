@@ -40,11 +40,11 @@ AM_LDFLAGS += -lpthread
 endif
 
 include_HEADERS = inc/libs3.h inc/rgadmin.h
-lib_LTLIBRARIES = libglobus_s3.la libglobus_rgadmin.la
+lib_LTLIBRARIES = libglobus_s3.la
 bin_PROGRAMS = s3
 
 pkgconfdir = $(libdir)/pkgconfig
-pkgconf_DATA = libglobus_s3.pc libglobus_rgadmin.pc
+pkgconf_DATA = libglobus_s3.pc
 
 libglobus_s3_la_SOURCES = \
 	inc/error_parser.h \
@@ -67,9 +67,7 @@ libglobus_s3_la_SOURCES = \
         src/service.c \
         src/service_access_logging.c \
         src/simplexml.c \
-        src/util.c
-
-libglobus_rgadmin_la_SOURCES = \
+        src/util.c \
         inc/libs3.h \
         inc/request.h \
         inc/simplexml.h \
@@ -85,10 +83,6 @@ endif
 libglobus_s3_la_LDFLAGS = -no-undefined \
         -version-info 0:1:0 \
 	$(AM_LDFLAGS)
-libglobus_rgadmin_la_LDFLAGS = -no-undefined \
-        -version-info 0:0:0 \
-        $(AM_LDFLAGS)
-libglobus_rgadmin_la_LIBADD = libglobus_s3.la
 
 s3_SOURCES = src/s3.c
 s3_LDADD = libglobus_s3.la $(AM_LDFLAGS)
