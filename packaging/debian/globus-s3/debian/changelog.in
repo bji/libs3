@@ -1,0 +1,5 @@
+globus-s3 (0.0-1+gt6.@distro@) @distro@; urgency=low
+
+  * Initial release
+
+ -- Globus Toolkit <support@globus.org>  Fri, 19 Feb 2016 11:03:40 -0500
