@@ -15,7 +15,7 @@ BuildRequires:  autoconf >= 2.60
 BuildRequires:  libtool >= 2.2
 %endif
 
-%if %{?centos}%{!?centos:0} == 5
+%if %{?rhel}%{!?rhel:0} == 5
 Buildrequires: curl-devel
 %else
 Buildrequires: libcurl-devel
@@ -24,7 +24,7 @@ Buildrequires: libcurl-devel
 BuildRequires: libxml2-devel
 BuildRequires: openssl-devel
 
-%if %{?centos}%{!?centos:0} == 5
+%if %{?rhel}%{!?rhel:0} == 5
 Requires: curl
 Requires: openssl
 %else
