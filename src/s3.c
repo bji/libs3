@@ -1264,7 +1264,11 @@ static void list_bucket(const char *bucketName, const char *prefix,
 
     list_bucket_callback_data data;
 
-    snprintf(data.nextMarker, sizeof(data.nextMarker), "%s", marker);
+    if (marker) {
+        snprintf(data.nextMarker, sizeof(data.nextMarker), "%s", marker);
+    } else {
+        data.nextMarker[0] = 0;
+    }
     data.keyCount = 0;
     data.allDetails = allDetails;
 
