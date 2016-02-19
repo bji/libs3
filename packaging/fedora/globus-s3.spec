@@ -5,7 +5,7 @@ Version: 0.0
 Release: 1
 License: LGPL
 Group: Networking/Utilities
-URL: http://github.com/globus/libs3
+URL: http://github.com/globus/globus-s3
 Source0: %{_name}-%{version}.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
