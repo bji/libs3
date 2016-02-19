@@ -9,20 +9,30 @@ URL: http://github.com/globus/globus-s3
 Source0: %{_name}-%{version}.tar.gz
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
-Buildrequires: libcurl-devel
-Buildrequires: libxml2-devel
-Buildrequires: openssl-devel
-Buildrequires: make
-
-Requires: libxml2
-Requires: libcurl
-Requires: openssl-libs
-
 %if %{?fedora}%{!?fedora:0} >= 19 || %{?rhel}%{!?rhel:0} >= 7
 BuildRequires:  automake >= 1.11
 BuildRequires:  autoconf >= 2.60
 BuildRequires:  libtool >= 2.2
 %endif
+
+%if %{?centos}%{!?centos:0} == 5
+Buildrequires: curl-devel
+%else
+Buildrequires: libcurl-devel
+%endif
+
+BuildRequires: libxml2-devel
+BuildRequires: openssl-devel
+
+%if %{?centos}%{!?centos:0} == 5
+Requires: curl
+Requires: openssl
+%else
+Requires: libcurl
+Requires: openssl-libs
+%endif
+
+Requires: libxml2
 
 %description
 This package is a modified version of libs3 which adds support for
