@@ -1,0 +1,22 @@
+Source: globus-s3
+Priority: optional
+Maintainer: Globus Toolkit <support@globus.org>
+Build-Depends: debhelper (>= 9), autotools-dev
+Standards-Version: 3.9.6
+Section: libs
+Homepage: http://github.com/globus/globus-s3
+#Vcs-Git: git://anonscm.debian.org/collab-maint/globus-s3.git
+#Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/globus-s3.git;a=summary
+
+Package: globus-s3-dev
+Section: libdevel
+Architecture: any
+Depends: globus-s3-0 (= ${binary:Version}), ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: globus-s3-0
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>

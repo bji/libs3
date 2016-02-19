@@ -8,11 +8,6 @@ EXTRA_DIST = \
 	README \
 	TODO \
 	archlinux/PKGBUILD \
-	debian/changelog \
-	debian/changelog.Debian \
-	debian/control \
-	debian/control.dev \
-	debian/postinst \
 	doxyfile \
 	libs3.spec \
 	mswin/libs3.def \
