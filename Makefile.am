@@ -44,7 +44,7 @@ lib_LTLIBRARIES = libglobus_s3.la
 bin_PROGRAMS = s3
 
 pkgconfdir = $(libdir)/pkgconfig
-pkgconf_DATA = libglobus_s3.pc
+pkgconf_DATA = globus-s3.pc
 
 libglobus_s3_la_SOURCES = \
 	inc/error_parser.h \

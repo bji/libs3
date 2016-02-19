@@ -1,4 +1,4 @@
-AC_INIT([libglobus_s3], [0.0], [https://github.com/globus/libs3])
+AC_INIT([globus_s3], [0.0], [https://github.com/globus/libs3])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.11 foreign subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
@@ -26,6 +26,6 @@ LIBCURL_CHECK_CONFIG
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
 
-AC_CONFIG_FILES([Makefile libglobus_s3.pc])
+AC_CONFIG_FILES([Makefile globus-s3.pc])
 
 AC_OUTPUT

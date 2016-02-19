@@ -3,9 +3,9 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: LibS3
-Description: LibS3 AWS S3 library
+Name: globus-s3
+Description: Globus Version of AWS S3 and Ceph Rados Gateway library
 Version: @VERSION@
 Requires: 
-Libs: -L${libdir} -ls3
+Libs: -L${libdir} -lglobus_s3
 Cflags: -I${includedir} 
