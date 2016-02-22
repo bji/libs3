@@ -11,7 +11,7 @@ Homepage: http://github.com/globus/globus-s3
 Package: libglobus-s3-dev
 Section: libdevel
 Architecture: any
-Depends: globus-s3-0 (= ${binary:Version}), ${misc:Depends}
+Depends: libglobus-s3-0 (= ${binary:Version}), ${misc:Depends}
 Description: Globus-modified version of libs3 with RADOS gateway support development packages
 
 Package: libglobus-s3-0
