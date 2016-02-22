@@ -1,3 +1,9 @@
+globus-s3 (0.0-3+gt6.@distro@) @distro@; urgency=low
+
+  * Fix incorrect .install, .dirs files for dev package
+
+ -- Globus Toolkit <support@globus.org>  Mon, 22 Feb 2016 16:38:12 -0500
+
 globus-s3 (0.0-2+gt6.@distro@) @distro@; urgency=low
 
   * Fix dev dependency on base
