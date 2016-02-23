@@ -34,7 +34,7 @@ Requires: openssl-libs
 Requires: curl
 %else
 Requires: libcurl
-#endif
+%endif
 
 Requires: libxml2
 
