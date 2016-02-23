@@ -2,7 +2,7 @@ Summary: C Library and Tools for Amazon S3 Access
 Name: globus-s3
 %global _name %(tr - _ <<< %{name})
 Version: 0.0
-Release: 1
+Release: 2
 License: LGPL
 Group: Networking/Utilities
 URL: http://github.com/globus/globus-s3
@@ -24,13 +24,17 @@ Buildrequires: libcurl-devel
 BuildRequires: libxml2-devel
 BuildRequires: openssl-devel
 
-%if %{?rhel}%{!?rhel:0} == 5
-Requires: curl
+%if %{?rhel}%{!?rhel:0} == 5 || %{?rhel}%{!?rhel:0} == 6
 Requires: openssl
 %else
-Requires: libcurl
 Requires: openssl-libs
 %endif
+
+%if %{?rhel}%{!?rhel:0} == 5
+Requires: curl
+%else
+Requires: libcurl
+#endif
 
 Requires: libxml2
 
@@ -92,7 +96,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/pkgconfig/globus-s3.pc
 
 %changelog
-* Fri Feb 19 2016  <bester@mcs.anl.gov> Joseph Bester
+* Tue Feb 23 2016 Globus Toolkit <support@globus.org> - 0.0-2
+- Adjust some dependencies for older centos
+
+* Fri Feb 19 2016  <bester@mcs.anl.gov> Joseph Bester - 0.0-1
 - Based on Bryan Ischo's libs3 with radosgw modifications
 
 * Sat Aug 09 2008  <bryan@ischo,com> Bryan Ischo
