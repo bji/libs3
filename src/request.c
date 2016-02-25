@@ -454,6 +454,8 @@ static S3Status compose_standard_headers(const RequestParams *params,
             len--;
         }
         values->hostHeader[len] = 0;
+    } else {
+        values->hostHeader[0] = 0;
     }
 
     // Cache-Control
