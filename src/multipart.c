@@ -73,8 +73,9 @@ static void AbortMultipartUploadCompleteCallback
 {    
     (void) callbackData;
     (void) s3ErrorDetails;
-    fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(requestStatus));
-    
+    if (requestStatus != S3StatusOK) {
+        fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(requestStatus));
+    }
 }
 
 static S3Status initialMultipartXmlCallback(const char *elementPath,
