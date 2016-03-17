@@ -72,9 +72,6 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
             (c == ')') || (c == '/')) {
             *dest++ = c;
         }
-        else if (*src == ' ') {
-            *dest++ = '+';
-        }
         else {
             *dest++ = '%';
             *dest++ = hex[c >> 4];
