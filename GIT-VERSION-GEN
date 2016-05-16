@@ -1,0 +1,63 @@
+#!/bin/bash
+
+error()
+{
+    echo "$*"
+    exit 1
+}
+
+# A file we can use to send version information downstream - like in .src.rpm
+VERF="GIT-VERSION-FILE"
+
+SAVED_VERSION=""
+
+# either there is a version file or we are in git, nothing else is sane... for now
+if test -f "$VERF"; then
+    SAVED_VERSION=$(awk -F ' = ' '/FULL_VERSION/ {print $NF}' "$VERF")
+    if [[ -z "$SAVED_VERSION" ]]; then
+        error "could not read version information from $VERF"
+    fi
+fi
+
+# even in saved version cases, re-run git to see if we need to update version file
+if test -d .git; then
+    # we get data like this from git describe
+    # release: v0.9.1
+    # between releases: v0.9.1-9-g94768c8
+    GIT_VERSION=$(git describe --match "v[0-9]*" HEAD)
+    # strip leading v - we only use the numbers for our version file
+    GIT_VERSION=${GIT_VERSION:1}
+else
+    # no git, require version from saved file
+    GIT_VERSION="$SAVED_VERSION"
+fi
+
+if [[ -z "$GIT_VERSION" ]]; then
+    error "could not use git to describe the version"
+fi
+
+#
+# pick up developer PKG_PATCH
+if [[ -n "$PKG_PATCH" ]]; then
+    GIT_VERSION="$GIT_VERSION-$PKG_PATCH"
+fi
+
+# version is everything before first dash, release everything after
+VERSION=$(echo "$GIT_VERSION" | cut -d'-' -f 1)
+
+# when git tells us we are at a tag, RELEASE is effectively blank
+num_dash=$(echo "$GIT_VERSION" | awk -F '-' '{print NF-1}')
+
+RELEASE=""
+if [[ $num_dash -gt 0 ]]; then
+    RELEASE=$(echo "$GIT_VERSION" | cut -d'-' -f 2-)
+fi
+
+# save it, even if the same as we read in - no harm
+if [[ "$SAVED_VERSION" != "$GIT_VERSION" ]]; then
+    cat > "$VERF" << EOF
+VERSION = $VERSION
+RELEASE = $RELEASE
+FULL_VERSION = $GIT_VERSION
+EOF
+fi
