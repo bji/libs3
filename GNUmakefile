@@ -352,6 +352,12 @@ RPM_RELEASE := $(shell echo $(RELEASE) | tr '-' '.')
 		-e s'/@@RELEASE@@/$(RPM_RELEASE)/g' < $< > $@+
 	$(VERBOSE_SHOW) mv $@+ $(BUILD)/$@
 
+RPM_DIR = $(BUILD)/rpmbuild
+
+rpm: dist
+	@mkdir -p $(RPM_DIR)
+	env RPM_DIR=$(RPM_DIR) bash ./pkg-linux/mock_rpmbuild.sh $(GIT_TARPATH).tar.gz $(BUILD)/libs3.spec
+
 # --------------------------------------------------------------------------
 # Debian package target
 
