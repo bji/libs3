@@ -331,13 +331,26 @@ $(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.dd)))
 GIT_TARNAME = libs3-$(FULL_VERSION)
 GIT_TARPATH = $(BUILD)/$(GIT_TARNAME)
 
-dist: $(BUILD)
+dist: $(BUILD) libs3.spec
 	$(VERBOSE_SHOW) git archive --format=tar --prefix=$(GIT_TARNAME)/ HEAD^{tree} > $(GIT_TARPATH).tar
 	$(VERBOSE_SHOW) mkdir -p $(GIT_TARNAME)
 	$(VERBOSE_SHOW) cp GIT-VERSION-FILE $(GIT_TARNAME)
-	$(VERBOSE_SHOW) tar -rf $(GIT_TARPATH).tar $(GIT_TARNAME)/GIT-VERSION-FILE
+	$(VERBOSE_SHOW) cp $(BUILD)/libs3.spec $(GIT_TARNAME)
+	$(VERBOSE_SHOW) tar -rf $(GIT_TARPATH).tar $(GIT_TARNAME)/GIT-VERSION-FILE $(GIT_TARNAME)/libs3.spec
 	$(VERBOSE_SHOW) rm -r $(GIT_TARNAME)
 	$(VERBOSE_SHOW) gzip -f -9 $(GIT_TARPATH).tar
+
+# --------------------------------------------------------------------------
+# Redhat RPM target
+
+# RPM releases can't have -
+RPM_RELEASE := $(shell echo $(RELEASE) | tr '-' '.')
+
+%.spec: %.spec.in .FORCE $(BUILD)
+	$(VERBOSE_SHOW) sed -e 's/@@VERSION@@/$(VERSION)/g' \
+		-e s'/@@TAR_NAME@@/$(GIT_TARNAME)/g' \
+		-e s'/@@RELEASE@@/$(RPM_RELEASE)/g' < $< > $@+
+	$(VERBOSE_SHOW) mv $@+ $(BUILD)/$@
 
 # --------------------------------------------------------------------------
 # Debian package target

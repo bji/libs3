@@ -1,16 +1,20 @@
-%{!?_version: %global _version 2.1}
+%define _version @@VERSION@@
+%define _tar_name @@TAR_NAME@@
+%define _release_extra @@RELEASE@@
+# official builds set this to 1, we use 0 for internal/dev-test
+%{!?_release: %global _release 0}
+
 # add on official "dot" if we have a patched version
-%global release_vsm_patch %{?vsm_patch:.%{vsm_patch}}
-%global source_vsm_patch %{?vsm_patch:-%{vsm_patch}}
+%global release_patch %{?_release_extra:.%{_release_extra}}
 
 Summary: C Library and Tools for Amazon S3 Access
 Name: libs3
 Version: %{_version}
-Release: vsm%{release_vsm_patch}%{?dist}
+Release: %{_release}%{release_patch}%{?dist}
 License: LGPL
 Group: Networking/Utilities
 URL: http://sourceforge.net/projects/reallibs3
-Source0: %{name}-%{version}%{source_vsm_patch}.tar.gz
+Source0: %{_tar_name}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}%{source_vsm_patch}-root
 # Want to include curl dependencies, but older Fedora Core uses curl-devel,
 # and newer Fedora Core uses libcurl-devel ... have to figure out how to
@@ -56,7 +60,7 @@ http://s3.amazonaws.com).  Its design goals are:
 
 
 %prep
-%setup -q -n %{name}-%{version}%{source_vsm_patch}
+%setup -q -n %{_tar_name}
 
 %build
 BUILD=$RPM_BUILD_ROOT/build make exported
