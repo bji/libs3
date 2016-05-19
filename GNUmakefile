@@ -353,6 +353,7 @@ RPM_RELEASE := $(shell echo $(RELEASE) | tr '-' '.')
 	$(VERBOSE_SHOW) mv $@+ $(BUILD)/$@
 
 RPM_DIR = $(BUILD)/rpmbuild
+export RESULT_DIR = $(PWD)/pkg-linux/libs3-$(FULL_VERSION)
 
 rpm: dist
 	@mkdir -p $(RPM_DIR)
