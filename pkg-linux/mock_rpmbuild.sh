@@ -66,8 +66,9 @@ fi
 FULL_VERSION=$(awk -F ' = ' '/FULL_VERSION/ {print $NF}' "$VERSION_FILE")
 VERSION=$(awk -F ' = ' '/^VERSION/ {print $NF}' "$VERSION_FILE")
 
-# package name is the first word in the source tar
-PKG_NAME=$(basename "$SOURCE_TAR" | awk -F '-' '{print $1}')
+# we require a convention that is pkg_name.spec, so use it...
+SPEC_NAME=$(basename "$SOURCE_SPEC")
+PKG_NAME="${SPEC_NAME%.*}"
 
 # To find build requirements
 VSM_REPO=${VSM_REPO:-"vsm_master"}
