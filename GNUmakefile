@@ -359,6 +359,10 @@ rpm: dist
 	@mkdir -p $(RPM_DIR)
 	env RPM_DIR=$(RPM_DIR) bash ./pkg-linux/mock_rpmbuild.sh $(GIT_TARPATH).tar.gz $(BUILD)/libs3.spec
 
+relrpm: dist
+	@mkdir -p $(RPM_DIR)
+	env RPM_DIR=$(RPM_DIR) REL_BUILD="yes" bash ./pkg-linux/mock_rpmbuild.sh $(GIT_TARPATH).tar.gz $(BUILD)/libs3.spec
+
 # --------------------------------------------------------------------------
 # Debian package target
 
