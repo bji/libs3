@@ -358,6 +358,12 @@ static S3Status compose_amz_headers(const RequestParams *params,
                            params->copySourceBucketName,
                            params->copySourceKey);
         }
+        // If byteCount != 0 then we're just copying a range, add header
+        if (params->byteCount > 0) {
+            headers_append(1, "x-amz-copy-source-range: bytes=%ld-%ld",
+                           params->startByte,
+                           params->startByte + params->byteCount);
+        }
         // And the x-amz-metadata-directive header
         if (properties) {
             headers_append(1, "%s", "x-amz-metadata-directive: REPLACE");

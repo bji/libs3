@@ -1963,6 +1963,57 @@ void S3_copy_object(const S3BucketContext *bucketContext,
 
 
 /**
+ * Copies portion of an object from one location to another.  The object may
+ * be copied back to itself, which is useful for replacing metadata without
+ * changing the object.  Required when doing >5GB object copies.
+ *
+ * @param bucketContext gives the source bucket and associated parameters for
+ *        this request
+ * @param key is the source key
+ * @param destinationBucket gives the destination bucket into which to copy
+ *        the object.  If NULL, the source bucket will be used.
+ * @param destinationKey gives the destination key into which to copy the
+ *        object.  If NULL, the source key will be used.
+ * @param partNo is the sequence numebr of any multipart upload, 0 = non-multipart
+ * @param uploadId is the ID returned for a multipart initialize request, ignored
+ *        if partNo = 0
+ * @param startOffset is the starting point in original object to copy.
+ * @param count is the number of bytes starting at startOffset in original
+ *        object to copy.  0 indicates no-range (i.e. all)
+ * @param putProperties optionally provides properties to apply to the object
+ *        that is being put to.  If not supplied (i.e. NULL is passed in),
+ *        then the copied object will retain the metadata of the copied
+ *        object.
+ * @param lastModifiedReturn returns the last modified date of the copied
+ *        object
+ * @param eTagReturnSize specifies the number of bytes provided in the
+ *        eTagReturn buffer
+ * @param eTagReturn is a buffer into which the resulting eTag of the copied
+ *        object will be written
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_copy_object_range(const S3BucketContext *bucketContext,
+                          const char *key, const char *destinationBucket,
+                          const char *destinationKey,
+                          const int partNo, const char *uploadId,
+                          const unsigned long startOffset, const unsigned long count,
+                          const S3PutProperties *putProperties,
+                          int64_t *lastModifiedReturn, int eTagReturnSize,
+                          char *eTagReturn, S3RequestContext *requestContext,
+                          const S3ResponseHandler *handler, void *callbackData);
+
+
+/**
  * Gets an object from S3.  The contents of the object are returned in the
  * handler's getObjectDataCallback.
  *
