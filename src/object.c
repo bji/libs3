@@ -174,6 +174,27 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
                     char *eTagReturn, S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData)
 {
+    /* Use the range copier with 0 length */
+    S3_copy_object_range(bucketContext, key,
+                         destinationBucket, destinationKey,
+                         0, NULL, // No multipart
+                         0, 0, // No length => std. copy of < 5GB
+                         putProperties,
+                         lastModifiedReturn, eTagReturnSize,
+                         eTagReturn, requestContext,
+                         handler, callbackData);
+}
+
+
+void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
+                          const char *destinationBucket, const char *destinationKey,
+                          const int partNo, const char *uploadId,
+                          const unsigned long startOffset, const unsigned long count,
+                          const S3PutProperties *putProperties,
+                          int64_t *lastModifiedReturn, int eTagReturnSize,
+                          char *eTagReturn, S3RequestContext *requestContext,
+                          const S3ResponseHandler *handler, void *callbackData)
+{
     // Create the callback data
     CopyObjectData *data = 
         (CopyObjectData *) malloc(sizeof(CopyObjectData));
@@ -197,6 +218,14 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
     data->eTagReturnLen = 0;
     string_buffer_initialize(data->lastModified);
 
+    // If there's a sequence ID > 0 then add a subResource, OTW pass in NULL
+    char subResource[512];
+    char *subRsrc = NULL;
+    if (partNo > 0) {
+        snprintf(subResource, 512, "partNumber=%d&uploadId=%s", partNo, uploadId);
+        subRsrc = subResource;
+    }
+
     // Set up the RequestParams
     RequestParams params =
     {
@@ -211,12 +240,12 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
           bucketContext->securityToken },             // securityToken
         destinationKey ? destinationKey : key,        // key
         0,                                            // queryParams
-        0,                                            // subResource
+        subRsrc,                                      // subResource
         bucketContext->bucketName,                    // copySourceBucketName
         key,                                          // copySourceKey
         0,                                            // getConditions
-        0,                                            // startByte
-        0,                                            // byteCount
+        startOffset,                                  // startByte
+        count,                                        // byteCount
         putProperties,                                // putProperties
         &copyObjectPropertiesCallback,                // propertiesCallback
         0,                                            // toS3Callback

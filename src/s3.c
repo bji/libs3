@@ -2063,7 +2063,6 @@ S3Status MultipartResponseProperiesCallback
     return S3StatusOK;
 }
 
-
 static int multipartPutXmlCallback(int bufferSize, char *buffer,
                                    void *callbackData)
 {
@@ -2132,7 +2131,8 @@ static int try_get_parts_info(const char *bucketName, const char *key,
     return 0;
 }
 
-static void put_object(int argc, char **argv, int optindex)
+static void put_object(int argc, char **argv, int optindex,
+                       const char *srcBucketName, const char *srcKey, unsigned long long srcSize)
 {
     if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
@@ -2283,7 +2283,12 @@ static void put_object(int argc, char **argv, int optindex)
     data.gb = 0;
     data.noStatus = noStatus;
 
-    if (filename) {
+    if (srcSize) {
+        // This is really a COPY multipart, not a put, so take from source object
+        contentLength = srcSize;
+        data.infile = NULL;
+    }
+    else if (filename) {
         if (!contentLength) {
             struct stat statbuf;
             // Stat the file to get its length
@@ -2459,16 +2464,43 @@ upload:
             partData.put_object_data = data;
             partContentLength = ((contentLength > MULTIPART_CHUNK_SIZE) ?
                                  MULTIPART_CHUNK_SIZE : contentLength);
-            printf("Sending Part Seq %d, length=%d\n", seq, partContentLength);
+            printf("%s Part Seq %d, length=%d\n", srcSize ? "Copying" : "Sending", seq, partContentLength);
             partData.put_object_data.contentLength = partContentLength;
             partData.put_object_data.originalContentLength = partContentLength;
             partData.put_object_data.totalContentLength = todoContentLength;
             partData.put_object_data.totalOriginalContentLength = totalContentLength;
             putProperties.md5 = 0;
             do {
-                S3_upload_part(&bucketContext, key, &putProperties,
-                               &putObjectHandler, seq, manager.upload_id,
-                               partContentLength,0, &partData);
+                if (srcSize) {
+                    S3BucketContext srcBucketContext =
+                    {
+                        0,
+                        srcBucketName,
+                        protocolG,
+                        uriStyleG,
+                        accessKeyIdG,
+                        secretAccessKeyG,
+                        0
+                    };
+
+                    S3ResponseHandler copyResponseHandler = { &responsePropertiesCallback, &responseCompleteCallback };
+                    int64_t lastModified;
+
+                    unsigned long long startOffset = (unsigned long long)MULTIPART_CHUNK_SIZE * (unsigned long long)(seq-1);
+                    unsigned long long count = partContentLength - 1; // Inclusive for copies
+                    // The default copy callback tries to set this for us, need to allocate here
+                    manager.etags[seq-1] = malloc(512); // TBD - magic #!  Isa there a max etag defined?
+                    S3_copy_object_range(&srcBucketContext, srcKey, bucketName, key,
+                         seq, manager.upload_id,
+                         startOffset, count,
+                         &putProperties,
+                         &lastModified, 512 /*TBD - magic # */, manager.etags[seq-1], 0,
+                         &copyResponseHandler, 0);
+                } else {
+                    S3_upload_part(&bucketContext, key, &putProperties,
+                                   &putObjectHandler, seq, manager.upload_id,
+                                   partContentLength,0, &partData);
+                }
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
                 printError();
@@ -2519,6 +2551,30 @@ upload:
 
 
 // copy object ---------------------------------------------------------------
+static S3Status copyListKeyCallback(int isTruncated, const char *nextMarker,
+                                    int contentsCount,
+                                    const S3ListBucketContent *contents,
+                                    int commonPrefixesCount,
+                                    const char **commonPrefixes,
+                                    void *callbackData)
+{
+    unsigned long long *size = (unsigned long long *)callbackData;
+
+    // These are unused, avoid warnings in a hopefully portable way
+    (void)(nextMarker);
+    (void)(commonPrefixesCount);
+    (void)(commonPrefixes);
+    (void)(isTruncated);
+
+    if (contentsCount != 1) {
+        // We either have no matched or multiples...can't perform the operation
+        return S3StatusErrorUnexpectedContent;
+    }
+
+    *size = (unsigned long long) contents->size;
+    return S3StatusOK;
+}
+
 
 static void copy_object(int argc, char **argv, int optindex)
 {
@@ -2541,11 +2597,43 @@ static void copy_object(int argc, char **argv, int optindex)
 
     const char *sourceBucketName = argv[optindex++];
     const char *sourceKey = slash;
+    unsigned long long sourceSize = 0;
 
     if (optindex == argc) {
         fprintf(stderr, "\nERROR: Missing parameter: "
                 "destination bucket/key\n");
         usageExit(stderr);
+    }
+
+    S3_init();
+    S3BucketContext listBucketContext =
+    {
+        0,
+        sourceBucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG,
+        0
+    };
+    S3ListBucketHandler listBucketHandler =
+    {
+        { &responsePropertiesCallback, &responseCompleteCallback },
+        &copyListKeyCallback
+    };
+    // Find size of existing key to determine if MP required
+    do {
+        S3_list_bucket(&listBucketContext, sourceKey, NULL,
+                       ".", 1, 0, &listBucketHandler, &sourceSize);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+    if (statusG != S3StatusOK) {
+        fprintf(stderr, "\nERROR: Unable to get source object size\n");
+        exit(1);
+    }
+    if (sourceSize > MULTIPART_CHUNK_SIZE) {
+        printf("\nUsing multipart copy because object size %llu is above %d.\n", sourceSize, MULTIPART_CHUNK_SIZE);
+        put_object(argc, argv, optindex, sourceBucketName, sourceKey, sourceSize);
+        return;
     }
 
     // Split bucket/key
@@ -2663,7 +2751,6 @@ static void copy_object(int argc, char **argv, int optindex)
         }
     }
 
-    S3_init();
     
     S3BucketContext bucketContext =
     {
@@ -3664,7 +3751,7 @@ int main(int argc, char **argv)
         }
     }
     else if (!strcmp(command, "put")) {
-        put_object(argc, argv, optind);
+        put_object(argc, argv, optind, NULL, NULL, 0);
     }
     else if (!strcmp(command, "copy")) {
         copy_object(argc, argv, optind);
