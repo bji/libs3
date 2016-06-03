@@ -64,13 +64,14 @@ static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
 static int verifyPeerG = 0;
+static int useSignatureV4G = 0;
 
 
 // Environment variables, saved as globals ----------------------------------
 
 static const char *accessKeyIdG = 0;
 static const char *secretAccessKeyG = 0;
-
+static const char *regionNameG = 0;
 
 // Request results, saved as globals -----------------------------------------
 
@@ -164,12 +165,21 @@ static void S3_init()
 {
     S3Status status;
     const char *hostname = getenv("S3_HOSTNAME");
-    
-    if ((status = S3_initialize("s3", verifyPeerG|S3_INIT_ALL, hostname))
+    int flags = verifyPeerG|S3_INIT_ALL;
+    if (useSignatureV4G) flags |= S3_INIT_SIGNATURE_V4;
+    if ((status = S3_initialize("s3", flags, hostname))
         != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
                 S3_get_status_name(status));
         exit(-1);
+    }
+    if (useSignatureV4G && regionNameG) {
+        if ((status = S3_set_region_name(regionNameG))
+            != S3StatusOK) {
+            fprintf(stderr, "Failed to set region name to %s: %s\n",
+                    regionNameG, S3_get_status_name(status));
+            exit(-1);
+        }
     }
 }
 
@@ -742,6 +752,7 @@ static struct option longOptionsG[] =
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
     { "verify-peer",          no_argument,        0,  'v' },
+    { "signature-v4",         no_argument,        0,  '4' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -3567,7 +3578,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhus4r:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3600,6 +3611,9 @@ int main(int argc, char **argv)
             verifyPeerG = S3_INIT_VERIFY_PEER;
             break;
         }
+        case '4':
+            useSignatureV4G = 1;
+            break;
         default:
             fprintf(stderr, "\nERROR: Unknown option: -%c\n", c);
             // Usage exit
@@ -3630,6 +3644,12 @@ int main(int argc, char **argv)
     if (!secretAccessKeyG) {
         fprintf(stderr, 
                 "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
+        return -1;
+    }
+    regionNameG = getenv("S3_REGIONNAME");
+    if (useSignatureV4G && !regionNameG) {
+        fprintf(stderr,
+                "Missing environment variable: S3_REGIONNAME\n");
         return -1;
     }
 
