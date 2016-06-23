@@ -66,7 +66,10 @@ http://s3.amazonaws.com).  Its design goals are:
 BUILD=$RPM_BUILD_ROOT/build make exported
 
 %install
-BUILD=$RPM_BUILD_ROOT/build DESTDIR=$RPM_BUILD_ROOT/usr make install
+BUILD=$RPM_BUILD_ROOT/build DESTDIR=$RPM_BUILD_ROOT/usr LIBDIR=$RPM_BUILD_ROOT/%{_libdir} make install
+
+# need 0755 for find-provides and other bits to recognize it
+chmod 0755 $RPM_BUILD_ROOT/%{_libdir}/libs3.so.*
 rm -rf $RPM_BUILD_ROOT/build
 
 %clean
@@ -75,12 +78,12 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 /usr/bin/s3
-/usr/lib/libs3.so*
+%{_libdir}/libs3.so*
 
 %files devel
 %defattr(-,root,root,-)
 /usr/include/libs3.h
-/usr/lib/libs3.a
+%{_libdir}/libs3.a
 
 %changelog
 * Sat Aug 09 2008  <bryan@ischo,com> Bryan Ischo
