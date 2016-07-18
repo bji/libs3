@@ -241,6 +241,13 @@ build_centos_6x() {
     common_build
 }
 
+# Centos 7.x (latest)
+build_centos_7x() {
+    MOCK_CONFIG=${MOCK_CONFIG:-"centos-7.x-x86_64"}
+    KVERSION=${KVERSION:-"3.10.0-327.18.2.el7"}
+    common_build
+}
+
 # Users can set the DISTRO_VERS environment variable to choose
 # which CentOS distro to build against.  There is no command
 # line option for this functionality.
@@ -262,8 +269,11 @@ case "$DISTRO_VERS" in
  "6.x")
     build_centos_6x
     ;;
+ "7.x")
+    build_centos_7x
+    ;;
  *)
-    echo "DISTRO_VERS must be one of: 6.4 6.5 6.6 6.7 6.x"
+    echo "DISTRO_VERS must be one of: 6.4 6.5 6.6 6.7 6.x 7.x"
     echo "You specified DISTRO_VERS=\"${DISTRO_VERS}\""
     exit 1
     ;;
