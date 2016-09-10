@@ -958,6 +958,9 @@ static S3Status setup_curl(Request *request,
     append_standard_header(rangeHeader);
     append_standard_header(authorizationHeader);
 
+    request->headers = curl_slist_append(request->headers,
+                                         "Accept: application/xml");
+
     // Append x-amz- headers
     int i;
     for (i = 0; i < values->amzHeadersCount; i++) {
