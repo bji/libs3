@@ -338,7 +338,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
     // Perform the request
     request_perform(&params, requestContext);
 }
-                         
+
 
 // delete object --------------------------------------------------------------
 
