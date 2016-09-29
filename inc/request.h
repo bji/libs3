@@ -74,10 +74,10 @@ typedef struct RequestParams
     const S3GetConditions *getConditions;
 
     // Start byte
-    uint64_t startByte;
+    size_t startByte;
 
     // Byte count
-    uint64_t byteCount;
+    size_t byteCount;
 
     // Put properties
     const S3PutProperties *putProperties;

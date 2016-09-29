@@ -35,6 +35,11 @@
 
 #ifdef __APPLE__
 #include <CommonCrypto/CommonHMAC.h>
+#define S3_SHA256_DIGEST_LENGTH CC_SHA256_DIGEST_LENGTH
+#else
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+#define S3_SHA256_DIGEST_LENGTH SHA256_DIGEST_LENGTH
 #endif
 
 #define USER_AGENT_SIZE 256
@@ -126,7 +131,7 @@ typedef struct RequestComputedValues
     char hostHeader[128];
 
     // Hex string of hash of request payload
-    char payloadHash[CC_SHA256_DIGEST_LENGTH * 2 + 1];
+    char payloadHash[S3_SHA256_DIGEST_LENGTH * 2 + 1];
 } RequestComputedValues;
 
 
@@ -285,14 +290,15 @@ static S3Status append_amz_header(RequestComputedValues *values,
         return S3StatusMetaDataHeadersTooLong;
     }
 
-    for (unsigned long i = 0; i < strlen(headerStr); i++) {
+    unsigned long i = 0;
+    for (; i < strlen(headerStr); i++) {
         values->amzHeadersRaw[rawPos++] = tolower(headerStr[i]);
     }
 
     strcat(&(values->amzHeadersRaw[rawPos]), ": ");
     rawPos += 2;
 
-    for (unsigned long i = 0; i < strlen(headerValue); i++) {
+    for (i = 0; i < strlen(headerValue); i++) {
         values->amzHeadersRaw[rawPos++] = headerValue[i];
     }
     rawPos--;
@@ -375,7 +381,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
         // If byteCount != 0 then we're just copying a range, add header
         if (params->byteCount > 0) {
             char byteRange[S3_MAX_METADATA_SIZE];
-            snprintf(byteRange, sizeof(byteRange), "bytes=%lld-%lld",
+            snprintf(byteRange, sizeof(byteRange), "bytes=%zd-%zd",
                      params->startByte, params->startByte + params->byteCount);
             append_amz_header(values, 0, "x-amz-copy-source-range", byteRange);
         }
@@ -396,10 +402,15 @@ static S3Status compose_amz_headers(const RequestParams *params,
         || params->httpRequestType == HttpRequestTypeDELETE
         || params->httpRequestType == HttpRequestTypeHEAD) {
         // empty payload
-        unsigned char md[CC_SHA256_DIGEST_LENGTH];
+        unsigned char md[S3_SHA256_DIGEST_LENGTH];
+#ifdef __APPLE__
         CC_SHA256("", 0, md);
+#else
+        SHA256((const unsigned char*) "", 0, md);
+#endif
         values->payloadHash[0] = '\0';
-        for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+        int i = 0;
+        for (; i < S3_SHA256_DIGEST_LENGTH; i++) {
             snprintf(&(values->payloadHash[i * 2]), 3, "%02x", md[i]);
         }
     }
@@ -699,7 +710,8 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
     int lastHeaderLen = 0;
     char *buffer = values->canonicalizedSignatureHeaders;
     char *hbuf = values->signedHeaders;
-    for (int i = 0; i < headerCount; i++) {
+    int i = 0;
+    for (; i < headerCount; i++) {
         const char *header = sortedHeaders[i];
         const char *c = header;
         char v;
@@ -797,7 +809,8 @@ static void canonicalize_query_string(const RequestParams *params, char *buffer)
     if (params->queryParams && params->queryParams[0]) {
         char appendage[4];
         int foundEquals = 0;
-        for (unsigned long i = 0; i < strlen(params->queryParams); i++) {
+        unsigned long i = 0;
+        for (; i < strlen(params->queryParams); i++) {
             char c = params->queryParams[i];
             if (isalnum(c) || (c == '_') || (c == '-') || (c == '~')
                 || (c == '.')) {
@@ -855,7 +868,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     strlen(values->canonicalQueryString) + 1 +
     strlen(values->canonicalizedSignatureHeaders) + 1 +
     strlen(values->signedHeaders) + 1 +
-    2 * CC_SHA256_DIGEST_LENGTH + 1; // 2 hex digits for each byte
+    2 * S3_SHA256_DIGEST_LENGTH + 1; // 2 hex digits for each byte
 
     int len = 0;
 
@@ -879,11 +892,17 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     len = 0;
-    unsigned char canonicalRequestHash[CC_SHA256_DIGEST_LENGTH];
+    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH];
+#ifdef __APPLE__
     CC_SHA256(canonicalRequest, strlen(canonicalRequest), canonicalRequestHash);
-    char canonicalRequestHashHex[2 * CC_SHA256_DIGEST_LENGTH + 1];
+#else
+    const unsigned char *rqstData = (const unsigned char*) canonicalRequest;
+    SHA256(rqstData, strlen(canonicalRequest), canonicalRequestHash);
+#endif
+    char canonicalRequestHashHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
     canonicalRequestHashHex[0] = '\0';
-    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+    int i = 0;
+    for (; i < S3_SHA256_DIGEST_LENGTH; i++) {
         buf_append(canonicalRequestHashHex, "%02x", canonicalRequestHash[i]);
     }
 
@@ -906,26 +925,51 @@ static S3Status compose_auth_header(const RequestParams *params,
     char accessKey[strlen(secretAccessKey) + 5];
     snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
 
-    unsigned char dateKey[CC_SHA256_DIGEST_LENGTH];
+#ifdef __APPLE__
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
     CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey), dateStr, 8, dateKey);
-    unsigned char dateRegionKey[CC_SHA256_DIGEST_LENGTH];
-    CCHmac(kCCHmacAlgSHA256, dateKey, CC_SHA256_DIGEST_LENGTH, awsRegion,
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    CCHmac(kCCHmacAlgSHA256, dateKey, S3_SHA256_DIGEST_LENGTH, awsRegion,
            strlen(awsRegion), dateRegionKey);
-    unsigned char dateRegionServiceKey[CC_SHA256_DIGEST_LENGTH];
-    CCHmac(kCCHmacAlgSHA256, dateRegionKey, CC_SHA256_DIGEST_LENGTH, "s3", 2,
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
+    CCHmac(kCCHmacAlgSHA256, dateRegionKey, S3_SHA256_DIGEST_LENGTH, "s3", 2,
            dateRegionServiceKey);
-    unsigned char signingKey[CC_SHA256_DIGEST_LENGTH];
-    CCHmac(kCCHmacAlgSHA256, dateRegionServiceKey, CC_SHA256_DIGEST_LENGTH,
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    CCHmac(kCCHmacAlgSHA256, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
            "aws4_request", strlen("aws4_request"), signingKey);
 
-    unsigned char finalSignature[CC_SHA256_DIGEST_LENGTH];
-    CCHmac(kCCHmacAlgSHA256, signingKey, CC_SHA256_DIGEST_LENGTH, stringToSign,
-           strlen(stringToSign), finalSignature);
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    CCHmac(kCCHmacAlgSHA256, signingKey, S3_SHA256_DIGEST_LENGTH, stringToSign,
+            strlen(stringToSign), finalSignature);
+#else
+    const EVP_MD *sha256evp = EVP_sha256();
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
+    HMAC(sha256evp, accessKey, strlen(accessKey),
+         (const unsigned char*) dateStr, 8, dateKey,
+         NULL);
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    HMAC(sha256evp, dateKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) awsRegion, strlen(awsRegion), dateRegionKey,
+         NULL);
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
+    HMAC(sha256evp, dateRegionKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) "s3", 2, dateRegionServiceKey, NULL);
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    HMAC(sha256evp, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) "aws4_request", strlen("aws4_request"),
+         signingKey,
+         NULL);
+
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    HMAC(sha256evp, signingKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) stringToSign, strlen(stringToSign),
+         finalSignature, NULL);
+#endif
 
     len = 0;
-    char finalSignatureHex[2 * CC_SHA256_DIGEST_LENGTH + 1];
+    char finalSignatureHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
     finalSignatureHex[0] = '\0';
-    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+    for (i = 0; i < S3_SHA256_DIGEST_LENGTH; i++) {
         buf_append(finalSignatureHex, "%02x", finalSignature[i]);
     }
 
