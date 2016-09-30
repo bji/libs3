@@ -38,7 +38,7 @@
 # --------------------------------------------------------------------------
 # Set libs3 version number, unless it is already set.
 
-LIBS3_VER_MAJOR ?= 2
+LIBS3_VER_MAJOR ?= 3
 LIBS3_VER_MINOR ?= 0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 

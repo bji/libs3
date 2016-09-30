@@ -83,19 +83,6 @@ int64_t parseIso8601Time(const char *str);
 
 uint64_t parseUnsignedInt(const char *str);
 
-// base64 encode bytes.  The output buffer must have at least
-// ((4 * (inLen + 1)) / 3) bytes in it.  Returns the number of bytes written
-// to [out].
-int base64Encode(const unsigned char *in, int inLen, char *out);
-
-// Compute HMAC-SHA-1 with key [key] and message [message], storing result
-// in [hmac]
-void HMAC_SHA1(unsigned char hmac[20], const unsigned char *key, int key_len,
-               const unsigned char *message, int message_len);
-
-// Compute a 64-bit hash values given a set of bytes
-uint64_t hash(const unsigned char *k, int length);
-
 // Because Windows seems to be missing isblank(), use our own; it's a very
 // easy function to write in any case
 int is_blank(char c);
