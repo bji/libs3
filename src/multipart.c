@@ -191,8 +191,8 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
                     const char *upload_id, int partContentLength,
                     S3RequestContext *requestContext, void *callbackData)
 {
-    char subResource[512];
-    snprintf(subResource, 512, "partNumber=%d&uploadId=%s", seq, upload_id);
+    char queryParams[512];
+    snprintf(queryParams, 512, "partNumber=%d&uploadId=%s", seq, upload_id);
 
     RequestParams params =
     {
@@ -206,8 +206,8 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
           bucketContext->securityToken,               // securityToken
           bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
-        subResource,                                  // subResource
+        queryParams,                                  // queryParams
+        0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -320,9 +320,9 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
                                   S3RequestContext *requestContext, 
                                   void *callbackData)
 {
-    char subResource[512];
-    snprintf(subResource, 512, "uploadId=%s", upload_id);
-    CommitMultiPartData *data = 
+    char queryParams[512];
+    snprintf(queryParams, 512, "uploadId=%s", upload_id);
+    CommitMultiPartData *data =
         (CommitMultiPartData *) malloc(sizeof(CommitMultiPartData));
     data->userdata = callbackData;
     data->handler = handler;
@@ -344,8 +344,8 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
           bucketContext->securityToken,               // securityToken
           bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
-        subResource,                                  // subResource
+        queryParams,                                  // queryParams
+        0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions

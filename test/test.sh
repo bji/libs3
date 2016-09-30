@@ -106,7 +106,7 @@ COPY_BUCKET=${TEST_BUCKET_PREFIX}.copybucket
 echo "$S3_COMMAND create $COPY_BUCKET"
 $S3_COMMAND create $COPY_BUCKET
 failures=$(($failures + (($? == 0) ? 0 : 1)))
-echo <<EOF
+cat <<EOF
 $S3_COMMAND copy $TEST_BUCKET/key_5 $COPY_BUCKET/copykey
 EOF
 $S3_COMMAND copy $TEST_BUCKET/key_5 $COPY_BUCKET/copykey
@@ -156,10 +156,10 @@ $S3_COMMAND getacl $TEST_BUCKET filename=acl
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
 # Add READ for all AWS users, and READ_ACP for everyone
-echo <<EOF >> acl
+cat <<EOF >> acl
 Group   Authenticated AWS Users                                   READ
 EOF
-echo <<EOF >> acl
+cat <<EOF >> acl
 Group   All Users                                                 READ_ACP
 EOF
 echo "$S3_COMMAND setacl $TEST_BUCKET filename=acl"
@@ -182,10 +182,10 @@ $S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
 # Add READ for all AWS users, and READ_ACP for everyone
-echo <<EOF >> acl
+cat <<EOF >> acl
 Group   Authenticated AWS Users                                   READ
 EOF
-echo <<EOF >> acl
+cat <<EOF >> acl
 Group   All Users                                                 READ_ACP
 EOF
 echo "$S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl"

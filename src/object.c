@@ -188,9 +188,10 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
 
 
 void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
-                          const char *destinationBucket, const char *destinationKey,
-                          const int partNo, const char *uploadId,
-                          const unsigned long startOffset, const unsigned long count,
+                          const char *destinationBucket,
+                          const char *destinationKey, const int partNo,
+                          const char *uploadId, const unsigned long startOffset,
+                          const unsigned long count,
                           const S3PutProperties *putProperties,
                           int64_t *lastModifiedReturn, int eTagReturnSize,
                           char *eTagReturn, S3RequestContext *requestContext,
@@ -220,11 +221,11 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
     string_buffer_initialize(data->lastModified);
 
     // If there's a sequence ID > 0 then add a subResource, OTW pass in NULL
-    char subResource[512];
-    char *subRsrc = NULL;
+    char queryParams[512];
+    char *qp = NULL;
     if (partNo > 0) {
-        snprintf(subResource, 512, "partNumber=%d&uploadId=%s", partNo, uploadId);
-        subRsrc = subResource;
+        snprintf(queryParams, 512, "partNumber=%d&uploadId=%s", partNo, uploadId);
+        qp = queryParams;
     }
 
     // Set up the RequestParams
@@ -241,8 +242,8 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
           bucketContext->securityToken,               // securityToken
           bucketContext->authRegion },                // authRegion
         destinationKey ? destinationKey : key,        // key
-        0,                                            // queryParams
-        subRsrc,                                      // subResource
+        qp,                                           // queryParams
+        0,                                            // subResource
         bucketContext->bucketName,                    // copySourceBucketName
         key,                                          // copySourceKey
         0,                                            // getConditions

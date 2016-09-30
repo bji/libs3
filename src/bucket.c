@@ -707,7 +707,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     }
 
     simplexml_initialize(&(lbData->simpleXml), &listBucketXmlCallback, lbData);
-    
+
     lbData->responsePropertiesCallback = 
         handler->responseHandler.propertiesCallback;
     lbData->listBucketCallback = handler->listBucketCallback;

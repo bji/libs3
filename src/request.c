@@ -641,26 +641,27 @@ static S3Status encode_key(const RequestParams *params,
 }
 
 
-// Simple comparison function for comparing two HTTP header names that are
-// embedded within an HTTP header line, returning true if header1 comes
-// before header2 alphabetically, false if not
-static int headerle(const char *header1, const char *header2)
+// Simple comparison function for comparing two "<key><delim><value>"
+// delimited strings, returning true if the key of s1 comes
+// before the key of s2 alphabetically, false if not
+static int headerle(const char *s1, const char *s2, char delim)
 {
     while (1) {
-        if (*header1 == ':') {
-            return (*header2 != ':');
+        if (*s1 == delim) {
+            return (*s2 != delim);
         }
-        else if (*header2 == ':') {
+        else if (*s2 == delim) {
             return 0;
         }
-        else if (*header2 < *header1) {
+        else if (*s2 < *s1) {
             return 0;
         }
-        else if (*header2 > *header1) {
+        else if (*s2 > *s1) {
             return 1;
         }
-        header1++, header2++;
+        s1++, s2++;
     }
+    return 0;
 }
 
 
@@ -672,18 +673,18 @@ static int headerle(const char *header1, const char *header2)
 // all the string comparisons that would be done "going forward", and thus
 // only does the necessary string comparisons to move values back into their
 // sorted position.
-static void header_gnome_sort(const char **headers, int size)
+static void kv_gnome_sort(const char **values, int size, char delim)
 {
     int i = 0, last_highest = 0;
 
     while (i < size) {
-        if ((i == 0) || headerle(headers[i - 1], headers[i])) {
+        if ((i == 0) || headerle(values[i - 1], values[i], delim)) {
             i = ++last_highest;
         }
         else {
-            const char *tmp = headers[i];
-            headers[i] = headers[i - 1];
-            headers[--i] = tmp;
+            const char *tmp = values[i];
+            values[i] = values[i - 1];
+            values[--i] = tmp;
         }
     }
 }
@@ -711,7 +712,7 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
     }
 
     // Now sort these
-    header_gnome_sort(sortedHeaders, headerCount);
+    kv_gnome_sort(sortedHeaders, headerCount, ':');
 
     // Now copy this sorted list into the buffer, all the while:
     // - folding repeated headers into single lines, and
@@ -807,22 +808,52 @@ static void canonicalize_resource(const S3BucketContext *context,
 #undef append
 }
 
-// Canonicalize the query string part of the request into a buffer
-static void canonicalize_query_string(const char *queryParams,
-                                      const char *subResource, char *buffer)
+
+static void sort_and_urlencode_query_string(const char *queryString,
+                                            char *result)
 {
-    int len = 0;
+#ifdef SIGNATURE_DEBUG
+    printf("\n--\nsort_and_urlencode\nqueryString: %s\n", queryString);
+#endif
 
-    *buffer = 0;
+    unsigned int numParams = 1;
+    const char *tmp = queryString;
+    while ((tmp = strchr(tmp, '&')) != NULL) {
+        numParams++;
+        tmp++;
+    }
 
-#define append(str) len += sprintf(&(buffer[len]), "%s", str)
+    const char* params[numParams];
 
-    if (queryParams && queryParams[0]) {
-        char appendage[4];
+    char tokenized[strlen(queryString) + 1];
+    strncpy(tokenized, queryString, strlen(queryString) + 1);
+
+    char *tok = tokenized;
+    const char *token = NULL;
+    char *save = NULL;
+    unsigned int i = 0;
+
+    while ((token = strtok_r(tok, "&", &save)) != NULL) {
+        tok = NULL;
+        params[i++] = token;
+    }
+
+    kv_gnome_sort(params, numParams, '=');
+
+#ifdef SIGNATURE_DEBUG
+    for (i = 0; i < numParams; i++) {
+        printf("%d: %s\n", i, params[i]);
+    }
+#endif
+
+    unsigned int pi = 0;
+    char appendage[4];
+
+    for (; pi < numParams; pi++) {
+        const char *param = params[pi];
         int foundEquals = 0;
-        unsigned long i = 0;
-        for (; i < strlen(queryParams); i++) {
-            char c = queryParams[i];
+        for (i = 0; i < strlen(param); i++) {
+            char c = param[i];
             if (isalnum(c) || (c == '_') || (c == '-') || (c == '~')
                 || (c == '.')) {
                 appendage[0] = c;
@@ -836,15 +867,37 @@ static void canonicalize_query_string(const char *queryParams,
             else {
                 snprintf(appendage, 4, "%%%02X", c);
             }
-            append(appendage);
+            strncat(result, appendage, strlen(appendage));
         }
+        strncat(result, "&", 1);
+    }
+    result[strlen(result) - 1] = '\0';
+}
+
+
+// Canonicalize the query string part of the request into a buffer
+static void canonicalize_query_string(const char *queryParams,
+                                      const char *subResource, char *buffer)
+{
+    int len = 0;
+
+    *buffer = 0;
+
+#define append(str) len += sprintf(&(buffer[len]), "%s", str)
+
+    if (queryParams && queryParams[0]) {
+        char sorted[strlen(queryParams) * 2];
+        sorted[0] = '\0';
+        sort_and_urlencode_query_string(queryParams, sorted);
+        append(sorted);
     }
 
     if (subResource && subResource[0]) {
         if (queryParams && queryParams[0]) {
-            append("?");
+            append("&");
         }
         append(subResource);
+        append("=");
     }
 
 #undef append
@@ -1028,7 +1081,7 @@ static S3Status compose_auth_header(const RequestParams *params,
 #ifdef SIGNATURE_DEBUG
     printf("--\nAuthorization Header:\n%s\n", values->authorizationHeader);
     printf("--\nAMZ Headers:\n");
-    for (int i = 0; i < values->amzHeadersCount; i++) {
+    for (i = 0; i < values->amzHeadersCount; i++) {
         printf("%s\n", values->amzHeaders[i]);
     }
 #endif
@@ -1668,7 +1721,7 @@ S3Status request_curl_code_to_status(CURLcode code)
 
 S3Status S3_generate_authenticated_query_string
     (char *buffer, const S3BucketContext *bucketContext,
-     const char *key, int64_t expires, const char *resource,
+     const char *key, int expires, const char *resource,
      const char *httpMethod)
 {
     // maximum expiration period is seven days (in seconds)
@@ -1701,7 +1754,7 @@ S3Status S3_generate_authenticated_query_string
 
     snprintf(queryParams, sizeof(queryParams),
              "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
-             "&X-Amz-Date=%s&X-Amz-Expires=%llu"
+             "&X-Amz-Date=%s&X-Amz-Expires=%d"
              "&X-Amz-SignedHeaders=%s&X-Amz-Signature=%s",
              computed.authCredential, computed.requestDateISO8601, expires,
              computed.signedHeaders, computed.requestSignatureHex);

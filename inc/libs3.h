@@ -1721,9 +1721,9 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
  * @param expires gives the number of seconds since Unix epoch for the
  *        expiration date of the request; after this time, the request will
  *        no longer be valid.  If this value is negative, the largest
- *        expiration date possible is used (currently, Jan 19, 2038).
+ *        expiration interval possible is used (one week).
  * @param resource gives a sub-resource to be fetched for the request, or NULL
- *        for none.  This should be of the form "?<resource>", i.e. 
+ *        for none.  This should be of the form "?<resource>", i.e.
  *        "?torrent".
  * @param httpMethod the HTTP request method that will be used with the
  *        generated query string (e.g. "GET").
@@ -1735,7 +1735,7 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
  **/
 S3Status S3_generate_authenticated_query_string
     (char *buffer, const S3BucketContext *bucketContext,
-     const char *key, int64_t expires, const char *resource,
+     const char *key, int expires, const char *resource,
      const char *httpMethod);
 
 

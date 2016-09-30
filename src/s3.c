@@ -807,7 +807,7 @@ static S3Status responsePropertiesCallback
 // This callback does the same thing for every request type: saves the status
 // and error stuff in global variables
 static void responseCompleteCallback(S3Status status,
-                                     const S3ErrorDetails *error, 
+                                     const S3ErrorDetails *error,
                                      void *callbackData)
 {
     (void) callbackData;
@@ -2429,7 +2429,7 @@ static void put_object(int argc, char **argv, int optindex,
                 &responsePropertiesCallback,
                 &responseCompleteCallback
             },
-            &initial_multipart_callback    
+            &initial_multipart_callback
         };
 
         S3PutObjectHandler putObjectHandler = {
@@ -2439,7 +2439,7 @@ static void put_object(int argc, char **argv, int optindex,
 
         S3MultipartCommitHandler commit_handler = {
             {
-                    &responsePropertiesCallback,&responseCompleteCallback
+                &responsePropertiesCallback,&responseCompleteCallback
             },
             &multipartPutXmlCallback,
             0
@@ -2451,17 +2451,17 @@ static void put_object(int argc, char **argv, int optindex,
         if (uploadId) {
             manager.upload_id = strdup(uploadId);
             manager.remaining = contentLength;
-            if(!try_get_parts_info(bucketName, key, &manager)) {
+            if (!try_get_parts_info(bucketName, key, &manager)) {
                 fseek(data.infile, -(manager.remaining), 2);
                 contentLength = manager.remaining;
                 goto upload;
-            }else {
+            } else {
                 goto clean;
             }
         }
 
         do {
-            S3_initiate_multipart(&bucketContext,key,0, &handler,0, &manager);
+            S3_initiate_multipart(&bucketContext, key,0, &handler,0, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         if (manager.upload_id == 0 || statusG != S3StatusOK) {
@@ -2505,12 +2505,14 @@ upload:
                     unsigned long long count = partContentLength - 1; // Inclusive for copies
                     // The default copy callback tries to set this for us, need to allocate here
                     manager.etags[seq-1] = malloc(512); // TBD - magic #!  Isa there a max etag defined?
-                    S3_copy_object_range(&srcBucketContext, srcKey, bucketName, key,
-                         seq, manager.upload_id,
-                         startOffset, count,
-                         &putProperties,
-                         &lastModified, 512 /*TBD - magic # */, manager.etags[seq-1], 0,
-                         &copyResponseHandler, 0);
+                    S3_copy_object_range(&srcBucketContext, srcKey,
+                                         bucketName, key,
+                                         seq, manager.upload_id,
+                                         startOffset, count,
+                                         &putProperties,
+                                         &lastModified, 512 /*TBD - magic # */,
+                                         manager.etags[seq-1], 0,
+                                         &copyResponseHandler, 0);
                 } else {
                     S3_upload_part(&bucketContext, key, &putProperties,
                                    &putObjectHandler, seq, manager.upload_id,
@@ -2643,7 +2645,9 @@ static void copy_object(int argc, char **argv, int optindex)
                        ".", 1, 0, &listBucketHandler, &sourceSize);
     } while (S3_status_is_retryable(statusG) && should_retry());
     if (statusG != S3StatusOK) {
-        fprintf(stderr, "\nERROR: Unable to get source object size\n");
+        fprintf(stderr, "\nERROR: Unable to get source object size (%s)\n",
+                S3_get_status_name(statusG));
+        fprintf(stderr, "%s\n", errorDetailsG);
         exit(1);
     }
     if (sourceSize > MULTIPART_CHUNK_SIZE) {
@@ -3082,7 +3086,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
         key = 0;
     }
 
-    int64_t expires = -1;
+    int expires = -1;
 
     const char *resource = 0;
     const char *httpMethod = "GET";
