@@ -128,7 +128,8 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
           bucketContext->secretAccessKey,             // secretAccessKey
-          bucketContext->securityToken },             // securityToken
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
         0,                                            // queryParams
         "acl",                                        // subResource
@@ -299,7 +300,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
-    
+
     // Convert aclGrants to XML document
     S3Status status = generateAclXmlDocument
         (ownerId, ownerDisplayName, aclGrantCount, aclGrants,
@@ -327,7 +328,8 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
           bucketContext->secretAccessKey,             // secretAccessKey
-          bucketContext->securityToken },             // securityToken
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
         0,                                            // queryParams
         "acl",                                        // subResource

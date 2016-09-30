@@ -906,8 +906,10 @@ static S3Status compose_auth_header(const RequestParams *params,
         buf_append(canonicalRequestHashHex, "%02x", canonicalRequestHash[i]);
     }
 
-    // FIXME: determine correct region
-    const char *awsRegion = "us-east-1";
+    const char *awsRegion = S3_DEFAULT_REGION;
+    if (params->bucketContext.authRegion) {
+        awsRegion = params->bucketContext.authRegion;
+    }
     char scope[SIGNATURE_SCOPE_SIZE + 1];
     snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request", dateStr,
              awsRegion);
@@ -1377,7 +1379,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
     snprintf(userAgentG, sizeof(userAgentG), 
              "Mozilla/4.0 (Compatible; %s; libs3 %s.%s; %s)",
              userAgentInfo, LIBS3_VER_MAJOR, LIBS3_VER_MINOR, platform);
-    
+
     return S3StatusOK;
 }
 

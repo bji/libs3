@@ -228,6 +228,12 @@ extern "C" {
 #define S3_INIT_ALL                        (S3_INIT_WINSOCK)
 
 
+/**
+ * The default region identifier used to scope the signing key
+ */
+#define S3_DEFAULT_REGION                  "us-east-1"
+
+
 /** **************************************************************************
  * Enumerations
  ************************************************************************** **/
@@ -711,6 +717,12 @@ typedef struct S3BucketContext
      *  The Amazon Security Token used to generate Temporary Security Credentials
      **/
     const char *securityToken;
+
+    /**
+     * The AWS region to which to scope the signing key used for authorization.
+     * If NULL, the default region ("us-east-1") will be used.
+     */
+    const char *authRegion;
 } S3BucketContext;
 
 
@@ -1740,6 +1752,7 @@ S3Status S3_generate_authenticated_query_string
  *        Security Credentials
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
+ * @param authRegion is the AWS region to use for the authorization signature
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -1750,10 +1763,10 @@ S3Status S3_generate_authenticated_query_string
  **/
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey, const char *securityToken,
-                     const char *hostName, S3RequestContext *requestContext,
-                     const S3ListServiceHandler *handler,
-                     void *callbackData);
-                         
+                     const char *hostName, const char *authRegion,
+                     S3RequestContext *requestContext,
+                     const S3ListServiceHandler *handler, void *callbackData);
+
 
 /** **************************************************************************
  * Bucket Functions
@@ -1773,6 +1786,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the bucket name to test
+ * @param authRegion is the AWS region to use for the authorization signature
  * @param locationConstraintReturnSize gives the number of bytes in the
  *        locationConstraintReturn parameter
  * @param locationConstraintReturn provides the location into which to write
@@ -1792,13 +1806,14 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     const char *accessKeyId, const char *secretAccessKey,
-                    const char *securityToken, const char *hostName, 
-                    const char *bucketName, int locationConstraintReturnSize,
+                    const char *securityToken, const char *hostName,
+                    const char *bucketName, const char *authRegion,
+                    int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
                     const S3ResponseHandler *handler, void *callbackData);
 
-                           
+
 /**
  * Creates a new bucket.
  *
@@ -1812,6 +1827,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be created
+ * @param authRegion is the AWS region to use for the authorization signature
  * @param cannedAcl gives the "REST canned ACL" to use for the created bucket
  * @param locationConstraint if non-NULL, gives the geographic location for
  *        the bucket to create.
@@ -1826,7 +1842,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *securityToken,
                       const char *hostName, const char *bucketName,
-                      S3CannedAcl cannedAcl, const char *locationConstraint,
+                      const char *authRegion, S3CannedAcl cannedAcl,
+                      const char *locationConstraint,
                       S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
@@ -1846,6 +1863,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  * @param hostName is the S3 host name to use; if NULL is passed in, the
  *        default S3 host as provided to S3_initialize() will be used.
  * @param bucketName is the name of the bucket to be deleted
+ * @param authRegion is the AWS region to use for the authorization signature
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -1856,8 +1874,9 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  **/
 void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *accessKeyId, const char *secretAccessKey,
-                      const char *securityToken, const char *hostName, 
-                      const char *bucketName, S3RequestContext *requestContext,
+                      const char *securityToken, const char *hostName,
+                      const char *bucketName, const char *authRegion,
+                      S3RequestContext *requestContext,
                       const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -1917,7 +1936,7 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
                    const S3PutObjectHandler *handler, void *callbackData);
-                        
+
 
 /**
  * Copies an object from one location to another.  The object may be copied

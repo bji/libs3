@@ -913,7 +913,7 @@ static void list_service(int allDetails)
     };
 
     do {
-        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 0, 
+        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 0, 0,
                         &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -957,7 +957,7 @@ static void test_bucket(int argc, char **argv, int optindex)
     char locationConstraint[64];
     do {
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG, 0,
-                       0, bucketName, sizeof(locationConstraint),
+                       0, bucketName, 0, sizeof(locationConstraint),
                        locationConstraint, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -1056,7 +1056,7 @@ static void create_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, 0,
-                         0, bucketName, cannedAcl, locationConstraint, 0,
+                         0, bucketName, 0, cannedAcl, locationConstraint, 0,
                          &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -1096,7 +1096,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         0, 0, bucketName, 0, &responseHandler, 0);
+                         0, 0, bucketName, 0, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1253,6 +1253,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -1679,6 +1680,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
             uriStyleG,
             accessKeyIdG,
             secretAccessKeyG,
+            0,
             0
         };
 
@@ -1801,6 +1803,7 @@ static void list_parts(int argc, char **argv, int optindex)
             uriStyleG,
             accessKeyIdG,
             secretAccessKeyG,
+            0,
             0
         };
 
@@ -1900,6 +1903,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
             uriStyleG,
             accessKeyIdG,
             secretAccessKeyG,
+            0,
             0
         };
 
@@ -1963,6 +1967,7 @@ static void delete_object(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -2089,6 +2094,7 @@ static int try_get_parts_info(const char *bucketName, const char *key,
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -2351,6 +2357,7 @@ static void put_object(int argc, char **argv, int optindex,
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -2480,6 +2487,7 @@ upload:
                         uriStyleG,
                         accessKeyIdG,
                         secretAccessKeyG,
+                        0,
                         0
                     };
 
@@ -2614,6 +2622,7 @@ static void copy_object(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
     S3ListBucketHandler listBucketHandler =
@@ -2760,6 +2769,7 @@ static void copy_object(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -2942,6 +2952,7 @@ static void get_object(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3017,6 +3028,7 @@ static void head_object(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3097,6 +3109,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3200,6 +3213,7 @@ void get_acl(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3364,6 +3378,7 @@ void set_acl(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3457,6 +3472,7 @@ void get_logging(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3624,6 +3640,7 @@ void set_logging(int argc, char **argv, int optindex)
         uriStyleG,
         accessKeyIdG,
         secretAccessKeyG,
+        0,
         0
     };
 
@@ -3701,7 +3718,7 @@ int main(int argc, char **argv)
     }
 
     const char *command = argv[optind++];
-    
+
     if (!strcmp(command, "help")) {
         fprintf(stdout, "\ns3 is a program for performing single requests "
                 "to Amazon S3.\n");

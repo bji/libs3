@@ -100,7 +100,7 @@ static S3Status propertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     XmlCallbackData *cbData = (XmlCallbackData *) callbackData;
-    
+
     return (*(cbData->responsePropertiesCallback))
         (responseProperties, cbData->callbackData);
 }
@@ -132,7 +132,8 @@ static void completeCallback(S3Status requestStatus,
 
 void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey, const char *securityToken,
-                     const char *hostName, S3RequestContext *requestContext,
+                     const char *hostName, const char *authRegion,
+                     S3RequestContext *requestContext,
                      const S3ListServiceHandler *handler, void *callbackData)
 {
     // Create and set up the callback data
@@ -167,7 +168,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
           S3UriStylePath,                             // uriStyle
           accessKeyId,                                // accessKeyId
           secretAccessKey,                            // secretAccessKey
-          securityToken },                            // securityToken
+          securityToken,                              // securityToken
+          authRegion },                               // authRegion
         0,                                            // key
         0,                                            // queryParams
         0,                                            // subResource

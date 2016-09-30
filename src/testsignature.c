@@ -26,7 +26,8 @@ static void responseCompleteCallback(S3Status status,
         }
         if (error->extraDetailsCount > 0) {
             for (int i = 0; i < error->extraDetailsCount; i++) {
-                printf("%s: %s\n", error->extraDetails[i].name, error->extraDetails[i].value);
+                printf("%s: %s\n", error->extraDetails[i].name,
+                       error->extraDetails[i].value);
             }
         }
     }
@@ -43,17 +44,17 @@ int main(int argc, char **argv)
     S3_initialize(NULL, S3_INIT_ALL, NULL);
 
     S3BucketContext bucketContext =
-    { 0, "examplebucket", S3ProtocolHTTPS, S3UriStyleVirtualHost,
-        "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", 0 };
+        { 0, "examplebucket", S3ProtocolHTTPS, S3UriStyleVirtualHost,
+            "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            0, 0 };
 
     S3GetObjectHandler getObjectHandler =
     {
-        { &responsePropertiesCallback, &responseCompleteCallback },
-        &getObjectDataCallback
-    };
+    { &responsePropertiesCallback, &responseCompleteCallback },
+        &getObjectDataCallback };
 
     S3_get_object(&bucketContext, "test.txt", NULL, 0, 10, NULL,
-                   &getObjectHandler, NULL);
+                  &getObjectHandler, NULL);
 
     S3_deinitialize();
 }
