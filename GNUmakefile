@@ -119,6 +119,9 @@ ifndef LIBXML2_CFLAGS
     LIBXML2_CFLAGS := $(shell xml2-config --cflags)
 endif
 
+ifndef OPENSSL_LIBS
+    OPENSSL_LIBS := -lssl -lcrypto
+endif
 
 # --------------------------------------------------------------------------
 # These CFLAGS assume a GNU compiler.  For other compilers, write a script
@@ -142,7 +145,7 @@ CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
           -D_ISOC99_SOURCE \
           -D_POSIX_C_SOURCE=200112L
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(OPENSSL_LIBS) -lpthread
 
 
 # --------------------------------------------------------------------------
@@ -203,6 +206,14 @@ uninstall:
 
 # --------------------------------------------------------------------------
 # Compile target patterns
+
+$(BUILD)/obj/test%.o: src/test%.c
+	$(QUIET_ECHO) $@: Compiling test object
+	@ mkdir -p $(dir $(BUILD)/dep/$<)
+	@ $(CC) $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
+        -o $(BUILD)/dep/$(<:%.c=%.d) -c $<
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) $(CC) -Wno-error=unused-parameter $(CFLAGS) -o $@ -c $<
 
 $(BUILD)/obj/%.o: src/%.c
 	$(QUIET_ECHO) $@: Compiling object
@@ -275,12 +286,17 @@ $(BUILD)/include/libs3.h: inc/libs3.h
 # Test targets
 
 .PHONY: test
-test: $(BUILD)/bin/testsimplexml
+test: $(BUILD)/bin/testsimplexml $(BUILD)/bin/testsignature
 
 $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(LIBS3_STATIC)
 	$(QUIET_ECHO) $@: Building executable
 	@ mkdir -p $(dir $@)
 	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LIBXML2_LIBS)
+
+$(BUILD)/bin/testsignature: $(BUILD)/obj/testsignature.o $(LIBS3_STATIC)
+	$(QUIET_ECHO) $@: Building executable
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LDFLAGS)
 
 
 # --------------------------------------------------------------------------

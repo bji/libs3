@@ -25,7 +25,8 @@ static void responseCompleteCallback(S3Status status,
             printf("%s\n", error->message);
         }
         if (error->extraDetailsCount > 0) {
-            for (int i = 0; i < error->extraDetailsCount; i++) {
+            int i = 0;
+            for (; i < error->extraDetailsCount; i++) {
                 printf("%s: %s\n", error->extraDetails[i].name,
                        error->extraDetails[i].value);
             }
@@ -57,4 +58,6 @@ int main(int argc, char **argv)
                   &getObjectHandler, NULL);
 
     S3_deinitialize();
+
+    return 0;
 }
