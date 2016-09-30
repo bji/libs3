@@ -127,6 +127,15 @@ typedef struct RequestComputedValues
     // Authorization header
     char authorizationHeader[256];
 
+    // Request date stamp
+    char requestDateISO8601[64];
+
+    // Credential used for authorization signature
+    char authCredential[MAX_CREDENTIAL_SIZE + 1];
+
+    // Computed request signature (hex string)
+    char requestSignatureHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
+
     // Host header
     char hostHeader[128];
 
@@ -322,7 +331,7 @@ static S3Status append_amz_header(RequestComputedValues *values,
 // these headers in params->amzHeaders (and also sets params->amzHeadersCount
 // to be the count of the total number of x-amz- headers thus created).
 static S3Status compose_amz_headers(const RequestParams *params,
-                                    const char *dateStr,
+                                    int forceUnsignedPayload,
                                     RequestComputedValues *values)
 {
     const S3PutProperties *properties = params->putProperties;
@@ -367,7 +376,7 @@ static S3Status compose_amz_headers(const RequestParams *params,
     }
 
     // Add the x-amz-date header
-    append_amz_header(values, 0, "x-amz-date", dateStr);
+    append_amz_header(values, 0, "x-amz-date", values->requestDateISO8601);
 
     if (params->httpRequestType == HttpRequestTypeCOPY) {
         // Add the x-amz-copy-source header
@@ -397,10 +406,11 @@ static S3Status compose_amz_headers(const RequestParams *params,
                           params->bucketContext.securityToken);
     }
 
-    if (params->httpRequestType == HttpRequestTypeGET
-        || params->httpRequestType == HttpRequestTypeCOPY
-        || params->httpRequestType == HttpRequestTypeDELETE
-        || params->httpRequestType == HttpRequestTypeHEAD) {
+    if (!forceUnsignedPayload
+        && (params->httpRequestType == HttpRequestTypeGET
+            || params->httpRequestType == HttpRequestTypeCOPY
+            || params->httpRequestType == HttpRequestTypeDELETE
+            || params->httpRequestType == HttpRequestTypeHEAD)) {
         // empty payload
         unsigned char md[S3_SHA256_DIGEST_LENGTH];
 #ifdef __APPLE__
@@ -798,7 +808,8 @@ static void canonicalize_resource(const S3BucketContext *context,
 }
 
 // Canonicalize the query string part of the request into a buffer
-static void canonicalize_query_string(const RequestParams *params, char *buffer)
+static void canonicalize_query_string(const char *queryParams,
+                                      const char *subResource, char *buffer)
 {
     int len = 0;
 
@@ -806,12 +817,12 @@ static void canonicalize_query_string(const RequestParams *params, char *buffer)
 
 #define append(str) len += sprintf(&(buffer[len]), "%s", str)
 
-    if (params->queryParams && params->queryParams[0]) {
+    if (queryParams && queryParams[0]) {
         char appendage[4];
         int foundEquals = 0;
         unsigned long i = 0;
-        for (; i < strlen(params->queryParams); i++) {
-            char c = params->queryParams[i];
+        for (; i < strlen(queryParams); i++) {
+            char c = queryParams[i];
             if (isalnum(c) || (c == '_') || (c == '-') || (c == '~')
                 || (c == '.')) {
                 appendage[0] = c;
@@ -829,14 +840,43 @@ static void canonicalize_query_string(const RequestParams *params, char *buffer)
         }
     }
 
-    if (params->subResource && params->subResource[0]) {
-        if (params->queryParams && params->queryParams[0]) {
+    if (subResource && subResource[0]) {
+        if (queryParams && queryParams[0]) {
             append("?");
         }
+        append(subResource);
     }
 
 #undef append
 }
+
+
+static HttpRequestType http_request_method_to_type(const char *method)
+{
+    if (!method) {
+        return HttpRequestTypeInvalid;
+    }
+    if (strcmp(method, "POST") == 0) {
+        return HttpRequestTypePOST;
+    }
+    else if (strcmp(method, "GET") == 0) {
+        return HttpRequestTypeGET;
+    }
+    else if (strcmp(method, "HEAD") == 0) {
+        return HttpRequestTypeHEAD;
+    }
+    else if (strcmp(method, "PUT") == 0) {
+        return HttpRequestTypePUT;
+    }
+    else if (strcmp(method, "COPY") == 0) {
+        return HttpRequestTypeCOPY;
+    }
+    else if (strcmp(method, "DELETE") == 0) {
+        return HttpRequestTypeDELETE;
+    }
+    return HttpRequestTypeInvalid;
+}
+
 
 // Convert an HttpRequestType to an HTTP Verb string
 static const char *http_request_type_to_verb(HttpRequestType requestType)
@@ -859,7 +899,6 @@ static const char *http_request_type_to_verb(HttpRequestType requestType)
 
 // Composes the Authorization header for the request
 static S3Status compose_auth_header(const RequestParams *params,
-                                    const char *dateStr,
                                     RequestComputedValues *values)
 {
     const char *httpMethod = http_request_type_to_verb(params->httpRequestType);
@@ -911,13 +950,13 @@ static S3Status compose_auth_header(const RequestParams *params,
         awsRegion = params->bucketContext.authRegion;
     }
     char scope[SIGNATURE_SCOPE_SIZE + 1];
-    snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request", dateStr,
-             awsRegion);
+    snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request",
+             values->requestDateISO8601, awsRegion);
 
     char stringToSign[17 + 17 + SIGNATURE_SCOPE_SIZE + 1
         + strlen(canonicalRequestHashHex)];
     snprintf(stringToSign, sizeof(stringToSign), "AWS4-HMAC-SHA256\n%s\n%s\n%s",
-             dateStr, scope, canonicalRequestHashHex);
+             values->requestDateISO8601, scope, canonicalRequestHashHex);
 
 #ifdef SIGNATURE_DEBUG
     printf("--\nString to Sign:\n%s\n", stringToSign);
@@ -929,7 +968,8 @@ static S3Status compose_auth_header(const RequestParams *params,
 
 #ifdef __APPLE__
     unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
-    CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey), dateStr, 8, dateKey);
+    CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey),
+           values->requestDateISO8601, 8, dateKey);
     unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
     CCHmac(kCCHmacAlgSHA256, dateKey, S3_SHA256_DIGEST_LENGTH, awsRegion,
            strlen(awsRegion), dateRegionKey);
@@ -947,7 +987,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     const EVP_MD *sha256evp = EVP_sha256();
     unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
     HMAC(sha256evp, accessKey, strlen(accessKey),
-         (const unsigned char*) dateStr, 8, dateKey,
+         (const unsigned char*) values->requestDateISO8601, 8, dateKey,
          NULL);
     unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
     HMAC(sha256evp, dateKey, S3_SHA256_DIGEST_LENGTH,
@@ -969,22 +1009,21 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     len = 0;
-    char finalSignatureHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
-    finalSignatureHex[0] = '\0';
+    values->requestSignatureHex[0] = '\0';
     for (i = 0; i < S3_SHA256_DIGEST_LENGTH; i++) {
-        buf_append(finalSignatureHex, "%02x", finalSignature[i]);
+        buf_append(values->requestSignatureHex, "%02x", finalSignature[i]);
     }
 
-    char credential[strlen(params->bucketContext.accessKeyId) + 1 + 8 + 1
-        + strlen(awsRegion) + 1 + 2 + 1 + 12 + 1];
-    snprintf(credential, sizeof(credential), "%s/%.8s/%s/s3/aws4_request",
-             params->bucketContext.accessKeyId, dateStr, awsRegion);
+    snprintf(values->authCredential, sizeof(values->authCredential),
+             "%s/%.8s/%s/s3/aws4_request", params->bucketContext.accessKeyId,
+             values->requestDateISO8601, awsRegion);
 
     snprintf(
             values->authorizationHeader,
             sizeof(values->authorizationHeader),
             "Authorization: AWS4-HMAC-SHA256 Credential=%s,SignedHeaders=%s,Signature=%s",
-            credential, values->signedHeaders, finalSignatureHex);
+            values->authCredential, values->signedHeaders,
+            values->requestSignatureHex);
 
 #ifdef SIGNATURE_DEBUG
     printf("--\nAuthorization Header:\n%s\n", values->authorizationHeader);
@@ -1393,6 +1432,65 @@ void request_api_deinitialize()
     }
 }
 
+static S3Status setup_request(const RequestParams *params,
+                              RequestComputedValues *computed,
+                              int forceUnsignedPayload)
+{
+    S3Status status;
+
+    // Validate the bucket name
+    if (params->bucketContext.bucketName
+        && ((status = S3_validate_bucket_name(params->bucketContext.bucketName,
+                                              params->bucketContext.uriStyle))
+            != S3StatusOK)) {
+        return status;
+    }
+
+    if (1) {
+        time_t now = time(NULL);
+        struct tm gmt;
+        gmtime_r(&now, &gmt);
+        strftime(computed->requestDateISO8601,
+                 sizeof(computed->requestDateISO8601), "%Y%m%dT%H%M%SZ", &gmt);
+    }
+    else {
+        snprintf(computed->requestDateISO8601,
+                 sizeof(computed->requestDateISO8601), "20130524T000000Z");
+    }
+
+    // Compose the amz headers
+    if ((status = compose_amz_headers(params, forceUnsignedPayload, computed))
+        != S3StatusOK) {
+        return status;
+    }
+
+    // Compose standard headers
+    if ((status = compose_standard_headers(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+    // URL encode the key
+    if ((status = encode_key(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+    // Compute the canonicalized amz headers
+    canonicalize_signature_headers(computed);
+
+    // Compute the canonicalized resource
+    canonicalize_resource(&params->bucketContext, computed->urlEncodedKey,
+                          computed->canonicalURI);
+    canonicalize_query_string(params->queryParams, params->subResource,
+                              computed->canonicalQueryString);
+
+    // Compose Authorization header
+    if ((status = compose_auth_header(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+    return status;
+}
+
 void request_perform(const RequestParams *params, S3RequestContext *context)
 {
     Request *request;
@@ -1407,50 +1505,7 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     // These will hold the computed values
     RequestComputedValues computed;
 
-    // Validate the bucket name
-    if (params->bucketContext.bucketName && 
-        ((status = S3_validate_bucket_name
-          (params->bucketContext.bucketName, 
-           params->bucketContext.uriStyle)) != S3StatusOK)) {
-        return_status(status);
-    }
-
-    char date[64];
-    if (1) {
-        time_t now = time(NULL);
-        struct tm gmt;
-        gmtime_r(&now, &gmt);
-        strftime(date, sizeof(date), "%Y%m%dT%H%M%SZ", &gmt);
-    }
-    else {
-        snprintf(date, sizeof(date), "20130524T000000Z");
-    }
-
-    // Compose the amz headers
-    if ((status = compose_amz_headers(params, date, &computed)) != S3StatusOK) {
-        return_status(status);
-    }
-
-    // Compose standard headers
-    if ((status = compose_standard_headers(params, &computed)) != S3StatusOK) {
-        return_status(status);
-    }
-
-    // URL encode the key
-    if ((status = encode_key(params, &computed)) != S3StatusOK) {
-        return_status(status);
-    }
-
-    // Compute the canonicalized amz headers
-    canonicalize_signature_headers(&computed);
-
-    // Compute the canonicalized resource
-    canonicalize_resource(&params->bucketContext, computed.urlEncodedKey,
-                          computed.canonicalURI);
-    canonicalize_query_string(params, computed.canonicalQueryString);
-
-    // Compose Authorization header
-    if ((status = compose_auth_header(params, date, &computed)) != S3StatusOK) {
+    if ((status = setup_request(params, &computed, 0)) != S3StatusOK) {
         return_status(status);
     }
 
@@ -1613,11 +1668,12 @@ S3Status request_curl_code_to_status(CURLcode code)
 
 S3Status S3_generate_authenticated_query_string
     (char *buffer, const S3BucketContext *bucketContext,
-     const char *key, int64_t expires, const char *resource)
+     const char *key, int64_t expires, const char *resource,
+     const char *httpMethod)
 {
-#define MAX_EXPIRES (((int64_t) 1 << 31) - 1)
-    // S3 seems to only accept expiration dates up to the number of seconds
-    // representably by a signed 32-bit integer
+    // maximum expiration period is seven days (in seconds)
+#define MAX_EXPIRES 604800
+
     if (expires < 0) {
         expires = MAX_EXPIRES;
     }
@@ -1625,68 +1681,32 @@ S3Status S3_generate_authenticated_query_string
         expires = MAX_EXPIRES;
     }
 
-    // xxx todo: rework this so that it can be incorporated into shared code
-    // with request_perform().  It's really unfortunate that this code is not
-    // shared with request_perform().
+    RequestParams params =
+    { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
+        resource,
+        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL };
 
-    // URL encode the key
-    char urlEncodedKey[S3_MAX_KEY_SIZE * 3];
-    if (key) {
-        urlEncode(urlEncodedKey, key, strlen(key));
-    }
-    else {
-        urlEncodedKey[0] = 0;
+    RequestComputedValues computed;
+    S3Status status = setup_request(&params, &computed, 1);
+    if (status != S3StatusOK) {
+        return status;
     }
 
-    // Compute canonicalized resource
-    char canonicalizedResource[MAX_CANONICALIZED_RESOURCE_SIZE];
-    canonicalize_resource(bucketContext, urlEncodedKey,
-                          canonicalizedResource);
+    // Finally, compose the URI, with params
+    char queryParams[sizeof("X-Amz-Algorithm=AWS4-HMAC-SHA256")
+        + sizeof("&X-Amz-Credential=") + MAX_CREDENTIAL_SIZE
+        + sizeof("&X-Amz-Date=") + 16 + sizeof("&X-Amz-Expires=") + 6
+        + sizeof("&X-Amz-SignedHeaders=") + 128 + sizeof("&X-Amz-Signature=")
+        + sizeof(computed.requestSignatureHex) + 1];
 
-    // We allow for:
-    // 17 bytes for HTTP-Verb + \n
-    // 1 byte for empty Content-MD5 + \n
-    // 1 byte for empty Content-Type + \n
-    // 20 bytes for Expires + \n
-    // 0 bytes for CanonicalizedAmzHeaders
-    // CanonicalizedResource
-    char signbuf[17 + 1 + 1 + 1 + 20 + sizeof(canonicalizedResource) + 1];
-    int len = 0;
-
-#define signbuf_append(format, ...)                             \
-    len += snprintf(&(signbuf[len]), sizeof(signbuf) - len,     \
-                    format, __VA_ARGS__)
-
-    signbuf_append("%s\n", "GET"); // HTTP-Verb
-    signbuf_append("%s\n", ""); // Content-MD5
-    signbuf_append("%s\n", ""); // Content-Type
-    signbuf_append("%llu\n", (unsigned long long) expires);
-    signbuf_append("%s", canonicalizedResource);
-
-    // Generate an HMAC-SHA-1 of the signbuf
-    unsigned char hmac[20];
-
-    HMAC_SHA1(hmac, (unsigned char *) bucketContext->secretAccessKey,
-              strlen(bucketContext->secretAccessKey),
-              (unsigned char *) signbuf, len);
-
-    // Now base-64 encode the results
-    char b64[((20 + 1) * 4) / 3];
-    int b64Len = base64Encode(hmac, 20, b64);
-
-    // Now urlEncode that
-    char signature[sizeof(b64) * 3];
-    urlEncode(signature, b64, b64Len);
-
-    // Finally, compose the uri, with params:
-    // ?AWSAccessKeyId=xxx[&Expires=]&Signature=xxx
-    char queryParams[sizeof("AWSAccessKeyId=") + 20 + 
-                     sizeof("&Expires=") + 20 + 
-                     sizeof("&Signature=") + sizeof(signature) + 1];
-
-    sprintf(queryParams, "AWSAccessKeyId=%s&Expires=%ld&Signature=%s",
-            bucketContext->accessKeyId, (long) expires, signature);
+    snprintf(queryParams, sizeof(queryParams),
+             "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
+             "&X-Amz-Date=%s&X-Amz-Expires=%llu"
+             "&X-Amz-SignedHeaders=%s&X-Amz-Signature=%s",
+             computed.authCredential, computed.requestDateISO8601, expires,
+             computed.signedHeaders, computed.requestSignatureHex);
 
     return compose_uri(buffer, S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE,
-                       bucketContext, urlEncodedKey, resource, queryParams);
+                       bucketContext, computed.urlEncodedKey, resource,
+                       queryParams);
 }

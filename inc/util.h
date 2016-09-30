@@ -40,7 +40,6 @@
 #define ACS_GROUP_LOG_DELIVERY  ACS_URL "s3/LogDelivery"
 
 
-
 // Derived from S3 documentation
 
 // This is the maximum number of bytes needed in a "compacted meta header"
@@ -64,6 +63,12 @@
 #define MAX_CANONICALIZED_RESOURCE_SIZE \
     (1 + 255 + 1 + MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent") - 1) + 1)
 
+#define MAX_ACCESS_KEY_ID_LENGTH 32
+
+// Maximum length of a credential string
+// <access key>/<yyyymmdd>/<region>/s3/aws4_request
+#define MAX_CREDENTIAL_SIZE \
+   (MAX_ACCESS_KEY_ID_LENGTH + 1) + 8 + 1 + 32 + sizeof("/s3/aws4_request")
 
 // Utilities -----------------------------------------------------------------
 

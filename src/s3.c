@@ -64,6 +64,7 @@ static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
 static int verifyPeerG = 0;
+static const char *awsRegionG = NULL;
 
 
 // Environment variables, saved as globals ----------------------------------
@@ -156,6 +157,8 @@ static char putenvBufG[256];
 #define TARGET_BUCKET_PREFIX_LEN (sizeof(TARGET_BUCKET_PREFIX) - 1)
 #define TARGET_PREFIX_PREFIX "targetPrefix="
 #define TARGET_PREFIX_PREFIX_LEN (sizeof(TARGET_PREFIX_PREFIX) - 1)
+#define HTTP_METHOD_PREFIX "method="
+#define HTTP_METHOD_PREFIX_LEN (sizeof(HTTP_METHOD_PREFIX) - 1)
 
 
 // util ----------------------------------------------------------------------
@@ -164,7 +167,7 @@ static void S3_init()
 {
     S3Status status;
     const char *hostname = getenv("S3_HOSTNAME");
-    
+
     if ((status = S3_initialize("s3", verifyPeerG|S3_INIT_ALL, hostname))
         != S3StatusOK) {
         fprintf(stderr, "Failed to initialize libs3: %s\n", 
@@ -201,13 +204,14 @@ static void usageExit(FILE *out)
 "   -r/--retries         : retry retryable failures this number of times\n"
 "                          (default is 5)\n"
 "   -v/--verify-peer     : verify peer SSL certificate (default is no)\n"
+"   -g/--region <REGION> : use <REGION> for request authorization\n"
 "\n"
 "   Environment:\n"
 "\n"
 "   S3_ACCESS_KEY_ID     : S3 access key ID (required)\n"
 "   S3_SECRET_ACCESS_KEY : S3 secret access key (required)\n"
 "   S3_HOSTNAME          : specify alternative S3 host (optional)\n"
-"\n" 
+"\n"
 " Commands (with <required parameters> and [optional parameters]) :\n"
 "\n"
 "   (NOTE: all command parameters take a value and are specified using the\n"
@@ -322,6 +326,8 @@ static void usageExit(FILE *out)
 "     [expires]          : Expiration date for query string\n"
 "     [resource]         : Sub-resource of key for query string, without a\n"
 "                          leading '?', for example, \"torrent\"\n"
+"     [method]           : HTTP method for use with the query string\n"
+"                        : (default is \"GET\")"
 "\n"
 "   listmultiparts       : Show multipart uploads\n"
 "     <bucket>           : Bucket multipart uploads belongs to\n"
@@ -438,7 +444,7 @@ static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
         }
 
         memcpy(&(buf->data[buf->size]), data, toCopy);
-        
+
         buf->size += toCopy, data += toCopy, dataLen -= toCopy;
     }
 
@@ -742,6 +748,7 @@ static struct option longOptionsG[] =
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
     { "verify-peer",          no_argument,        0,  'v' },
+    { "region",               required_argument,  0,  'g' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -913,8 +920,8 @@ static void list_service(int allDetails)
     };
 
     do {
-        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0, 0, 0,
-                        &listServiceHandler, &data);
+        S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0,
+                        awsRegionG, 0, &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -957,7 +964,7 @@ static void test_bucket(int argc, char **argv, int optindex)
     char locationConstraint[64];
     do {
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG, 0,
-                       0, bucketName, 0, sizeof(locationConstraint),
+                       0, bucketName, awsRegionG, sizeof(locationConstraint),
                        locationConstraint, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -1055,9 +1062,9 @@ static void create_bucket(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, 0,
-                         0, bucketName, 0, cannedAcl, locationConstraint, 0,
-                         &responseHandler, 0);
+        S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0,
+                         bucketName, awsRegionG, cannedAcl, locationConstraint,
+                         0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -1066,7 +1073,7 @@ static void create_bucket(int argc, char **argv, int optindex)
     else {
         printError();
     }
-    
+
     S3_deinitialize();
 }
 
@@ -1096,7 +1103,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         0, 0, bucketName, 0, 0, &responseHandler, 0);
+                         0, 0, bucketName, awsRegionG, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1244,7 +1251,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
                         int maxkeys, int allDetails)
 {
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -1254,7 +1261,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ListBucketHandler listBucketHandler =
@@ -1393,7 +1400,7 @@ typedef struct list_parts_callback_data
 
 typedef struct list_upload_callback_data
 {
-    char uploadId[1024];    
+    char uploadId[1024];
 } abort_upload_callback_data;
 
 static void printListMultipartHeader(int allDetails)
@@ -1408,12 +1415,12 @@ static void printListPartsHeader()
     printf("%-25s  %-30s  %-30s   %-15s", 
            "LastModified", 
            "PartNumber", "ETag", "SIZE");
-    
+
     printf("\n");
     printf("---------------------  "
-           "    -------------    "           
+           "    -------------    "
            "-------------------------------  "
-           "               -----");    
+           "               -----");
     printf("\n");
 }
 
@@ -1453,7 +1460,7 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
     else {
         data->nextUploadIdMarker[0] = 0;
     }
-    
+
     if (uploadsCount && !data->uploadCount) {
         printListMultipartHeader(data->allDetails);
     }
@@ -1485,8 +1492,8 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
         }
         else {
             time_t t = (time_t) upload->initiated;
-            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", 
-                     gmtime(&t));            
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
+                     gmtime(&t));
             printf("%-50s  %s %-50s", upload->key, timebuf, upload->uploadId);
             if (data->allDetails) {
                 printf("  %-34s  %-64s  %-12s  %-64s  %-12s",
@@ -1513,16 +1520,16 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
 
 
 static S3Status listPartsCallback(int isTruncated,
-                                        const char *nextPartNumberMarker,
-                                        const char *initiatorId,
-                                        const char *initiatorDisplayName,
-                                        const char *ownerId,
-                                        const char *ownerDisplayName,
-                                        const char *storageClass,
-                                        int partsCount, 
-                                        int handlePartsStart,
-                                        const S3ListPart *parts,
-                                        void *callbackData)
+                                  const char *nextPartNumberMarker,
+                                  const char *initiatorId,
+                                  const char *initiatorDisplayName,
+                                  const char *ownerId,
+                                  const char *ownerDisplayName,
+                                  const char *storageClass,
+                                  int partsCount,
+                                  int handlePartsStart,
+                                  const S3ListPart *parts,
+                                  void *callbackData)
 {
     list_parts_callback_data *data = 
         (list_parts_callback_data *) callbackData;
@@ -1611,7 +1618,7 @@ static S3Status listPartsCallback(int isTruncated,
         }
     }
 
-    data->partsCount += partsCount;    
+    data->partsCount += partsCount;
 
     return S3StatusOK;
 }
@@ -1662,16 +1669,16 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
         else if (!bucketName) {
             bucketName = param;
         }
-        
+
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
     if (bucketName) {
-        
+
         S3_init();
-    
+
         S3BucketContext bucketContext =
         {
             0,
@@ -1681,7 +1688,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
             accessKeyIdG,
             secretAccessKeyG,
             0,
-            0
+            awsRegionG
         };
 
         S3ListMultipartUploadsHandler listMultipartUploadsHandler =
@@ -1785,16 +1792,16 @@ static void list_parts(int argc, char **argv, int optindex)
                 !strcmp(ad, "1")) {
                 allDetails = 1;
             }
-        }       
+        }
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
     if (bucketName) {
-        
+
         S3_init();
-    
+
         S3BucketContext bucketContext =
         {
             0,
@@ -1804,7 +1811,7 @@ static void list_parts(int argc, char **argv, int optindex)
             accessKeyIdG,
             secretAccessKeyG,
             0,
-            0
+            awsRegionG
         };
 
         S3ListPartsHandler listPartsHandler =
@@ -1816,11 +1823,11 @@ static void list_parts(int argc, char **argv, int optindex)
         list_parts_callback_data data;
 
         memset(&data, 0, sizeof(list_parts_callback_data));
-        if (partnumbermarker != 0) {            
+        if (partnumbermarker != 0) {
             snprintf(data.nextPartNumberMarker,
                      sizeof(data.nextPartNumberMarker), "%s", partnumbermarker);
         }
-        
+
         data.partsCount = 0;
         data.allDetails = allDetails;
         data.noPrint = 0;
@@ -1849,9 +1856,7 @@ static void list_parts(int argc, char **argv, int optindex)
         }
 
         S3_deinitialize();
-        
     }
-   
 }
 
 
@@ -1862,7 +1867,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
                 "<upload-id>\n");
         return;
     }
-    
+
     // Split bucket/key
     char *slash = argv[optindex];
     while (*slash && (*slash != '/')) {
@@ -1879,22 +1884,22 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
     const char *key = slash;
     const char *uploadid = 0;
     while (optindex < argc) {
-        char *param = argv[optindex++]; 
+        char *param = argv[optindex++];
         if (!strncmp(param, UPLOAD_ID_PREFIX, UPLOAD_ID_PREFIX_LEN)) {
             uploadid = &(param[UPLOAD_ID_PREFIX_LEN]);
         }
         else if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             key = &(param[FILENAME_PREFIX_LEN]);
-        }        
+        }
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
     if (bucketName) {
-        
+
         S3_init();
-    
+
         S3BucketContext bucketContext =
         {
             0,
@@ -1904,7 +1909,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
             accessKeyIdG,
             secretAccessKeyG,
             0,
-            0
+            awsRegionG
         };
 
         S3AbortMultipartUploadHandler abortMultipartUploadHandler =
@@ -1924,7 +1929,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
             snprintf(data.nextUploadIdMarker, sizeof(data.nextUploadIdMarker),
                      "%s", uploadidmarker);
         }
-        
+
         data.uploadCount = 0;
         data.allDetails = allDetails;
         */
@@ -1933,7 +1938,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
             S3_abort_multipart_upload(&bucketContext, key, uploadid,
                            &abortMultipartUploadHandler);
         } while (S3_status_is_retryable(statusG) && should_retry());
-            
+
         S3_deinitialize();
     }
 }
@@ -1958,7 +1963,7 @@ static void delete_object(int argc, char **argv, int optindex)
     const char *key = slash;
 
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -1968,11 +1973,11 @@ static void delete_object(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
-    { 
+    {
         0,
         &responseCompleteCallback
     };
@@ -2007,7 +2012,7 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
 {
     put_object_callback_data *data = 
         (put_object_callback_data *) callbackData;
-    
+
     int ret = 0;
 
     if (data->contentLength) {
@@ -2030,7 +2035,7 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
         printf("%llu bytes remaining ", 
                (unsigned long long) data->totalContentLength);
         printf("(%d%% complete) ...\n",
-               (int) (((data->totalOriginalContentLength - 
+               (int) (((data->totalOriginalContentLength -
                         data->totalContentLength) * 100) /
                       data->totalOriginalContentLength));
     }
@@ -2068,6 +2073,7 @@ S3Status MultipartResponseProperiesCallback
     return S3StatusOK;
 }
 
+
 static int multipartPutXmlCallback(int bufferSize, char *buffer,
                                    void *callbackData)
 {
@@ -2095,7 +2101,7 @@ static int try_get_parts_info(const char *bucketName, const char *key,
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ListPartsHandler listPartsHandler =
@@ -2107,7 +2113,7 @@ static int try_get_parts_info(const char *bucketName, const char *key,
     list_parts_callback_data data;
 
     memset(&data, 0, sizeof(list_parts_callback_data));
-   
+
     data.partsCount = 0;
     data.allDetails = 0;
     data.manager = manager;
@@ -2133,9 +2139,10 @@ static int try_get_parts_info(const char *bucketName, const char *key,
         printError();
         return -1;
     }
-    
+
     return 0;
 }
+
 
 static void put_object(int argc, char **argv, int optindex,
                        const char *srcBucketName, const char *srcKey, unsigned long long srcSize)
@@ -2348,7 +2355,7 @@ static void put_object(int argc, char **argv, int optindex,
             contentLength;
 
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -2358,7 +2365,7 @@ static void put_object(int argc, char **argv, int optindex,
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3PutProperties putProperties =
@@ -2374,7 +2381,7 @@ static void put_object(int argc, char **argv, int optindex,
         metaProperties,
         useServerSideEncryption
     };
-    
+
     if (contentLength <= MULTIPART_CHUNK_SIZE) {
         S3PutObjectHandler putObjectHandler =
         {
@@ -2437,10 +2444,10 @@ static void put_object(int argc, char **argv, int optindex,
             &multipartPutXmlCallback,
             0
         };
-        
+
         manager.etags = (char **) malloc(sizeof(char *) * totalSeq);
         manager.next_etags_pos = 0;
-               
+
         if (uploadId) {
             manager.upload_id = strdup(uploadId);
             manager.remaining = contentLength;
@@ -2452,7 +2459,7 @@ static void put_object(int argc, char **argv, int optindex,
                 goto clean;
             }
         }
-           
+
         do {
             S3_initiate_multipart(&bucketContext,key,0, &handler,0, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
@@ -2462,7 +2469,7 @@ static void put_object(int argc, char **argv, int optindex,
             goto clean;
         }
 
-upload: 
+upload:
         todoContentLength -= MULTIPART_CHUNK_SIZE * manager.next_etags_pos;
         for (seq = manager.next_etags_pos + 1; seq <= totalSeq; seq++) {
             memset(&partData, 0, sizeof(MultipartPartData));
@@ -2488,7 +2495,7 @@ upload:
                         accessKeyIdG,
                         secretAccessKeyG,
                         0,
-                        0
+                        awsRegionG
                     };
 
                     S3ResponseHandler copyResponseHandler = { &responsePropertiesCallback, &responseCompleteCallback };
@@ -2517,7 +2524,7 @@ upload:
             contentLength -= MULTIPART_CHUNK_SIZE;
             todoContentLength -= MULTIPART_CHUNK_SIZE;
         }
-       
+
         int i;
         int size = 0;
         size += growbuffer_append(&(manager.gb), "<CompleteMultipartUpload>",
@@ -2553,7 +2560,7 @@ upload:
         growbuffer_destroy(manager.gb);
         free(manager.etags);
     }
-    
+
     S3_deinitialize();
 }
 
@@ -2623,7 +2630,7 @@ static void copy_object(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
     S3ListBucketHandler listBucketHandler =
     {
@@ -2760,7 +2767,6 @@ static void copy_object(int argc, char **argv, int optindex)
         }
     }
 
-    
     S3BucketContext bucketContext =
     {
         0,
@@ -2770,7 +2776,7 @@ static void copy_object(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3PutProperties putProperties =
@@ -2788,7 +2794,7 @@ static void copy_object(int argc, char **argv, int optindex)
     };
 
     S3ResponseHandler responseHandler =
-    { 
+    {
         &responsePropertiesCallback,
         &responseCompleteCallback
     };
@@ -2831,7 +2837,7 @@ static S3Status getObjectDataCallback(int bufferSize, const char *buffer,
     FILE *outfile = (FILE *) callbackData;
 
     size_t wrote = fwrite(buffer, 1, bufferSize, outfile);
-    
+
     return ((wrote < (size_t) bufferSize) ? 
             S3StatusAbortedByCallback : S3StatusOK);
 }
@@ -2926,7 +2932,7 @@ static void get_object(int argc, char **argv, int optindex)
             // unmodified
             outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
         }
-        
+
         if (!outfile) {
             fprintf(stderr, "\nERROR: Failed to open output file %s: ",
                     filename);
@@ -2943,7 +2949,7 @@ static void get_object(int argc, char **argv, int optindex)
     }
 
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -2953,7 +2959,7 @@ static void get_object(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3GetConditions getConditions =
@@ -2993,7 +2999,7 @@ static void head_object(int argc, char **argv, int optindex)
         fprintf(stderr, "\nERROR: Missing parameter: bucket/key\n");
         usageExit(stderr);
     }
-    
+
     // Head implies showing response properties
     showResponsePropertiesG = 1;
 
@@ -3019,7 +3025,7 @@ static void head_object(int argc, char **argv, int optindex)
     }
 
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -3029,7 +3035,7 @@ static void head_object(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
@@ -3079,6 +3085,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
     int64_t expires = -1;
 
     const char *resource = 0;
+    const char *httpMethod = "GET";
 
     while (optindex < argc) {
         char *param = argv[optindex++];
@@ -3093,6 +3100,9 @@ static void generate_query_string(int argc, char **argv, int optindex)
         else if (!strncmp(param, RESOURCE_PREFIX, RESOURCE_PREFIX_LEN)) {
             resource = &(param[RESOURCE_PREFIX_LEN]);
         }
+        else if (!strncmp(param, HTTP_METHOD_PREFIX, HTTP_METHOD_PREFIX_LEN)) {
+            httpMethod = &(param[HTTP_METHOD_PREFIX_LEN]);
+        }
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
@@ -3100,7 +3110,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
     }
 
     S3_init();
-    
+
     S3BucketContext bucketContext =
     {
         0,
@@ -3110,14 +3120,14 @@ static void generate_query_string(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE];
 
     S3Status status = S3_generate_authenticated_query_string
-        (buffer, &bucketContext, key, expires, resource);
-    
+        (buffer, &bucketContext, key, expires, resource, httpMethod);
+
     if (status != S3StatusOK) {
         printf("Failed to generate authenticated query string: %s\n",
                S3_get_status_name(status));
@@ -3182,7 +3192,7 @@ void get_acl(int argc, char **argv, int optindex)
             // unmodified
             outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
         }
-        
+
         if (!outfile) {
             fprintf(stderr, "\nERROR: Failed to open output file %s: ",
                     filename);
@@ -3214,7 +3224,7 @@ void get_acl(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
@@ -3357,7 +3367,7 @@ void set_acl(int argc, char **argv, int optindex)
     aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
     char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
     char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
-    
+
     // Parse it
     int aclGrantCount;
     S3AclGrant aclGrants[S3_MAX_ACL_GRANT_COUNT];
@@ -3379,7 +3389,7 @@ void set_acl(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
@@ -3392,7 +3402,7 @@ void set_acl(int argc, char **argv, int optindex)
         S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
                    aclGrantCount, aclGrants, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
-    
+
     if (statusG != S3StatusOK) {
         printError();
     }
@@ -3440,7 +3450,7 @@ void get_logging(int argc, char **argv, int optindex)
             // unmodified
             outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
         }
-        
+
         if (!outfile) {
             fprintf(stderr, "\nERROR: Failed to open output file %s: ",
                     filename);
@@ -3473,7 +3483,7 @@ void get_logging(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
@@ -3507,7 +3517,7 @@ void get_logging(int argc, char **argv, int optindex)
                 char composedId[S3_MAX_GRANTEE_USER_ID_SIZE + 
                                 S3_MAX_GRANTEE_DISPLAY_NAME_SIZE + 16];
                 const char *id;
-                
+
                 switch (grant->granteeType) {
                 case S3GranteeTypeAmazonCustomerByEmail:
                     type = "Email";
@@ -3600,7 +3610,7 @@ void set_logging(int argc, char **argv, int optindex)
 
     if (targetBucket) {
         FILE *infile;
-        
+
         if (filename) {
             if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
                 fprintf(stderr, "\nERROR: Failed to open input file %s: ",
@@ -3618,7 +3628,7 @@ void set_logging(int argc, char **argv, int optindex)
         aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
         char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
         char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
-        
+
         // Parse it
         if (!convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
                                 &aclGrantCount, aclGrants)) {
@@ -3641,7 +3651,7 @@ void set_logging(int argc, char **argv, int optindex)
         accessKeyIdG,
         secretAccessKeyG,
         0,
-        0
+        awsRegionG
     };
 
     S3ResponseHandler responseHandler =
@@ -3655,7 +3665,7 @@ void set_logging(int argc, char **argv, int optindex)
                                      targetPrefix, aclGrantCount, aclGrants, 
                                      0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
-    
+
     if (statusG != S3StatusOK) {
         printError();
     }
@@ -3671,7 +3681,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:g:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3699,11 +3709,14 @@ int main(int argc, char **argv)
                 retriesG += *v - '0';
                 v++;
             }
+            }
             break;
         case 'v':
             verifyPeerG = S3_INIT_VERIFY_PEER;
             break;
-        }
+        case 'g':
+            awsRegionG = strdup(optarg);
+            break;
         default:
             fprintf(stderr, "\nERROR: Unknown option: -%c\n", c);
             // Usage exit

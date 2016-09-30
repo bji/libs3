@@ -40,7 +40,8 @@ typedef enum
     HttpRequestTypePUT,
     HttpRequestTypeCOPY,
     HttpRequestTypeDELETE,
-    HttpRequestTypePOST
+    HttpRequestTypePOST,
+    HttpRequestTypeInvalid
 } HttpRequestType;
 
 

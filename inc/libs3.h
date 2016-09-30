@@ -1725,6 +1725,8 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
  * @param resource gives a sub-resource to be fetched for the request, or NULL
  *        for none.  This should be of the form "?<resource>", i.e. 
  *        "?torrent".
+ * @param httpMethod the HTTP request method that will be used with the
+ *        generated query string (e.g. "GET").
  * @return One of:
  *         S3StatusUriTooLong if, due to an internal error, the generated URI
  *             is longer than S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE bytes in
@@ -1733,7 +1735,8 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
  **/
 S3Status S3_generate_authenticated_query_string
     (char *buffer, const S3BucketContext *bucketContext,
-     const char *key, int64_t expires, const char *resource);
+     const char *key, int64_t expires, const char *resource,
+     const char *httpMethod);
 
 
 /** **************************************************************************
