@@ -157,10 +157,10 @@ failures=$(($failures + (($? == 0) ? 0 : 1)))
 
 # Add READ for all AWS users, and READ_ACP for everyone
 cat <<EOF >> acl
-Group   Authenticated AWS Users                                   READ
+Group   Authenticated AWS Users                                                                     READ
 EOF
 cat <<EOF >> acl
-Group   All Users                                                 READ_ACP
+Group   All Users                                                                                   READ_ACP
 EOF
 echo "$S3_COMMAND setacl $TEST_BUCKET filename=acl"
 $S3_COMMAND setacl $TEST_BUCKET filename=acl
@@ -183,10 +183,10 @@ failures=$(($failures + (($? == 0) ? 0 : 1)))
 
 # Add READ for all AWS users, and READ_ACP for everyone
 cat <<EOF >> acl
-Group   Authenticated AWS Users                                   READ
+Group   Authenticated AWS Users                                                                     READ
 EOF
 cat <<EOF >> acl
-Group   All Users                                                 READ_ACP
+Group   All Users                                                                                   READ_ACP
 EOF
 echo "$S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl"
 $S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl
