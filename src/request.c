@@ -304,7 +304,7 @@ static S3Status append_amz_header(RequestComputedValues *values,
         values->amzHeadersRaw[rawPos++] = tolower(headerStr[i]);
     }
 
-    strcat(&(values->amzHeadersRaw[rawPos]), ": ");
+    snprintf(&(values->amzHeadersRaw[rawPos]), 3, ": ");
     rawPos += 2;
 
     for (i = 0; i < strlen(headerValue); i++) {
@@ -1080,10 +1080,6 @@ static S3Status compose_auth_header(const RequestParams *params,
 
 #ifdef SIGNATURE_DEBUG
     printf("--\nAuthorization Header:\n%s\n", values->authorizationHeader);
-    printf("--\nAMZ Headers:\n");
-    for (i = 0; i < values->amzHeadersCount; i++) {
-        printf("%s\n", values->amzHeaders[i]);
-    }
 #endif
 
     return S3StatusOK;
@@ -1540,6 +1536,14 @@ static S3Status setup_request(const RequestParams *params,
     if ((status = compose_auth_header(params, computed)) != S3StatusOK) {
         return status;
     }
+
+#ifdef SIGNATURE_DEBUG
+    int i = 0;
+    printf("\n--\nAMZ Headers:\n");
+    for (; i < computed->amzHeadersCount; i++) {
+        printf("%s\n", computed->amzHeaders[i]);
+    }
+#endif
 
     return status;
 }
