@@ -125,7 +125,7 @@ typedef struct RequestComputedValues
     char rangeHeader[128];
 
     // Authorization header
-    char authorizationHeader[256];
+    char authorizationHeader[1024];
 
     // Request date stamp
     char requestDateISO8601[64];
