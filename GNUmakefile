@@ -278,7 +278,7 @@ $(BUILD)/include/libs3.h: inc/libs3.h
 # Test targets
 
 .PHONY: test
-test: $(BUILD)/bin/testsimplexml $(BUILD)/bin/testsignature
+test: $(BUILD)/bin/testsimplexml
 
 $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(LIBS3_STATIC)
 	$(QUIET_ECHO) $@: Building executable
