@@ -134,7 +134,7 @@ typedef struct RequestComputedValues
     char authCredential[MAX_CREDENTIAL_SIZE + 1];
 
     // Computed request signature (hex string)
-    char requestSignatureHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
+    char requestSignatureHex[S3_SHA256_DIGEST_LENGTH * 2 + 1];
 
     // Host header
     char hostHeader[128];
@@ -1495,17 +1495,11 @@ static S3Status setup_request(const RequestParams *params,
         return status;
     }
 
-    if (1) {
-        time_t now = time(NULL);
-        struct tm gmt;
-        gmtime_r(&now, &gmt);
-        strftime(computed->requestDateISO8601,
-                 sizeof(computed->requestDateISO8601), "%Y%m%dT%H%M%SZ", &gmt);
-    }
-    else {
-        snprintf(computed->requestDateISO8601,
-                 sizeof(computed->requestDateISO8601), "20130524T000000Z");
-    }
+    time_t now = time(NULL);
+    struct tm gmt;
+    gmtime_r(&now, &gmt);
+    strftime(computed->requestDateISO8601, sizeof(computed->requestDateISO8601),
+             "%Y%m%dT%H%M%SZ", &gmt);
 
     // Compose the amz headers
     if ((status = compose_amz_headers(params, forceUnsignedPayload, computed))

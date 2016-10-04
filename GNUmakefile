@@ -207,14 +207,6 @@ uninstall:
 # --------------------------------------------------------------------------
 # Compile target patterns
 
-$(BUILD)/obj/test%.o: src/test%.c
-	$(QUIET_ECHO) $@: Compiling test object
-	@ mkdir -p $(dir $(BUILD)/dep/$<)
-	@ $(CC) $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
-        -o $(BUILD)/dep/$(<:%.c=%.d) -c $<
-	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) $(CC) -Wno-error=unused-parameter $(CFLAGS) -o $@ -c $<
-
 $(BUILD)/obj/%.o: src/%.c
 	$(QUIET_ECHO) $@: Compiling object
 	@ mkdir -p $(dir $(BUILD)/dep/$<)
@@ -292,11 +284,6 @@ $(BUILD)/bin/testsimplexml: $(BUILD)/obj/testsimplexml.o $(LIBS3_STATIC)
 	$(QUIET_ECHO) $@: Building executable
 	@ mkdir -p $(dir $@)
 	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LIBXML2_LIBS)
-
-$(BUILD)/bin/testsignature: $(BUILD)/obj/testsignature.o $(LIBS3_STATIC)
-	$(QUIET_ECHO) $@: Building executable
-	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LDFLAGS)
 
 
 # --------------------------------------------------------------------------
