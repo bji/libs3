@@ -1317,6 +1317,7 @@ static void list(int argc, char **argv, int optindex)
     int maxkeys = 0, allDetails = 0;
     while (optindex < argc) {
         char *param = argv[optindex++];
+
         if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
             prefix = &(param[PREFIX_PREFIX_LEN]);
         }
@@ -1700,7 +1701,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
         list_multiparts_callback_data data;
 
         memset(&data, 0, sizeof(list_multiparts_callback_data));
-        if (keymarker != 0) {            
+        if (keymarker != 0) {
             snprintf(data.nextKeyMarker, sizeof(data.nextKeyMarker), "%s",
                      keymarker);
         }

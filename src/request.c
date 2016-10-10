@@ -517,20 +517,13 @@ static S3Status compose_standard_headers(const RequestParams *params,
         }
         values->hostHeader[len] = 0;
     }
-    else if (params->bucketContext.hostName) {
-        size_t len = snprintf(values->hostHeader, sizeof(values->hostHeader),
-                              "Host: %s", params->bucketContext.hostName);
-        if (len >= sizeof(values->hostHeader)) {
-            return S3StatusUriTooLong;
-        }
-        while (is_blank(values->hostHeader[len])) {
-            len--;
-        }
-        values->hostHeader[len] = 0;
-    }
     else {
-        size_t len = snprintf(values->hostHeader, sizeof(values->hostHeader),
-                              "Host: %s", S3_DEFAULT_HOSTNAME);
+        size_t len = snprintf(
+                values->hostHeader,
+                sizeof(values->hostHeader),
+                "Host: %s",
+                params->bucketContext.hostName ?
+                    params->bucketContext.hostName : defaultHostNameG);
         if (len >= sizeof(values->hostHeader)) {
             return S3StatusUriTooLong;
         }

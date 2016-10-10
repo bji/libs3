@@ -645,7 +645,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     // Compose the query params
     string_buffer(queryParams, 4096);
     string_buffer_initialize(queryParams);
-    
+
 #define safe_append(name, value)                                        \
     do {                                                                \
         int fit;                                                        \
