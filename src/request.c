@@ -1378,7 +1378,11 @@ S3Status request_curl_code_to_status(CURLcode code)
         return S3StatusConnectionFailed;
     case CURLE_PARTIAL_FILE:
         return S3StatusOK;
+#if LIBCURL_VERSION_NUM >= 0x071101 /* 7.17.1 */
     case CURLE_PEER_FAILED_VERIFICATION:
+#else
+    case CURLE_SSL_PEER_CERTIFICATE:
+#endif
     case CURLE_SSL_CACERT:
         return S3StatusServerFailedVerification;
     default:
