@@ -220,6 +220,13 @@ extern "C" {
  */
 #define S3_INIT_VERIFY_PEER                2
 
+/**
+ * This constant is used by the S3_initialize() function, to enable AWS
+ * signature version 4 for authorization. If this is not set in the flags
+ * passed to S3_initialize(), then the libs3 will use AWS signature version
+ * 2 to sign all requests.
+ */
+#define S3_INIT_SIGNATURE_V4               4
 
 /**
  * This convenience constant is used by the S3_initialize() function to
@@ -423,6 +430,14 @@ typedef enum
     S3UriStylePath                      = 1
 } S3UriStyle;
 
+/**
+ * S3SignatureVersion define the signature methods for AWS REST API.
+ **/
+typedef enum
+{
+    S3SignatureV2                       = 2,
+    S3SignatureV4                       = 4
+} S3SignatureVersion;
 
 /**
  * S3GranteeType defines the type of Grantee used in an S3 ACL Grant.
@@ -1436,6 +1451,21 @@ typedef struct S3AbortMultipartUploadHandler
 S3Status S3_initialize(const char *userAgentInfo, int flags,
                        const char *defaultS3HostName);
 
+/**
+ * Set the region name in the requests made to AWS S3, and it is only required
+ * when AWS signature version 4 is enabled (S3_initialize() is called with
+ * S3_INIT_SIGNATURE_V4 flag.). And it should be called immediately after the
+ * call to S3_initialize(), before any other S3 function calls. And this
+ * function is NOT thread-safe and can only be called by one thread at a time.
+ *
+ * @param regionName is a string to represent the region the library wants to
+ *        contact in all its request. If this is NULL or this function is not
+ *        called at all, the region is default to "us-east-1".
+ * @return One of:
+ *         S3StatusOK on success
+ *         S3StatusUriTooLong if regionName is longer than S3_MAX_HOSTNAME_SIZE
+ **/
+S3Status S3_set_region_name(const char *regionName);
 
 /**
  * Must be called once per program for each call to libs3_initialize().  After
