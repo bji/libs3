@@ -55,18 +55,20 @@ S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
 
 void S3_destroy_request_context(S3RequestContext *requestContext)
 {
-    curl_multi_cleanup(requestContext->curlm);
-
-    // For each request in the context, call back its done method with
-    // 'interrupted' status
+    // For each request in the context, remove curl handle, call back its done
+    // method with 'interrupted' status
     Request *r = requestContext->requests, *rFirst = r;
     
     if (r) do {
         r->status = S3StatusInterrupted;
+        // remove easy handle from a multi session
+        curl_multi_remove_handle(requestContext->curlm, r->curl);
         Request *rNext = r->next;
         request_finish(r);
         r = rNext;
     } while (r != rFirst);
+
+    curl_multi_cleanup(requestContext->curlm);
 
     free(requestContext);
 }
