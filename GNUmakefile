@@ -36,10 +36,19 @@
 
 
 # --------------------------------------------------------------------------
-# Set libs3 version number, unless it is already set.
+# Set libs3 version number using git tags and optional developer PKG_PATCH
+# environment variable
+#
 
-LIBS3_VER_MAJOR ?= 2
-LIBS3_VER_MINOR ?= 0
+# use phony .FORCE to ensure this is always regenerated
+.PHONY: .FORCE
+
+GIT-VERSION-FILE: .FORCE
+	./GIT-VERSION-GEN
+-include GIT-VERSION-FILE
+
+LIBS3_VER_MAJOR ?= $(wordlist 1,1, $(subst -, ,$(subst ., ,$(VERSION))))
+LIBS3_VER_MINOR ?= $(wordlist 2,2, $(subst -, ,$(subst ., ,$(VERSION))))
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
@@ -81,6 +90,8 @@ ifndef BUILD
     endif
 endif
 
+$(BUILD):
+	$(VERBOSE_SHOW) mkdir -p $(BUILD)
 
 # --------------------------------------------------------------------------
 # DESTDIR directory
@@ -314,6 +325,43 @@ ALL_SOURCES := $(LIBS3_SOURCES) s3.c testsimplexml.c
 $(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.d)))
 $(foreach i, $(ALL_SOURCES), $(eval -include $(BUILD)/dep/src/$(i:%.c=%.dd)))
 
+# --------------------------------------------------------------------------
+# tar package target
+#
+GIT_TARNAME = libs3-$(FULL_VERSION)
+GIT_TARPATH = $(BUILD)/$(GIT_TARNAME)
+
+dist: $(BUILD) libs3.spec
+	$(VERBOSE_SHOW) git archive --format=tar --prefix=$(GIT_TARNAME)/ HEAD^{tree} > $(GIT_TARPATH).tar
+	$(VERBOSE_SHOW) mkdir -p $(GIT_TARNAME)
+	$(VERBOSE_SHOW) cp GIT-VERSION-FILE $(GIT_TARNAME)
+	$(VERBOSE_SHOW) cp $(BUILD)/libs3.spec $(GIT_TARNAME)
+	$(VERBOSE_SHOW) tar -rf $(GIT_TARPATH).tar $(GIT_TARNAME)/GIT-VERSION-FILE $(GIT_TARNAME)/libs3.spec
+	$(VERBOSE_SHOW) rm -r $(GIT_TARNAME)
+	$(VERBOSE_SHOW) gzip -f -9 $(GIT_TARPATH).tar
+
+# --------------------------------------------------------------------------
+# Redhat RPM target
+
+# RPM releases can't have -
+RPM_RELEASE := $(shell echo $(RELEASE) | tr '-' '.')
+
+%.spec: %.spec.in .FORCE $(BUILD)
+	$(VERBOSE_SHOW) sed -e 's/@@VERSION@@/$(VERSION)/g' \
+		-e s'/@@TAR_NAME@@/$(GIT_TARNAME)/g' \
+		-e s'/@@RELEASE@@/$(RPM_RELEASE)/g' < $< > $@+
+	$(VERBOSE_SHOW) mv $@+ $(BUILD)/$@
+
+RPM_DIR = $(BUILD)/rpmbuild
+export RESULT_DIR = $(PWD)/pkg-linux/libs3-$(FULL_VERSION)
+
+rpm: dist
+	@mkdir -p $(RPM_DIR)
+	env RPM_DIR=$(RPM_DIR) bash ./pkg-linux/mock_rpmbuild.sh $(GIT_TARPATH).tar.gz $(BUILD)/libs3.spec
+
+relrpm: dist
+	@mkdir -p $(RPM_DIR)
+	env RPM_DIR=$(RPM_DIR) REL_BUILD="yes" bash ./pkg-linux/mock_rpmbuild.sh $(GIT_TARPATH).tar.gz $(BUILD)/libs3.spec
 
 # --------------------------------------------------------------------------
 # Debian package target
