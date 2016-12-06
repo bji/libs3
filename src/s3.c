@@ -64,6 +64,7 @@ static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
 static int verifyPeerG = 0;
+static int failOnError = 0;
 
 
 // Environment variables, saved as globals ----------------------------------
@@ -201,6 +202,7 @@ static void usageExit(FILE *out)
 "   -r/--retries         : retry retryable failures this number of times\n"
 "                          (default is 5)\n"
 "   -v/--verify-peer     : verify peer SSL certificate (default is no)\n"
+"   -e/--fail-on-error   : always return with non-zero error code on error (default: off)\n"
 "\n"
 "   Environment:\n"
 "\n"
@@ -742,6 +744,7 @@ static struct option longOptionsG[] =
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
     { "verify-peer",          no_argument,        0,  'v' },
+    { "fail-on-error",        no_argument,        0,  'e' },
     { 0,                      0,                  0,   0  }
 };
 
@@ -3649,12 +3652,23 @@ void set_logging(int argc, char **argv, int optindex)
 
 // main ----------------------------------------------------------------------
 
+// When fail-on-error is disabled, return
+//     -1 if command is acceptable,
+//      0 otherwise
+// With fail-on-error enabled, return
+//     -1 for command syntax errors,
+//     -2 for errors that prevent the S3 command from being run,
+//     -3 for errors from S3 service,
+//     -4 for HTTP errors,
+//      0 on successful execution
 int main(int argc, char **argv)
 {
+    int errorCode = 0;
+
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:e", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3687,6 +3701,9 @@ int main(int argc, char **argv)
             verifyPeerG = S3_INIT_VERIFY_PEER;
             break;
         }
+        case 'e':
+            failOnError = 1;
+            break;
         default:
             fprintf(stderr, "\nERROR: Unknown option: -%c\n", c);
             // Usage exit
@@ -3791,5 +3808,15 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    return 0;
+    if (failOnError && statusG != S3StatusOK) {
+        if (statusG < S3StatusErrorAccessDenied) {
+            errorCode = -2;
+        } else if (statusG < S3StatusHttpErrorMovedTemporarily) {
+            errorCode = -3;
+        } else {
+            errorCode = -4;
+        }
+    }
+
+    return errorCode;
 }
