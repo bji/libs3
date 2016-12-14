@@ -1217,6 +1217,12 @@ static S3Status setup_curl(Request *request,
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_LIMIT, 1024);
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_TIME, 15);
 
+
+    if (params->timeoutMs > 0) {
+        curl_easy_setopt_safe(CURLOPT_TIMEOUT_MS, params->timeoutMs);
+    }
+
+
     // Append standard headers
 #define append_standard_header(fieldName)                               \
     if (values-> fieldName [0]) {                                       \

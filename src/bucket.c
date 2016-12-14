@@ -157,7 +157,8 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // toS3CallbackTotalSize
         &testBucketDataCallback,                      // fromS3Callback
         &testBucketCompleteCallback,                  // completeCallback
-        tbData                                        // callbackData
+        tbData,                                       // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -231,6 +232,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *authRegion, S3CannedAcl cannedAcl,
                       const char *locationConstraint,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -298,7 +300,8 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         cbData->docLen,                               // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &createBucketCompleteCallback,                // completeCallback
-        cbData                                        // callbackData
+        cbData,                                       // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -384,7 +387,8 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &deleteBucketCompleteCallback,                // completeCallback
-        dbData                                        // callbackData
+        dbData,                                       // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -746,7 +750,8 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         0,                                            // toS3CallbackTotalSize
         &listBucketDataCallback,                      // fromS3Callback
         &listBucketCompleteCallback,                  // completeCallback
-        lbData                                        // callbackData
+        lbData,                                       // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request

@@ -144,7 +144,8 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         &getAclDataCallback,                          // fromS3Callback
         &getAclCompleteCallback,                      // completeCallback
-        gaData                                        // callbackData
+        gaData,                                       // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -344,7 +345,8 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         data->aclXmlDocumentLen,                      // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &setAclCompleteCallback,                      // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request

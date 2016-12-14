@@ -1837,6 +1837,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1848,6 +1849,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *authRegion, S3CannedAcl cannedAcl,
                       const char *locationConstraint,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -1929,6 +1931,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1938,6 +1941,7 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
                    const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
+                   int timeoutMs,
                    const S3PutObjectHandler *handler, void *callbackData);
 
 

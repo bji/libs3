@@ -36,6 +36,7 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
                    uint64_t contentLength,
                    const S3PutProperties *putProperties,
                    S3RequestContext *requestContext,
+                   int timeoutMs,
                    const S3PutObjectHandler *handler, void *callbackData)
 {
     // Set up the RequestParams
@@ -64,7 +65,8 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
         contentLength,                                // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         handler->responseHandler.completeCallback,    // completeCallback
-        callbackData                                  // callbackData
+        callbackData,                                 // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -255,7 +257,8 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         &copyObjectDataCallback,                      // fromS3Callback
         &copyObjectCompleteCallback,                  // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -297,7 +300,8 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         handler->getObjectDataCallback,               // fromS3Callback
         handler->responseHandler.completeCallback,    // completeCallback
-        callbackData                                  // callbackData
+        callbackData,                                 // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -337,7 +341,8 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         handler->completeCallback,                    // completeCallback
-        callbackData                                  // callbackData
+        callbackData,                                 // callbackData
+        0,                                            // timeoutMs
     };
 
     // Perform the request
@@ -377,7 +382,8 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         handler->completeCallback,                    // completeCallback
-        callbackData                                  // callbackData
+        callbackData,                                 // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request

@@ -184,7 +184,8 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         0,                                            // toS3CallbackTotalSize
         &dataCallback,                                // fromS3Callback
         &completeCallback,                            // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request

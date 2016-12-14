@@ -345,7 +345,8 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
         0,                                            // toS3CallbackTotalSize
         &getBlsDataCallback,                          // fromS3Callback
         &getBlsCompleteCallback,                      // completeCallback
-        gsData                                        // callbackData
+        gsData,                                       // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request
@@ -551,7 +552,8 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
         data->salXmlDocumentLen,                      // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &setSalCompleteCallback,                      // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        0                                             // timeoutMs
     };
 
     // Perform the request

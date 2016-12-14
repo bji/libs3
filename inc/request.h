@@ -102,6 +102,9 @@ typedef struct RequestParams
 
     // Data passed to the callbacks
     void *callbackData;
+
+    // Request timeout. 0 if not set
+    int timeoutMs;
 } RequestParams;
 
 
