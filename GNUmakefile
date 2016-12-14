@@ -38,7 +38,7 @@
 # --------------------------------------------------------------------------
 # Set libs3 version number, unless it is already set.
 
-LIBS3_VER_MAJOR ?= 2
+LIBS3_VER_MAJOR ?= 3
 LIBS3_VER_MINOR ?= 0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
@@ -119,6 +119,9 @@ ifndef LIBXML2_CFLAGS
     LIBXML2_CFLAGS := $(shell xml2-config --cflags)
 endif
 
+ifndef OPENSSL_LIBS
+    OPENSSL_LIBS := -lssl -lcrypto
+endif
 
 # --------------------------------------------------------------------------
 # These CFLAGS assume a GNU compiler.  For other compilers, write a script
@@ -142,7 +145,7 @@ CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
           -D_ISOC99_SOURCE \
           -D_POSIX_C_SOURCE=200112L
 
-LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) -lpthread
+LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(OPENSSL_LIBS) -lpthread
 
 
 # --------------------------------------------------------------------------

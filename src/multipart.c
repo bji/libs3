@@ -112,12 +112,13 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
     {
         HttpRequestTypePOST,                          // httpRequestType
         { bucketContext->hostName,                    // hostName
-     	  bucketContext->bucketName,                  // bucketName
+          bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey,             //secretAccessKey    
-          bucketContext->securityToken },             // secretToken
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
         0,                                            // queryParams
         "uploads",                                    // subResource
@@ -155,8 +156,9 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey,             //secretAccessKey    
-          bucketContext->securityToken },             // secretToken
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
         0,                                            // queryParams
         subResource,                                  // subResource
@@ -189,8 +191,8 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
                     const char *upload_id, int partContentLength,
                     S3RequestContext *requestContext, void *callbackData)
 {
-    char subResource[512];
-    snprintf(subResource, 512, "partNumber=%d&uploadId=%s", seq, upload_id);
+    char queryParams[512];
+    snprintf(queryParams, 512, "partNumber=%d&uploadId=%s", seq, upload_id);
 
     RequestParams params =
     {
@@ -200,11 +202,12 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey,             //secretAccessKey    
-          bucketContext->securityToken },             // secretToken
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
-        subResource,                                  // subResource
+        queryParams,                                  // queryParams
+        0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -317,9 +320,9 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
                                   S3RequestContext *requestContext, 
                                   void *callbackData)
 {
-    char subResource[512];
-    snprintf(subResource, 512, "uploadId=%s", upload_id);
-    CommitMultiPartData *data = 
+    char queryParams[512];
+    snprintf(queryParams, 512, "uploadId=%s", upload_id);
+    CommitMultiPartData *data =
         (CommitMultiPartData *) malloc(sizeof(CommitMultiPartData));
     data->userdata = callbackData;
     data->handler = handler;
@@ -337,11 +340,12 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
           bucketContext->accessKeyId,                 // accessKeyId
-          bucketContext->secretAccessKey,             //secretAccessKey    
-          bucketContext->securityToken },             // secretToken
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
-        subResource,                                  // subResource
+        queryParams,                                  // queryParams
+        0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
         0,                                            // getConditions
@@ -930,7 +934,8 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
               bucketContext->uriStyle,               // uriStyle
               bucketContext->accessKeyId,            // accessKeyId
               bucketContext->secretAccessKey,        // secretAccessKey
-              bucketContext->securityToken },        // securityToken
+              bucketContext->securityToken,          // securityToken
+              bucketContext->authRegion },           // authRegion
             0,                                       // key
             queryParams[0] ? queryParams : 0,        // queryParams
             "uploads",                               // subResource
@@ -1051,7 +1056,8 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
               bucketContext->uriStyle,               // uriStyle
               bucketContext->accessKeyId,            // accessKeyId
               bucketContext->secretAccessKey,        // secretAccessKey
-              bucketContext->securityToken },        // securityToken
+              bucketContext->securityToken,          // securityToken
+              bucketContext->authRegion },           // authRegion
             key,                                     // key
             queryParams[0] ? queryParams : 0,        // queryParams
             subResource,                             // subResource

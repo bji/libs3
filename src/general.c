@@ -184,7 +184,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorUnexpectedContent);
         handlecase(ErrorUnresolvableGrantByEmailAddress);
         handlecase(ErrorUserKeyMustBeSpecified);
-        handlecase(ErrorUnknown);    
+        handlecase(ErrorUnknown);
         handlecase(HttpErrorMovedTemporarily);
         handlecase(HttpErrorBadRequest);
         handlecase(HttpErrorForbidden);
