@@ -102,6 +102,8 @@ endif
 
 ifndef LIBXML2_LIBS
     LIBXML2_LIBS := $(shell xml2-config --libs)
+    # Work around missing libsystem_symptoms.dylib in Xcode 8; see
+	# http://stackoverflow.com/questions/39536144/libsystem-symptoms-dylib-missing-in-xcode-8
     LIBXML2_LIBS := $(filter-out -L$(shell xcrun --show-sdk-path)/usr/lib, $(LIBXML2_LIBS))
 endif
 
