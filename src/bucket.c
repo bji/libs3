@@ -542,10 +542,11 @@ static S3Status listBucketXmlCallback(const char *elementPath,
         else if (!strcmp(elementPath, 
                          "ListBucketResult/CommonPrefixes/Prefix")) {
             int which = lbData->commonPrefixesCount;
+            size_t oldLen = lbData->commonPrefixLens[which];
             lbData->commonPrefixLens[which] +=
-                snprintf(lbData->commonPrefixes[which],
+                snprintf(lbData->commonPrefixes[which]+oldLen,
                          sizeof(lbData->commonPrefixes[which]) -
-                         lbData->commonPrefixLens[which] - 1,
+                         oldLen - 1,
                          "%.*s", dataLen, data);
             if (lbData->commonPrefixLens[which] >=
                 (int) sizeof(lbData->commonPrefixes[which])) {
