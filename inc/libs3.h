@@ -2055,6 +2055,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2064,6 +2065,7 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
                    S3RequestContext *requestContext,
+                   int timeoutMs,
                    const S3GetObjectHandler *handler, void *callbackData);
 
 
@@ -2076,6 +2078,7 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed 
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2083,6 +2086,7 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
  **/
 void S3_head_object(const S3BucketContext *bucketContext, const char *key,
                     S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ResponseHandler *handler, void *callbackData);
                          
 /**

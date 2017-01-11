@@ -2983,7 +2983,7 @@ static void get_object(int argc, char **argv, int optindex)
 
     do {
         S3_get_object(&bucketContext, key, &getConditions, startByte,
-                      byteCount, 0, &getObjectHandler, outfile);
+                      byteCount, 0, 0, &getObjectHandler, outfile);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3050,7 +3050,7 @@ static void head_object(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
+        S3_head_object(&bucketContext, key, 0, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
