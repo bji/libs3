@@ -1704,7 +1704,7 @@ S3Status request_curl_code_to_status(CURLcode code)
         return S3StatusFailedToConnect;
     case CURLE_WRITE_ERROR:
     case CURLE_OPERATION_TIMEDOUT:
-        return S3StatusConnectionFailed;
+        return S3StatusErrorRequestTimeout;
     case CURLE_PARTIAL_FILE:
         return S3StatusOK;
 #if LIBCURL_VERSION_NUM >= 0x071101 /* 7.17.1 */
