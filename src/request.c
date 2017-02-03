@@ -1738,7 +1738,7 @@ S3Status S3_generate_authenticated_query_string
     RequestParams params =
     { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
         resource,
-        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL };
+        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
 
     RequestComputedValues computed;
     S3Status status = setup_request(&params, &computed, 1);

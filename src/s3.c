@@ -63,6 +63,7 @@ static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
+static int timeoutMsG = 0;
 static int verifyPeerG = 0;
 static const char *awsRegionG = NULL;
 
@@ -203,6 +204,8 @@ static void usageExit(FILE *out)
 "   -s/--show-properties : show response properties on stdout\n"
 "   -r/--retries         : retry retryable failures this number of times\n"
 "                          (default is 5)\n"
+"   -t/--timeout         : request timeout, milliseconds. 0 if waiting forever\n"
+"                          (default is 0)\n"
 "   -v/--verify-peer     : verify peer SSL certificate (default is no)\n"
 "   -g/--region <REGION> : use <REGION> for request authorization\n"
 "\n"
@@ -747,6 +750,7 @@ static struct option longOptionsG[] =
     { "unencrypted",          no_argument,        0,  'u' },
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
+    { "timeout",              required_argument,  0,  't' },
     { "verify-peer",          no_argument,        0,  'v' },
     { "region",               required_argument,  0,  'g' },
     { 0,                      0,                  0,   0  }
@@ -921,7 +925,7 @@ static void list_service(int allDetails)
 
     do {
         S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0,
-                        awsRegionG, 0, &listServiceHandler, &data);
+                        awsRegionG, 0, timeoutMsG, &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -965,7 +969,7 @@ static void test_bucket(int argc, char **argv, int optindex)
     do {
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG, 0,
                        0, bucketName, awsRegionG, sizeof(locationConstraint),
-                       locationConstraint, 0, &responseHandler, 0);
+                       locationConstraint, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     const char *result;
@@ -1103,7 +1107,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         0, 0, bucketName, awsRegionG, 0, &responseHandler, 0);
+                         0, 0, bucketName, awsRegionG, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1284,7 +1288,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
         data.isTruncated = 0;
         do {
             S3_list_bucket(&bucketContext, prefix, data.nextMarker,
-                           delimiter, maxkeys, 0, &listBucketHandler, &data);
+                           delimiter, maxkeys, 0, timeoutMsG, &listBucketHandler, &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             break;
@@ -1719,6 +1723,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
                                           data.nextKeyMarker,
                                           data.nextUploadIdMarker, encodingtype,
                                           delimiter, maxuploads, 0,
+                                          timeoutMsG,
                                           &listMultipartUploadsHandler, &data);
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
@@ -1839,7 +1844,8 @@ static void list_parts(int argc, char **argv, int optindex)
                 S3_list_parts(&bucketContext, key, data.nextPartNumberMarker,
                                 uploadid, encodingtype,
                                 maxparts,
-                               0, &listPartsHandler, &data);
+                               0, timeoutMsG,
+                               &listPartsHandler, &data);
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
                 break;
@@ -1937,7 +1943,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
 
         do {
             S3_abort_multipart_upload(&bucketContext, key, uploadid,
-                           &abortMultipartUploadHandler);
+                           timeoutMsG, &abortMultipartUploadHandler);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         S3_deinitialize();
@@ -1984,7 +1990,7 @@ static void delete_object(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
+        S3_delete_object(&bucketContext, key, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
@@ -2123,7 +2129,7 @@ static int try_get_parts_info(const char *bucketName, const char *key,
         data.isTruncated = 0;
         do {
             S3_list_parts(&bucketContext, key, data.nextPartNumberMarker,
-                          manager->upload_id, 0, 0, 0, &listPartsHandler,
+                          manager->upload_id, 0, 0, 0, timeoutMsG, &listPartsHandler,
                           &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
@@ -2462,7 +2468,7 @@ static void put_object(int argc, char **argv, int optindex,
         }
 
         do {
-            S3_initiate_multipart(&bucketContext, key,0, &handler,0, &manager);
+            S3_initiate_multipart(&bucketContext, key,0, &handler,0, timeoutMsG, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         if (manager.upload_id == 0 || statusG != S3StatusOK) {
@@ -2513,11 +2519,14 @@ upload:
                                          &putProperties,
                                          &lastModified, 512 /*TBD - magic # */,
                                          manager.etags[seq-1], 0,
+                                         timeoutMsG,
                                          &copyResponseHandler, 0);
                 } else {
                     S3_upload_part(&bucketContext, key, &putProperties,
                                    &putObjectHandler, seq, manager.upload_id,
-                                   partContentLength,0, &partData);
+                                   partContentLength,
+                                   0, timeoutMsG,
+                                   &partData);
                 }
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
@@ -2546,7 +2555,7 @@ upload:
         do {
             S3_complete_multipart_upload(&bucketContext, key, &commit_handler,
                                          manager.upload_id, manager.remaining,
-                                         0,  &manager);
+                                         0, timeoutMsG, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             printError();
@@ -2643,7 +2652,8 @@ static void copy_object(int argc, char **argv, int optindex)
     // Find size of existing key to determine if MP required
     do {
         S3_list_bucket(&listBucketContext, sourceKey, NULL,
-                       ".", 1, 0, &listBucketHandler, &sourceSize);
+                       ".", 1, 0,
+                       timeoutMsG, &listBucketHandler, &sourceSize);
     } while (S3_status_is_retryable(statusG) && should_retry());
     if (statusG != S3StatusOK) {
         fprintf(stderr, "\nERROR: Unable to get source object size (%s)\n",
@@ -2811,6 +2821,7 @@ static void copy_object(int argc, char **argv, int optindex)
         S3_copy_object(&bucketContext, sourceKey, destinationBucketName,
                        destinationKey, anyPropertiesSet ? &putProperties : 0,
                        &lastModified, sizeof(eTag), eTag, 0,
+                       timeoutMsG,
                        &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -3240,7 +3251,8 @@ void get_acl(int argc, char **argv, int optindex)
 
     do {
         S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName,
-                   &aclGrantCount, aclGrants, 0, &responseHandler, 0);
+                   &aclGrantCount, aclGrants, 0,
+                   timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -3405,7 +3417,8 @@ void set_acl(int argc, char **argv, int optindex)
 
     do {
         S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
-                   aclGrantCount, aclGrants, 0, &responseHandler, 0);
+                   aclGrantCount, aclGrants, 0,
+                   timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3500,6 +3513,7 @@ void get_logging(int argc, char **argv, int optindex)
     do {
         S3_get_server_access_logging(&bucketContext, targetBucket, targetPrefix,
                                      &aclGrantCount, aclGrants, 0,
+                                     timeoutMsG,
                                      &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -3668,7 +3682,8 @@ void set_logging(int argc, char **argv, int optindex)
     do {
         S3_set_server_access_logging(&bucketContext, targetBucket,
                                      targetPrefix, aclGrantCount, aclGrants,
-                                     0, &responseHandler, 0);
+                                     0,
+                                     timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3686,7 +3701,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:g:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:t:g:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3712,6 +3727,16 @@ int main(int argc, char **argv)
             while (*v) {
                 retriesG *= 10;
                 retriesG += *v - '0';
+                v++;
+            }
+            }
+            break;
+        case 't': {
+            const char *v = optarg;
+            timeoutMsG = 0;
+            while (*v) {
+                timeoutMsG *= 10;
+                timeoutMsG += *v - '0';
                 v++;
             }
             }

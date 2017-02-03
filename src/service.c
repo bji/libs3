@@ -134,6 +134,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey, const char *securityToken,
                      const char *hostName, const char *authRegion,
                      S3RequestContext *requestContext,
+                     int timeoutMs,
                      const S3ListServiceHandler *handler, void *callbackData)
 {
     // Create and set up the callback data
@@ -185,7 +186,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
         &dataCallback,                                // fromS3Callback
         &completeCallback,                            // completeCallback
         data,                                         // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request

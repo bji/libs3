@@ -175,6 +175,7 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
                     const S3PutProperties *putProperties,
                     int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ResponseHandler *handler, void *callbackData)
 {
     /* Use the range copier with 0 length */
@@ -185,6 +186,7 @@ void S3_copy_object(const S3BucketContext *bucketContext, const char *key,
                          putProperties,
                          lastModifiedReturn, eTagReturnSize,
                          eTagReturn, requestContext,
+                         timeoutMs,
                          handler, callbackData);
 }
 
@@ -197,6 +199,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
                           const S3PutProperties *putProperties,
                           int64_t *lastModifiedReturn, int eTagReturnSize,
                           char *eTagReturn, S3RequestContext *requestContext,
+                          int timeoutMs,
                           const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -258,7 +261,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
         &copyObjectDataCallback,                      // fromS3Callback
         &copyObjectCompleteCallback,                  // completeCallback
         data,                                         // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -356,6 +359,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
 
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData)
 {
     // Set up the RequestParams
@@ -385,7 +389,7 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
         0,                                            // fromS3Callback
         handler->completeCallback,                    // completeCallback
         callbackData,                                 // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request

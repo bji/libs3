@@ -98,6 +98,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
                           S3PutProperties *putProperties,
                           S3MultipartInitialHandler *handler,
                           S3RequestContext *requestContext,
+                          int timeoutMs,
                           void *callbackData)
 {
     InitialMultipartData *mdata =
@@ -134,7 +135,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
         InitialMultipartCallback,                     // fromS3Callback
         InitialMultipartCompleteCallback,             // completeCallback
         mdata,                                        // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -144,6 +145,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
 
 void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
                                const char *uploadId,
+                               int timeoutMs,
                                S3AbortMultipartUploadHandler *handler)
 {
     char subResource[512];
@@ -175,7 +177,7 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
         0,                                            // fromS3Callback
         AbortMultipartUploadCompleteCallback,         // completeCallback
         0,                                            // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -191,7 +193,9 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
                     S3PutProperties *putProperties,
                     S3PutObjectHandler *handler, int seq,
                     const char *upload_id, int partContentLength,
-                    S3RequestContext *requestContext, void *callbackData)
+                    S3RequestContext *requestContext,
+                    int timeoutMs,
+                    void *callbackData)
 {
     char queryParams[512];
     snprintf(queryParams, 512, "partNumber=%d&uploadId=%s", seq, upload_id);
@@ -222,7 +226,7 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
         0,                                            // fromS3Callback
         handler->responseHandler.completeCallback,    // completeCallback
         callbackData,                                 // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     request_perform(&params, requestContext);
@@ -321,6 +325,7 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
                                   S3MultipartCommitHandler *handler,
                                   const char *upload_id, int contentLength,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   void *callbackData)
 {
     char queryParams[512];
@@ -361,7 +366,7 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
         commitMultipartCallback,                      // fromS3Callback
         commitMultipartCompleteCallback,              // completeCallback
         data,                                         // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     request_perform(&params, requestContext);
@@ -839,6 +844,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
                                const char *uploadidmarker,
                                const char *encodingtype, const char *delimiter,
                                int maxuploads, S3RequestContext *requestContext,
+                               int timeoutMs,
                                const S3ListMultipartUploadsHandler *handler,
                                void *callbackData)
 {
@@ -955,7 +961,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
             &listMultipartDataCallback,              // fromS3Callback
             &listMultipartCompleteCallback,          // completeCallback
             lmData,                                  // callbackData
-            0                                        // timeoutMs
+            timeoutMs                                // timeoutMs
         };
 
         // Perform the request
@@ -967,6 +973,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
                    const char *partnumbermarker, const char *uploadid,
                    const char *encodingtype, int maxparts,
                    S3RequestContext *requestContext,
+                   int timeoutMs,
                    const S3ListPartsHandler *handler, void *callbackData)
 {
     // Compose the query params
@@ -1078,7 +1085,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
             &listPartsDataCallback,                  // fromS3Callback
             &listPartsCompleteCallback,              // completeCallback
             lpData,                                  // callbackData
-            0                                        // timeoutMs
+            timeoutMs                                // timeoutMs
         };
 
         // Perform the request

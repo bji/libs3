@@ -1759,6 +1759,7 @@ S3Status S3_generate_authenticated_query_string
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1768,6 +1769,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
                      const char *secretAccessKey, const char *securityToken,
                      const char *hostName, const char *authRegion,
                      S3RequestContext *requestContext,
+                     int timeoutMs,
                      const S3ListServiceHandler *handler, void *callbackData);
 
 
@@ -1802,6 +1804,7 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1814,6 +1817,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -1872,6 +1876,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1882,6 +1887,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *securityToken, const char *hostName,
                       const char *bucketName, const char *authRegion,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -1900,6 +1906,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1909,6 +1916,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext,
                     const char *prefix, const char *marker,
                     const char *delimiter, int maxkeys,
                     S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ListBucketHandler *handler, void *callbackData);
 
 
@@ -1974,6 +1982,7 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -1985,6 +1994,7 @@ void S3_copy_object(const S3BucketContext *bucketContext,
                     const S3PutProperties *putProperties,
                     int64_t *lastModifiedReturn, int eTagReturnSize,
                     char *eTagReturn, S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -2023,6 +2033,7 @@ void S3_copy_object(const S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2036,6 +2047,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext,
                           const S3PutProperties *putProperties,
                           int64_t *lastModifiedReturn, int eTagReturnSize,
                           char *eTagReturn, S3RequestContext *requestContext,
+                          int timeoutMs,
                           const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -2098,6 +2110,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2105,6 +2118,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
  **/
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -2133,6 +2147,7 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2142,6 +2157,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
                 char *ownerId, char *ownerDisplayName,
                 int *aclGrantCountReturn, S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -2165,6 +2181,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2174,6 +2191,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 const char *ownerId, const char *ownerDisplayName,
                 int aclGrantCount, const S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData);
 
 
@@ -2212,6 +2230,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2223,6 +2242,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
                                   int *aclGrantCountReturn,
                                   S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData);
 
@@ -2251,6 +2271,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2261,6 +2282,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
                                   const char *targetPrefix, int aclGrantCount,
                                   const S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData);
 
@@ -2282,6 +2304,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
@@ -2289,6 +2312,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
                            S3PutProperties *putProperties,
                            S3MultipartInitialHandler *handler,
                            S3RequestContext *requestContext,
+                           int timeoutMs,
                            void *callbackData);
 
 
@@ -2310,6 +2334,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
@@ -2317,7 +2342,9 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
                     S3PutProperties * putProperties,
                     S3PutObjectHandler *handler,
                     int seq, const char *upload_id, int partContentLength,
-                    S3RequestContext *requestContext, void *callbackData);
+                    S3RequestContext *requestContext,
+                    int timeoutMs,
+                    void *callbackData);
 
 
 /**
@@ -2335,6 +2362,7 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
@@ -2344,6 +2372,7 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
                                   const char *upload_id,
                                   int contentLength,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   void *callbackData);
 
 
@@ -2367,6 +2396,7 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2376,6 +2406,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
                    const char *partnumbermarker,
                    const char *uploadid, const char *encodingtype,
                    int maxparts, S3RequestContext *requestContext,
+                   int timeoutMs,
                    const S3ListPartsHandler *handler, void *callbackData);
 
 
@@ -2389,11 +2420,13 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
  * @param key is the source key
  * @param uploadId identifying the multipart upload whose parts are being
  *        listed.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  **/
 void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
                                const char *uploadId,
+                               int timeoutMs,
                                S3AbortMultipartUploadHandler *handler);
 
 
@@ -2422,6 +2455,7 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  * @param callbackData will be passed in as the callbackData parameter to
@@ -2432,6 +2466,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
                                const char *uploadidmarker,
                                const char *encodingtype, const char *delimiter,
                                int maxuploads, S3RequestContext *requestContext,
+                               int timeoutMs,
                                const S3ListMultipartUploadsHandler *handler,
                                void *callbackData);
 

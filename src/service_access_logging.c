@@ -298,6 +298,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
                                   int *aclGrantCountReturn,
                                   S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData)
 {
@@ -346,7 +347,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
         &getBlsDataCallback,                          // fromS3Callback
         &getBlsCompleteCallback,                      // completeCallback
         gsData,                                       // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -494,6 +495,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
                                   const char *targetPrefix, int aclGrantCount,
                                   const S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData)
 {
@@ -553,7 +555,7 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
         0,                                            // fromS3Callback
         &setSalCompleteCallback,                      // completeCallback
         data,                                         // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request

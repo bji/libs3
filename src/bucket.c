@@ -111,6 +111,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                     int locationConstraintReturnSize,
                     char *locationConstraintReturn,
                     S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -158,7 +159,7 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         &testBucketDataCallback,                      // fromS3Callback
         &testBucketCompleteCallback,                  // completeCallback
         tbData,                                       // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -347,6 +348,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
                       const char *securityToken, const char *hostName,
                       const char *bucketName, const char *authRegion,
                       S3RequestContext *requestContext,
+                      int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -388,7 +390,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
         0,                                            // fromS3Callback
         &deleteBucketCompleteCallback,                // completeCallback
         dbData,                                       // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -645,6 +647,7 @@ static void listBucketCompleteCallback(S3Status requestStatus,
 void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
                     const char *marker, const char *delimiter, int maxkeys,
                     S3RequestContext *requestContext,
+                    int timeoutMs,
                     const S3ListBucketHandler *handler, void *callbackData)
 {
     // Compose the query params
@@ -751,7 +754,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
         &listBucketDataCallback,                      // fromS3Callback
         &listBucketCompleteCallback,                  // completeCallback
         lbData,                                       // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request

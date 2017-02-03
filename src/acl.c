@@ -98,6 +98,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
                 char *ownerId, char *ownerDisplayName,
                 int *aclGrantCountReturn, S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -145,7 +146,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
         &getAclDataCallback,                          // fromS3Callback
         &getAclCompleteCallback,                      // completeCallback
         gaData,                                       // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -288,6 +289,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 const char *ownerId, const char *ownerDisplayName,
                 int aclGrantCount, const S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData)
 {
     if (aclGrantCount > S3_MAX_ACL_GRANT_COUNT) {
@@ -346,7 +348,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         0,                                            // fromS3Callback
         &setAclCompleteCallback,                      // completeCallback
         data,                                         // callbackData
-        0                                             // timeoutMs
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
