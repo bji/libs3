@@ -1,10 +1,10 @@
 /** **************************************************************************
  * multipart.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -40,8 +40,8 @@ typedef struct InitialMultipartData
     void *userdata;
 } InitialMultipartData;
 
-static S3Status InitialMultipartCallback(int bufferSize, const char *buffer, 
-                                         void *callbackData) 
+static S3Status InitialMultipartCallback(int bufferSize, const char *buffer,
+                                         void *callbackData)
 {
     InitialMultipartData *mdata = (InitialMultipartData *) callbackData;
     return simplexml_add(&(mdata->simpleXml), buffer, bufferSize);
@@ -49,7 +49,7 @@ static S3Status InitialMultipartCallback(int bufferSize, const char *buffer,
 
 static void InitialMultipartCompleteCallback
     (S3Status requestStatus, const S3ErrorDetails *s3ErrorDetails,
-     void *callbackData) 
+     void *callbackData)
 {
     InitialMultipartData *mdata = (InitialMultipartData *) callbackData;
 
@@ -61,20 +61,20 @@ static void InitialMultipartCompleteCallback
     if (mdata->handler->responseXmlCallback) {
         (*mdata->handler->responseXmlCallback)
             (mdata->upload_id, mdata->userdata);
-    }    
+    }
 
     simplexml_deinitialize(&(mdata->simpleXml));
     free(mdata);
-}    
+}
 
 static void AbortMultipartUploadCompleteCallback
     (S3Status requestStatus, const S3ErrorDetails *s3ErrorDetails,
-     void *callbackData) 
-{    
+     void *callbackData)
+{
     (void) callbackData;
     (void) s3ErrorDetails;
     fprintf(stderr, "\nERROR: %s\n", S3_get_status_name(requestStatus));
-    
+
 }
 
 static S3Status initialMultipartXmlCallback(const char *elementPath,
@@ -95,13 +95,13 @@ static S3Status initialMultipartXmlCallback(const char *elementPath,
 }
 
 void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
-                          S3PutProperties *putProperties, 
-                          S3MultipartInitialHandler *handler, 
-                          S3RequestContext *requestContext, 
-                          void *callbackData) 
+                          S3PutProperties *putProperties,
+                          S3MultipartInitialHandler *handler,
+                          S3RequestContext *requestContext,
+                          void *callbackData)
 {
-    InitialMultipartData *mdata = 
-        (InitialMultipartData *) malloc(sizeof(InitialMultipartData)); 
+    InitialMultipartData *mdata =
+        (InitialMultipartData *) malloc(sizeof(InitialMultipartData));
     simplexml_initialize(&(mdata->simpleXml), &initialMultipartXmlCallback,
                          mdata);
     string_buffer_initialize(mdata->upload_id);
@@ -144,7 +144,7 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
 
 void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
                                const char *uploadId,
-                               S3AbortMultipartUploadHandler *handler) 
+                               S3AbortMultipartUploadHandler *handler)
 {
     char subResource[512];
     snprintf(subResource, 512, "uploadId=%s", uploadId);
@@ -230,7 +230,7 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
 
 
 /*
- * S3 commit multipart 
+ * S3 commit multipart
  *
  */
 
@@ -238,15 +238,15 @@ typedef struct CommitMultiPartData {
     SimpleXml simplexml;
     void *userdata;
     S3MultipartCommitHandler *handler;
-    //response parsed from 
+    //response parsed from
     string_buffer(location,128);
     string_buffer(etag,128);
 } CommitMultiPartData;
 
 
-static S3Status commitMultipartResponseXMLcallback(const char *elementPath, 
-                                                   const char *data, 
-                                                   int dataLen, 
+static S3Status commitMultipartResponseXMLcallback(const char *elementPath,
+                                                   const char *data,
+                                                   int dataLen,
                                                    void *callbackData)
 {
     int fit;
@@ -260,13 +260,13 @@ static S3Status commitMultipartResponseXMLcallback(const char *elementPath,
         }
     }
     (void) fit;
-    
+
     return S3StatusOK;
 }
 
 
-static S3Status commitMultipartCallback(int bufferSize, const char *buffer, 
-                                        void *callbackData) 
+static S3Status commitMultipartCallback(int bufferSize, const char *buffer,
+                                        void *callbackData)
 {
     CommitMultiPartData *data = (CommitMultiPartData *) callbackData;
     return simplexml_add(&(data->simplexml), buffer, bufferSize);
@@ -277,7 +277,7 @@ static S3Status commitMultipartPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     CommitMultiPartData *data = (CommitMultiPartData *) callbackData;
-    
+
     if (data->handler->responseHandler.propertiesCallback) {
         (*(data->handler->responseHandler.propertiesCallback))
             (responseProperties, data->userdata);
@@ -286,8 +286,8 @@ static S3Status commitMultipartPropertiesCallback
 }
 
 static void commitMultipartCompleteCallback
-    (S3Status requestStatus, const S3ErrorDetails *s3ErrorDetails, 
-     void *callbackData) 
+    (S3Status requestStatus, const S3ErrorDetails *s3ErrorDetails,
+     void *callbackData)
 {
     CommitMultiPartData *data = (CommitMultiPartData*) callbackData;
     if (data->handler->responseHandler.completeCallback) {
@@ -303,8 +303,8 @@ static void commitMultipartCompleteCallback
 }
 
 
-static int commitMultipartPutObject(int bufferSize, char *buffer, 
-                                    void *callbackData) 
+static int commitMultipartPutObject(int bufferSize, char *buffer,
+                                    void *callbackData)
 {
     CommitMultiPartData *data = (CommitMultiPartData*) callbackData;
     if (data->handler->putObjectDataCallback) {
@@ -318,9 +318,9 @@ static int commitMultipartPutObject(int bufferSize, char *buffer,
 
 void S3_complete_multipart_upload(S3BucketContext *bucketContext,
                                   const char *key,
-                                  S3MultipartCommitHandler *handler, 
-                                  const char *upload_id, int contentLength, 
-                                  S3RequestContext *requestContext, 
+                                  S3MultipartCommitHandler *handler,
+                                  const char *upload_id, int contentLength,
+                                  S3RequestContext *requestContext,
                                   void *callbackData)
 {
     char queryParams[512];
@@ -379,7 +379,7 @@ typedef struct ListMultipartUpload
     string_buffer(key, 1024);
     string_buffer(uploadId, 256);
     string_buffer(initiatorId, 256);
-    string_buffer(initiatorDisplayName, 256);    
+    string_buffer(initiatorDisplayName, 256);
     string_buffer(ownerId, 256);
     string_buffer(ownerDisplayName, 256);
     string_buffer(storageClass, 256);
@@ -392,7 +392,7 @@ typedef struct ListPart
     string_buffer(eTag, 1024);
     string_buffer(partNumber, 24);
     string_buffer(size, 256);
-    string_buffer(lastModified, 256);     
+    string_buffer(lastModified, 256);
 } ListPart;
 
 
@@ -429,12 +429,12 @@ typedef struct ListPartsData
 
     string_buffer(isTruncated, 64);
     string_buffer(nextPartNumberMarker, 1024);
-    string_buffer(initiatorId, 256);   
-    string_buffer(initiatorDisplayName, 256);    
+    string_buffer(initiatorId, 256);
+    string_buffer(initiatorDisplayName, 256);
     string_buffer(ownerId, 256);
     string_buffer(ownerDisplayName, 256);
-    string_buffer(storageClass, 256); 
-    
+    string_buffer(storageClass, 256);
+
     int handlePartsStart;
     int partsCount;
     ListPart parts[MAX_PARTS];
@@ -483,7 +483,7 @@ static S3Status listMultipartPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     ListMultipartData *lmData = (ListMultipartData *) callbackData;
-    
+
     return (*(lmData->responsePropertiesCallback))
         (responseProperties, lmData->callbackData);
 }
@@ -493,26 +493,26 @@ static S3Status listPartsPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     ListPartsData *lpData = (ListPartsData *) callbackData;
-    
+
     return (*(lpData->responsePropertiesCallback))
         (responseProperties, lpData->callbackData);
 }
 
 
-static S3Status listMultipartDataCallback(int bufferSize, const char *buffer, 
+static S3Status listMultipartDataCallback(int bufferSize, const char *buffer,
                                        void *callbackData)
 {
     ListMultipartData *lmData = (ListMultipartData *) callbackData;
-    
+
     return simplexml_add(&(lmData->simpleXml), buffer, bufferSize);
 }
 
 
-static S3Status listPartsDataCallback(int bufferSize, const char *buffer, 
+static S3Status listPartsDataCallback(int bufferSize, const char *buffer,
                                        void *callbackData)
 {
     ListPartsData *lpData = (ListPartsData *) callbackData;
-    
+
     return simplexml_add(&(lpData->simpleXml), buffer, bufferSize);
 }
 
@@ -573,11 +573,11 @@ static S3Status make_list_parts_callback(ListPartsData *lpData)
         S3ListPart *partDest = &(Parts[i]);
         ListPart *partSrc = &(lpData->parts[i]);
         partDest->eTag = partSrc->eTag;
-        partDest->partNumber = parseUnsignedInt(partSrc->partNumber);       
-        partDest->size = parseUnsignedInt(partSrc->size);   
+        partDest->partNumber = parseUnsignedInt(partSrc->partNumber);
+        partDest->size = parseUnsignedInt(partSrc->size);
         partDest->lastModified = parseIso8601Time(partSrc->lastModified);
     }
-    
+
     return (*(lpData->listPartsCallback))
         (isTruncated, lpData->nextPartNumberMarker, lpData->initiatorId,
          lpData->initiatorDisplayName, lpData->ownerId,
@@ -586,7 +586,7 @@ static S3Status make_list_parts_callback(ListPartsData *lpData)
 }
 
 
-static void listMultipartCompleteCallback(S3Status requestStatus, 
+static void listMultipartCompleteCallback(S3Status requestStatus,
                                           const S3ErrorDetails *s3ErrorDetails,
                                           void *callbackData)
 {
@@ -606,7 +606,7 @@ static void listMultipartCompleteCallback(S3Status requestStatus,
 }
 
 
-static void listPartsCompleteCallback(S3Status requestStatus, 
+static void listPartsCompleteCallback(S3Status requestStatus,
                                       const S3ErrorDetails *s3ErrorDetails,
                                       void *callbackData)
 {
@@ -649,57 +649,57 @@ static S3Status listMultipartXmlCallback(const char *elementPath,
         }
         else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/Key")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->key, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, 
+        else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/Initiated")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->initiated, data, dataLen, fit);
         }
         else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/UploadId")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->uploadId, data, dataLen, fit);
         }
         else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/Initiator/ID")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->initiatorId, data, dataLen, fit);
         }
         else if (!strcmp
                  (elementPath,
                   "ListMultipartUploadsResult/Upload/Initiator/DisplayName")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->initiatorDisplayName, data, dataLen,
                                  fit);
         }
         else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/Owner/ID")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->ownerId, data, dataLen, fit);
         }
         else if (!strcmp
-                 (elementPath, 
+                 (elementPath,
                   "ListMultipartUploadsResult/Upload/Owner/DisplayName")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append
                 (uploads->ownerDisplayName, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, 
+        else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/Upload/StorageClass")) {
-            ListMultipartUpload *uploads = 
+            ListMultipartUpload *uploads =
                 &(lmData->uploads[lmData->uploadsCount]);
             string_buffer_append(uploads->storageClass, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, 
+        else if (!strcmp(elementPath,
                          "ListMultipartUploadsResult/CommonPrefixes/Prefix")) {
             int which = lmData->commonPrefixesCount;
             lmData->commonPrefixLens[which] +=
@@ -805,7 +805,7 @@ static S3Status listPartsXmlCallback(const char *elementPath,
         else if (!strcmp(elementPath, "ListPartsResult/Part/Size")) {
             ListPart *parts = &(lpData->parts[lpData->partsCount]);
             string_buffer_append(parts->size, data, dataLen, fit);
-        }       
+        }
     }
     else {
         if (!strcmp(elementPath, "ListPartsResult/Part")) {
@@ -824,7 +824,7 @@ static S3Status listPartsXmlCallback(const char *elementPath,
                 // Initialize the next one
                 initialize_list_part(&(lpData->parts[lpData->partsCount]));
             }
-        }       
+        }
     }
 
     /* Avoid compiler error about variable set but not used */
@@ -837,7 +837,7 @@ static S3Status listPartsXmlCallback(const char *elementPath,
 void S3_list_multipart_uploads(S3BucketContext *bucketContext,
                                const char *prefix, const char *keymarker,
                                const char *uploadidmarker,
-                               const char *encodingtype, const char *delimiter, 
+                               const char *encodingtype, const char *delimiter,
                                int maxuploads, S3RequestContext *requestContext,
                                const S3ListMultipartUploadsHandler *handler,
                                void *callbackData)
@@ -845,7 +845,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
     // Compose the query params
     string_buffer(queryParams, 4096);
     string_buffer_initialize(queryParams);
-        
+
 #define safe_append(name, value)                                            \
         do {                                                                \
             int fit;                                                        \
@@ -879,8 +879,8 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
                 return;                                                     \
             }                                                               \
         } while (0)
-    
-    
+
+
         int amp = 0;
         if (prefix && *prefix) {
             safe_append("prefix", prefix);
@@ -903,31 +903,31 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
                      maxuploads);
             safe_append("max-uploads", maxUploadsString);
         }
-    
+
         ListMultipartData *lmData =
             (ListMultipartData *) malloc(sizeof(ListMultipartData));
-    
+
         if (!lmData) {
             (*(handler->responseHandler.completeCallback))
                 (S3StatusOutOfMemory, 0, callbackData);
             return;
         }
-    
+
         simplexml_initialize(&(lmData->simpleXml), &listMultipartXmlCallback,
                              lmData);
-        
-        lmData->responsePropertiesCallback = 
+
+        lmData->responsePropertiesCallback =
             handler->responseHandler.propertiesCallback;
         lmData->listMultipartCallback = handler->responseXmlCallback;
-        lmData->responseCompleteCallback = 
+        lmData->responseCompleteCallback =
             handler->responseHandler.completeCallback;
         lmData->callbackData = callbackData;
-    
+
         string_buffer_initialize(lmData->isTruncated);
         string_buffer_initialize(lmData->nextKeyMarker);
         string_buffer_initialize(lmData->nextUploadIdMarker);
         initialize_list_multipart_data(lmData);
-    
+
         // Set up the RequestParams
         RequestParams params =
         {
@@ -957,7 +957,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
             lmData,                                  // callbackData
             0                                        // timeoutMs
         };
-    
+
         // Perform the request
         request_perform(&params, requestContext);
 }
@@ -972,7 +972,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
     // Compose the query params
     string_buffer(queryParams, 4096);
     string_buffer_initialize(queryParams);
-        
+
 #define safe_append(name, value)                                            \
         do {                                                                \
             int fit;                                                        \
@@ -1006,9 +1006,9 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
                 return;                                                     \
             }                                                               \
         } while (0)
-    
+
         char subResource[512];
-        snprintf(subResource, 512, "uploadId=%s", uploadid);   
+        snprintf(subResource, 512, "uploadId=%s", uploadid);
         int amp = 0;
 
         if (partnumbermarker && *partnumbermarker) {
@@ -1022,26 +1022,26 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
             snprintf(maxPartsString, sizeof(maxPartsString), "%d", maxparts);
             safe_append("max-parts", maxPartsString);
         }
-    
+
         ListPartsData *lpData =
             (ListPartsData *) malloc(sizeof(ListPartsData));
-    
+
         if (!lpData) {
             (*(handler->responseHandler.completeCallback))
                 (S3StatusOutOfMemory, 0, callbackData);
             return;
         }
-    
+
         simplexml_initialize(&(lpData->simpleXml), &listPartsXmlCallback,
                              lpData);
-        
-        lpData->responsePropertiesCallback = 
+
+        lpData->responsePropertiesCallback =
             handler->responseHandler.propertiesCallback;
         lpData->listPartsCallback = handler->responseXmlCallback;
-        lpData->responseCompleteCallback = 
+        lpData->responseCompleteCallback =
             handler->responseHandler.completeCallback;
         lpData->callbackData = callbackData;
-    
+
         string_buffer_initialize(lpData->isTruncated);
         string_buffer_initialize(lpData->nextPartNumberMarker);
         string_buffer_initialize(lpData->initiatorId);
@@ -1080,7 +1080,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
             lpData,                                  // callbackData
             0                                        // timeoutMs
         };
-    
+
         // Perform the request
         request_perform(&params, requestContext);
 }

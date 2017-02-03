@@ -1,10 +1,10 @@
 /** **************************************************************************
  * object.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -89,7 +89,7 @@ typedef struct CopyObjectData
     int eTagReturnSize;
     char *eTagReturn;
     int eTagReturnLen;
-    
+
     string_buffer(lastModified, 256);
 } CopyObjectData;
 
@@ -110,7 +110,7 @@ static S3Status copyObjectXmlCallback(const char *elementPath,
             if (coData->eTagReturnSize && coData->eTagReturn) {
                 coData->eTagReturnLen +=
                     snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
-                             coData->eTagReturnSize - 
+                             coData->eTagReturnSize -
                              coData->eTagReturnLen - 1,
                              "%.*s", dataLen, data);
                 if (coData->eTagReturnLen >= coData->eTagReturnSize) {
@@ -131,7 +131,7 @@ static S3Status copyObjectPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     CopyObjectData *coData = (CopyObjectData *) callbackData;
-    
+
     return (*(coData->responsePropertiesCallback))
         (responseProperties, coData->callbackData);
 }
@@ -146,7 +146,7 @@ static S3Status copyObjectDataCallback(int bufferSize, const char *buffer,
 }
 
 
-static void copyObjectCompleteCallback(S3Status requestStatus, 
+static void copyObjectCompleteCallback(S3Status requestStatus,
                                        const S3ErrorDetails *s3ErrorDetails,
                                        void *callbackData)
 {
@@ -200,7 +200,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
                           const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
-    CopyObjectData *data = 
+    CopyObjectData *data =
         (CopyObjectData *) malloc(sizeof(CopyObjectData));
     if (!data) {
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
@@ -235,7 +235,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
     {
         HttpRequestTypeCOPY,                          // httpRequestType
         { bucketContext->hostName,                    // hostName
-          destinationBucket ? destinationBucket : 
+          destinationBucket ? destinationBucket :
           bucketContext->bucketName,                  // bucketName
           bucketContext->protocol,                    // protocol
           bucketContext->uriStyle,                    // uriStyle
