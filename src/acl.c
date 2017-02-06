@@ -1,10 +1,10 @@
 /** **************************************************************************
  * acl.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -55,7 +55,7 @@ static S3Status getAclPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     GetAclData *gaData = (GetAclData *) callbackData;
-    
+
     return (*(gaData->responsePropertiesCallback))
         (responseProperties, gaData->callbackData);
 }
@@ -69,12 +69,12 @@ static S3Status getAclDataCallback(int bufferSize, const char *buffer,
     int fit;
 
     string_buffer_append(gaData->aclXmlDocument, buffer, bufferSize, fit);
-    
+
     return fit ? S3StatusOK : S3StatusXmlDocumentTooLarge;
 }
 
 
-static void getAclCompleteCallback(S3Status requestStatus, 
+static void getAclCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
@@ -94,10 +94,11 @@ static void getAclCompleteCallback(S3Status requestStatus,
 }
 
 
-void S3_get_acl(const S3BucketContext *bucketContext, const char *key, 
+void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
                 char *ownerId, char *ownerDisplayName,
-                int *aclGrantCountReturn, S3AclGrant *aclGrants, 
+                int *aclGrantCountReturn, S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData)
 {
     // Create the callback data
@@ -144,7 +145,8 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
         0,                                            // toS3CallbackTotalSize
         &getAclDataCallback,                          // fromS3Callback
         &getAclCompleteCallback,                      // completeCallback
-        gaData                                        // callbackData
+        gaData,                                       // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -154,9 +156,9 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
 
 // set acl -------------------------------------------------------------------
 
-static S3Status generateAclXmlDocument(const char *ownerId, 
+static S3Status generateAclXmlDocument(const char *ownerId,
                                        const char *ownerDisplayName,
-                                       int aclGrantCount, 
+                                       int aclGrantCount,
                                        const S3AclGrant *aclGrants,
                                        int *xmlDocumentLenReturn,
                                        char *xmlDocument,
@@ -191,7 +193,7 @@ static S3Status generateAclXmlDocument(const char *ownerId,
             break;
         case S3GranteeTypeCanonicalUser:
             append("CanonicalUser\"><ID>%s</ID><DisplayName>%s</DisplayName>",
-                   grant->grantee.canonicalUser.id, 
+                   grant->grantee.canonicalUser.id,
                    grant->grantee.canonicalUser.displayName);
             break;
         default: { // case S3GranteeTypeAllAwsUsers/S3GranteeTypeAllUsers:
@@ -242,7 +244,7 @@ static S3Status setAclPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     SetAclData *paData = (SetAclData *) callbackData;
-    
+
     return (*(paData->responsePropertiesCallback))
         (responseProperties, paData->callbackData);
 }
@@ -252,11 +254,11 @@ static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
 {
     SetAclData *paData = (SetAclData *) callbackData;
 
-    int remaining = (paData->aclXmlDocumentLen - 
+    int remaining = (paData->aclXmlDocumentLen -
                      paData->aclXmlDocumentBytesWritten);
 
     int toCopy = bufferSize > remaining ? remaining : bufferSize;
-    
+
     if (!toCopy) {
         return 0;
     }
@@ -270,7 +272,7 @@ static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
 }
 
 
-static void setAclCompleteCallback(S3Status requestStatus, 
+static void setAclCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
@@ -287,6 +289,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 const char *ownerId, const char *ownerDisplayName,
                 int aclGrantCount, const S3AclGrant *aclGrants,
                 S3RequestContext *requestContext,
+                int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData)
 {
     if (aclGrantCount > S3_MAX_ACL_GRANT_COUNT) {
@@ -304,7 +307,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     // Convert aclGrants to XML document
     S3Status status = generateAclXmlDocument
         (ownerId, ownerDisplayName, aclGrantCount, aclGrants,
-         &(data->aclXmlDocumentLen), data->aclXmlDocument, 
+         &(data->aclXmlDocumentLen), data->aclXmlDocument,
          sizeof(data->aclXmlDocument));
     if (status != S3StatusOK) {
         free(data);
@@ -344,7 +347,8 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         data->aclXmlDocumentLen,                      // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &setAclCompleteCallback,                      // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request

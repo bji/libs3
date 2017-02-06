@@ -1,10 +1,10 @@
 /** **************************************************************************
  * request.h
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -102,6 +102,9 @@ typedef struct RequestParams
 
     // Data passed to the callbacks
     void *callbackData;
+
+    // Request timeout. If 0, no timeout will be enforced
+    int timeoutMs;
 } RequestParams;
 
 

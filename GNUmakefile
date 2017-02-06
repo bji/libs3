@@ -1,9 +1,9 @@
 # GNUmakefile
-# 
+#
 # Copyright 2008 Bryan Ischo <bryan@ischo.com>
-# 
+#
 # This file is part of libs3.
-# 
+#
 # libs3 is free software: you can redistribute it and/or modify it under the
 # terms of the GNU Lesser General Public License as published by the Free
 # Software Foundation, version 3 of the License.
@@ -38,7 +38,7 @@
 # --------------------------------------------------------------------------
 # Set libs3 version number, unless it is already set.
 
-LIBS3_VER_MAJOR ?= 3
+LIBS3_VER_MAJOR ?= 4
 LIBS3_VER_MINOR ?= 0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
@@ -221,7 +221,7 @@ $(BUILD)/obj/%.do: src/%.c
 	@ $(CC) $(CFLAGS) -M -MG -MQ $@ -DCOMPILINGDEPENDENCIES \
         -o $(BUILD)/dep/$(<:%.c=%.dd) -c $<
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) $(CC) $(CFLAGS) -fpic -fPIC -o $@ -c $< 
+	$(VERBOSE_SHOW) $(CC) $(CFLAGS) -fpic -fPIC -o $@ -c $<
 
 
 # --------------------------------------------------------------------------

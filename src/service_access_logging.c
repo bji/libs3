@@ -1,10 +1,10 @@
 /** **************************************************************************
  * server_access_logging.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -60,10 +60,10 @@ static S3Status convertBlsXmlCallback(const char *elementPath,
     if (data) {
         if (!strcmp(elementPath, "BucketLoggingStatus/LoggingEnabled/"
                     "TargetBucket")) {
-            caData->targetBucketReturnLen += 
+            caData->targetBucketReturnLen +=
                 snprintf(&(caData->targetBucketReturn
                            [caData->targetBucketReturnLen]),
-                         255 - caData->targetBucketReturnLen - 1, 
+                         255 - caData->targetBucketReturnLen - 1,
                          "%.*s", dataLen, data);
             if (caData->targetBucketReturnLen >= 255) {
                 return S3StatusTargetBucketTooLong;
@@ -71,10 +71,10 @@ static S3Status convertBlsXmlCallback(const char *elementPath,
         }
         else if (!strcmp(elementPath, "BucketLoggingStatus/LoggingEnabled/"
                     "TargetPrefix")) {
-            caData->targetPrefixReturnLen += 
+            caData->targetPrefixReturnLen +=
                 snprintf(&(caData->targetPrefixReturn
                            [caData->targetPrefixReturnLen]),
-                         255 - caData->targetPrefixReturnLen - 1, 
+                         255 - caData->targetPrefixReturnLen - 1,
                          "%.*s", dataLen, data);
             if (caData->targetPrefixReturnLen >= 255) {
                 return S3StatusTargetPrefixTooLong;
@@ -142,7 +142,7 @@ static S3Status convertBlsXmlCallback(const char *elementPath,
             else if (caData->userId[0] && caData->userDisplayName[0]) {
                 grant->granteeType = S3GranteeTypeCanonicalUser;
                 strcpy(grant->grantee.canonicalUser.id, caData->userId);
-                strcpy(grant->grantee.canonicalUser.displayName, 
+                strcpy(grant->grantee.canonicalUser.displayName,
                        caData->userDisplayName);
             }
             else if (caData->groupUri[0]) {
@@ -223,7 +223,7 @@ static S3Status convert_bls(char *blsXml, char *targetBucketReturn,
     S3Status status = simplexml_add(&simpleXml, blsXml, strlen(blsXml));
 
     simplexml_deinitialize(&simpleXml);
-                                          
+
     return status;
 }
 
@@ -252,7 +252,7 @@ static S3Status getBlsPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     GetBlsData *gsData = (GetBlsData *) callbackData;
-    
+
     return (*(gsData->responsePropertiesCallback))
         (responseProperties, gsData->callbackData);
 }
@@ -266,12 +266,12 @@ static S3Status getBlsDataCallback(int bufferSize, const char *buffer,
     int fit;
 
     string_buffer_append(gsData->blsXmlDocument, buffer, bufferSize, fit);
-    
+
     return fit ? S3StatusOK : S3StatusXmlDocumentTooLarge;
 }
 
 
-static void getBlsCompleteCallback(S3Status requestStatus, 
+static void getBlsCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
@@ -281,7 +281,7 @@ static void getBlsCompleteCallback(S3Status requestStatus,
         // Parse the document
         requestStatus = convert_bls
             (gsData->blsXmlDocument, gsData->targetBucketReturn,
-             gsData->targetPrefixReturn, gsData->aclGrantCountReturn, 
+             gsData->targetPrefixReturn, gsData->aclGrantCountReturn,
              gsData->aclGrants);
     }
 
@@ -295,9 +295,10 @@ static void getBlsCompleteCallback(S3Status requestStatus,
 void S3_get_server_access_logging(const S3BucketContext *bucketContext,
                                   char *targetBucketReturn,
                                   char *targetPrefixReturn,
-                                  int *aclGrantCountReturn, 
+                                  int *aclGrantCountReturn,
                                   S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData)
 {
@@ -345,7 +346,8 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
         0,                                            // toS3CallbackTotalSize
         &getBlsDataCallback,                          // fromS3Callback
         &getBlsCompleteCallback,                      // completeCallback
-        gsData                                        // callbackData
+        gsData,                                       // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
@@ -358,7 +360,7 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
 
 static S3Status generateSalXmlDocument(const char *targetBucket,
                                        const char *targetPrefix,
-                                       int aclGrantCount, 
+                                       int aclGrantCount,
                                        const S3AclGrant *aclGrants,
                                        int *xmlDocumentLenReturn,
                                        char *xmlDocument,
@@ -382,7 +384,7 @@ static S3Status generateSalXmlDocument(const char *targetBucket,
 
     if (targetBucket && targetBucket[0]) {
         append("<LoggingEnabled><TargetBucket>%s</TargetBucket>", targetBucket);
-        append("<TargetPrefix>%s</TargetPrefix>", 
+        append("<TargetPrefix>%s</TargetPrefix>",
                targetPrefix ? targetPrefix : "");
 
         if (aclGrantCount) {
@@ -402,7 +404,7 @@ static S3Status generateSalXmlDocument(const char *targetBucket,
                 case S3GranteeTypeCanonicalUser:
                     append("CanonicalUser\"><ID>%s</ID><DisplayName>%s"
                            "</DisplayName>",
-                           grant->grantee.canonicalUser.id, 
+                           grant->grantee.canonicalUser.id,
                            grant->grantee.canonicalUser.displayName);
                     break;
                 default: // case S3GranteeTypeAllAwsUsers/S3GranteeTypeAllUsers:
@@ -414,9 +416,9 @@ static S3Status generateSalXmlDocument(const char *targetBucket,
                 append("</Grantee><Permission>%s</Permission></Grant>",
                        ((grant->permission == S3PermissionRead) ? "READ" :
                         (grant->permission == S3PermissionWrite) ? "WRITE" :
-                        (grant->permission == 
+                        (grant->permission ==
                          S3PermissionReadACP) ? "READ_ACP" :
-                        (grant->permission == 
+                        (grant->permission ==
                          S3PermissionWriteACP) ? "WRITE_ACP" : "FULL_CONTROL"));
             }
             append("%s", "</TargetGrants>");
@@ -447,7 +449,7 @@ static S3Status setSalPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
     SetSalData *paData = (SetSalData *) callbackData;
-    
+
     return (*(paData->responsePropertiesCallback))
         (responseProperties, paData->callbackData);
 }
@@ -457,11 +459,11 @@ static int setSalDataCallback(int bufferSize, char *buffer, void *callbackData)
 {
     SetSalData *paData = (SetSalData *) callbackData;
 
-    int remaining = (paData->salXmlDocumentLen - 
+    int remaining = (paData->salXmlDocumentLen -
                      paData->salXmlDocumentBytesWritten);
 
     int toCopy = bufferSize > remaining ? remaining : bufferSize;
-    
+
     if (!toCopy) {
         return 0;
     }
@@ -475,7 +477,7 @@ static int setSalDataCallback(int bufferSize, char *buffer, void *callbackData)
 }
 
 
-static void setSalCompleteCallback(S3Status requestStatus, 
+static void setSalCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
@@ -489,10 +491,11 @@ static void setSalCompleteCallback(S3Status requestStatus,
 
 
 void S3_set_server_access_logging(const S3BucketContext *bucketContext,
-                                  const char *targetBucket, 
-                                  const char *targetPrefix, int aclGrantCount, 
-                                  const S3AclGrant *aclGrants, 
+                                  const char *targetBucket,
+                                  const char *targetPrefix, int aclGrantCount,
+                                  const S3AclGrant *aclGrants,
                                   S3RequestContext *requestContext,
+                                  int timeoutMs,
                                   const S3ResponseHandler *handler,
                                   void *callbackData)
 {
@@ -507,11 +510,11 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
-    
+
     // Convert aclGrants to XML document
     S3Status status = generateSalXmlDocument
         (targetBucket, targetPrefix, aclGrantCount, aclGrants,
-         &(data->salXmlDocumentLen), data->salXmlDocument, 
+         &(data->salXmlDocumentLen), data->salXmlDocument,
          sizeof(data->salXmlDocument));
     if (status != S3StatusOK) {
         free(data);
@@ -551,7 +554,8 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
         data->salXmlDocumentLen,                      // toS3CallbackTotalSize
         0,                                            // fromS3Callback
         &setSalCompleteCallback,                      // completeCallback
-        data                                          // callbackData
+        data,                                         // callbackData
+        timeoutMs                                     // timeoutMs
     };
 
     // Perform the request
