@@ -1,9 +1,9 @@
 # GNUmakefile.mingw
-# 
+#
 # Copyright 2008 Bryan Ischo <bryan@ischo.com>
-# 
+#
 # This file is part of libs3.
-# 
+#
 # libs3 is free software: you can redistribute it and/or modify it under the
 # terms of the GNU Lesser General Public License as published by the Free
 # Software Foundation, version 3 of the License.
@@ -212,7 +212,7 @@ LIBS3_STATIC = $(BUILD)/lib/libs3.a
 .PHONY: libs3
 libs3: $(LIBS3_SHARED) $(BUILD)/lib/libs3.a
 
-LIBS3_SOURCES := src/acl.c src/bucket.c src/error_parser.c src/general.c \
+LIBS3_SOURCES := src/bucket.c src/bucket_metadata.c src/error_parser.c src/general.c \
                  src/object.c src/request.c src/request_context.c \
                  src/response_headers_handler.c src/service_access_logging.c \
                  src/service.c src/simplexml.c src/util.c src/multipart.c \

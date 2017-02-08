@@ -1,5 +1,5 @@
 /** **************************************************************************
- * acl.c
+ * bucket_metadata.c
  *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
  *
@@ -55,7 +55,7 @@ typedef struct GetAclData
     S3AclGrant *aclGrants;
     char *ownerId;
     char *ownerDisplayName;
-    string_buffer(aclXmlDocument, ACL_XML_DOC_MAXSIZE);
+    string_buffer(xmlDocument, ACL_XML_DOC_MAXSIZE);
 } GetAclData;
 
 
@@ -76,7 +76,7 @@ static S3Status getAclDataCallback(int bufferSize, const char *buffer,
 
     int fit;
 
-    string_buffer_append(gaData->aclXmlDocument, buffer, bufferSize, fit);
+    string_buffer_append(gaData->xmlDocument, buffer, bufferSize, fit);
 
     return fit ? S3StatusOK : S3StatusXmlDocumentTooLarge;
 }
@@ -91,7 +91,7 @@ static void getAclCompleteCallback(S3Status requestStatus,
     if (requestStatus == S3StatusOK) {
         // Parse the document
         requestStatus = S3_convert_acl
-            (gaData->aclXmlDocument, gaData->ownerId, gaData->ownerDisplayName,
+            (gaData->xmlDocument, gaData->ownerId, gaData->ownerDisplayName,
              gaData->aclGrantCountReturn, gaData->aclGrants);
     }
 
@@ -124,7 +124,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
     gaData->aclGrants = aclGrants;
     gaData->ownerId = ownerId;
     gaData->ownerDisplayName = ownerDisplayName;
-    string_buffer_initialize(gaData->aclXmlDocument);
+    string_buffer_initialize(gaData->xmlDocument);
     *aclGrantCountReturn = 0;
 
     // Set up the RequestParams
@@ -235,35 +235,35 @@ static S3Status generateAclXmlDocument(const char *ownerId,
 }
 
 
-typedef struct SetAclData
+typedef struct SetXmlData
 {
     S3ResponsePropertiesCallback *responsePropertiesCallback;
     S3ResponseCompleteCallback *responseCompleteCallback;
     void *callbackData;
 
-    int aclXmlDocumentLen;
-    const char *aclXmlDocument;
-    int aclXmlDocumentBytesWritten;
+    int xmlDocumentLen;
+    const char *xmlDocument;
+    int xmlDocumentBytesWritten;
 
-} SetAclData;
+} SetXmlData;
 
 
-static S3Status setAclPropertiesCallback
+static S3Status setXmlPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
     return (*(paData->responsePropertiesCallback))
         (responseProperties, paData->callbackData);
 }
 
 
-static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
+static int setXmlDataCallback(int bufferSize, char *buffer, void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
-    int remaining = (paData->aclXmlDocumentLen -
-                     paData->aclXmlDocumentBytesWritten);
+    int remaining = (paData->xmlDocumentLen -
+                     paData->xmlDocumentBytesWritten);
 
     int toCopy = bufferSize > remaining ? remaining : bufferSize;
 
@@ -271,20 +271,20 @@ static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
         return 0;
     }
 
-    memcpy(buffer, &(paData->aclXmlDocument
-                     [paData->aclXmlDocumentBytesWritten]), toCopy);
+    memcpy(buffer, &(paData->xmlDocument
+                     [paData->xmlDocumentBytesWritten]), toCopy);
 
-    paData->aclXmlDocumentBytesWritten += toCopy;
+    paData->xmlDocumentBytesWritten += toCopy;
 
     return toCopy;
 }
 
 
-static void setAclCompleteCallback(S3Status requestStatus,
+static void setXmlCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
     (*(paData->responseCompleteCallback))
         (requestStatus, s3ErrorDetails, paData->callbackData);
@@ -308,18 +308,18 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         return;
     }
 
-    SetAclData *data = (SetAclData *) malloc(sizeof(SetAclData));
+    SetXmlData *data = (SetXmlData *) malloc(sizeof(SetXmlData));
     if (!data) {
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
-    data->aclXmlDocument = aclBuffer;
+    data->xmlDocument = aclBuffer;
 
     // Convert aclGrants to XML document
     S3Status status = generateAclXmlDocument
         (ownerId, ownerDisplayName, aclGrantCount, aclGrants,
-         &(data->aclXmlDocumentLen), aclBuffer,
+         &(data->xmlDocumentLen), aclBuffer,
          sizeof(aclBuffer));
     if (status != S3StatusOK) {
         free(data);
@@ -331,7 +331,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     data->responseCompleteCallback = handler->completeCallback;
     data->callbackData = callbackData;
 
-    data->aclXmlDocumentBytesWritten = 0;
+    data->xmlDocumentBytesWritten = 0;
 
     // Set up the RequestParams
     RequestParams params =
@@ -354,11 +354,11 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         0,                                            // startByte
         0,                                            // byteCount
         0,                                            // putProperties
-        &setAclPropertiesCallback,                    // propertiesCallback
-        &setAclDataCallback,                          // toS3Callback
-        data->aclXmlDocumentLen,                      // toS3CallbackTotalSize
+        &setXmlPropertiesCallback,                    // propertiesCallback
+        &setXmlDataCallback,                          // toS3Callback
+        data->xmlDocumentLen,                         // toS3CallbackTotalSize
         0,                                            // fromS3Callback
-        &setAclCompleteCallback,                      // completeCallback
+        &setXmlCompleteCallback,                      // completeCallback
         data,                                         // callbackData
         timeoutMs                                     // timeoutMs
     };
@@ -465,8 +465,8 @@ void S3_get_lifecycle(const S3BucketContext *bucketContext,
         &getLifecyclePropertiesCallback,              // propertiesCallback
         0,                                            // toS3Callback
         0,                                            // toS3CallbackTotalSize
-        &getLifecycleDataCallback,                          // fromS3Callback
-        &getLifecycleCompleteCallback,                      // completeCallback
+        &getLifecycleDataCallback,                    // fromS3Callback
+        &getLifecycleCompleteCallback,                // completeCallback
         gaData,                                       // callbackData
         timeoutMs                                     // timeoutMs
     };
@@ -531,23 +531,23 @@ void S3_set_lifecycle(const S3BucketContext *bucketContext,
 #else
     char md5Base64[MD5_DIGEST_LENGTH * 2];
 
-    SetAclData *data = (SetAclData *) malloc(sizeof(SetAclData));
+    SetXmlData *data = (SetXmlData *) malloc(sizeof(SetXmlData));
     if (!data) {
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
 
-    data->aclXmlDocument = lifecycleXmlDocument;
-    data->aclXmlDocumentLen = strlen(lifecycleXmlDocument);
+    data->xmlDocument = lifecycleXmlDocument;
+    data->xmlDocumentLen = strlen(lifecycleXmlDocument);
 
     data->responsePropertiesCallback = handler->propertiesCallback;
     data->responseCompleteCallback = handler->completeCallback;
     data->callbackData = callbackData;
 
-    data->aclXmlDocumentBytesWritten = 0;
+    data->xmlDocumentBytesWritten = 0;
 
-    generate_content_md5(data->aclXmlDocument, data->aclXmlDocumentLen,
+    generate_content_md5(data->xmlDocument, data->xmlDocumentLen,
                          md5Base64, sizeof (md5Base64));
 
     // Set up S3PutProperties
@@ -586,11 +586,11 @@ void S3_set_lifecycle(const S3BucketContext *bucketContext,
         0,                                            // startByte
         0,                                            // byteCount
         &properties,                                  // putProperties
-        &setAclPropertiesCallback,                    // propertiesCallback
-        &setAclDataCallback,                          // toS3Callback
-        data->aclXmlDocumentLen,                      // toS3CallbackTotalSize
+        &setXmlPropertiesCallback,                    // propertiesCallback
+        &setXmlDataCallback,                          // toS3Callback
+        data->xmlDocumentLen,                         // toS3CallbackTotalSize
         0,                                            // fromS3Callback
-        &setAclCompleteCallback,                      // completeCallback
+        &setXmlCompleteCallback,                      // completeCallback
         data,                                         // callbackData
         timeoutMs                                     // timeoutMs
     };
