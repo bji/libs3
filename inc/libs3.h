@@ -298,6 +298,7 @@ typedef enum
     S3StatusServerFailedVerification                        ,
     S3StatusConnectionFailed                                ,
     S3StatusAbortedByCallback                               ,
+    S3StatusNotSupported                                    ,
 
     /**
      * Errors from the S3 service
@@ -2194,6 +2195,54 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData);
 
+
+/** **************************************************************************
+ * Lifecycle Control Functions
+ ************************************************************************** **/
+
+/**
+ * Gets the lifecycle for the given bucket
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param lifecycleXmlDocumentReturn buffer for lifecycle XML document
+ * @param lifecycleXmlDocumentBufferSize size of the buffer
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_get_lifecycle(const S3BucketContext *bucketContext,
+                      char *lifecycleXmlDocumentReturn, int lifecycleXmlDocumentBufferSize,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData);
+
+
+/**
+ * Sets the lifecycle for the given bucket
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param lifecycleXmlDocument Lifecycle configuration as an XML document
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_set_lifecycle(const S3BucketContext *bucketContext,
+                      const char *lifecycleXmlDocument,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData);
 
 /** **************************************************************************
  * Server Access Log Functions

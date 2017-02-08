@@ -1,10 +1,10 @@
 /** **************************************************************************
  * general.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -107,6 +107,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ServerFailedVerification);
         handlecase(ConnectionFailed);
         handlecase(AbortedByCallback);
+        handlecase(NotSupported);
         handlecase(ErrorAccessDenied);
         handlecase(ErrorAccountProblem);
         handlecase(ErrorAmbiguousGrantByEmailAddress);
@@ -119,7 +120,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorEntityTooSmall);
         handlecase(ErrorEntityTooLarge);
         handlecase(ErrorExpiredToken);
-        handlecase(ErrorIllegalVersioningConfigurationException); 
+        handlecase(ErrorIllegalVersioningConfigurationException);
         handlecase(ErrorIncompleteBody);
         handlecase(ErrorIncorrectNumberOfFilesInPostRequest);
         handlecase(ErrorInlineDataTooLarge);
@@ -131,7 +132,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorInvalidBucketState);
         handlecase(ErrorInvalidDigest);
         handlecase(ErrorInvalidLocationConstraint);
-        handlecase(ErrorInvalidObjectState); 
+        handlecase(ErrorInvalidObjectState);
         handlecase(ErrorInvalidPart);
         handlecase(ErrorInvalidPartOrder);
         handlecase(ErrorInvalidPayer);
@@ -161,8 +162,8 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorNoSuchBucket);
         handlecase(ErrorNoSuchKey);
         handlecase(ErrorNoSuchLifecycleConfiguration);
-        handlecase(ErrorNoSuchUpload); 
-        handlecase(ErrorNoSuchVersion); 
+        handlecase(ErrorNoSuchUpload);
+        handlecase(ErrorNoSuchVersion);
         handlecase(ErrorNotImplemented);
         handlecase(ErrorNotSignedUp);
         handlecase(ErrorNotSuchBucketPolicy);
@@ -295,7 +296,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
 
     if (data) {
         if (!strcmp(elementPath, "AccessControlPolicy/Owner/ID")) {
-            caData->ownerIdLen += 
+            caData->ownerIdLen +=
                 snprintf(&(caData->ownerId[caData->ownerIdLen]),
                          S3_MAX_GRANTEE_USER_ID_SIZE - caData->ownerIdLen - 1,
                          "%.*s", dataLen, data);
@@ -305,18 +306,18 @@ static S3Status convertAclXmlCallback(const char *elementPath,
         }
         else if (!strcmp(elementPath, "AccessControlPolicy/Owner/"
                          "DisplayName")) {
-            caData->ownerDisplayNameLen += 
+            caData->ownerDisplayNameLen +=
                 snprintf(&(caData->ownerDisplayName
                            [caData->ownerDisplayNameLen]),
                          S3_MAX_GRANTEE_DISPLAY_NAME_SIZE -
-                         caData->ownerDisplayNameLen - 1, 
+                         caData->ownerDisplayNameLen - 1,
                          "%.*s", dataLen, data);
-            if (caData->ownerDisplayNameLen >= 
+            if (caData->ownerDisplayNameLen >=
                 S3_MAX_GRANTEE_DISPLAY_NAME_SIZE) {
                 return S3StatusUserDisplayNameTooLong;
             }
         }
-        else if (!strcmp(elementPath, 
+        else if (!strcmp(elementPath,
                     "AccessControlPolicy/AccessControlList/Grant/"
                     "Grantee/EmailAddress")) {
             // AmazonCustomerByEmail
@@ -382,7 +383,7 @@ static S3Status convertAclXmlCallback(const char *elementPath,
             else if (caData->userId[0] && caData->userDisplayName[0]) {
                 grant->granteeType = S3GranteeTypeCanonicalUser;
                 strcpy(grant->grantee.canonicalUser.id, caData->userId);
-                strcpy(grant->grantee.canonicalUser.displayName, 
+                strcpy(grant->grantee.canonicalUser.displayName,
                        caData->userDisplayName);
             }
             else if (caData->groupUri[0]) {
@@ -466,7 +467,7 @@ S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
     S3Status status = simplexml_add(&simpleXml, aclXml, strlen(aclXml));
 
     simplexml_deinitialize(&simpleXml);
-                                          
+
     return status;
 }
 
