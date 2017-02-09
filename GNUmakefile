@@ -39,7 +39,7 @@
 # Set libs3 version number, unless it is already set.
 
 LIBS3_VER_MAJOR ?= 4
-LIBS3_VER_MINOR ?= 0
+LIBS3_VER_MINOR ?= 1
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
 
@@ -233,7 +233,7 @@ LIBS3_STATIC = $(BUILD)/lib/libs3.a
 .PHONY: libs3
 libs3: $(LIBS3_SHARED) $(LIBS3_STATIC)
 
-LIBS3_SOURCES := acl.c bucket.c error_parser.c general.c \
+LIBS3_SOURCES := bucket.c bucket_metadata.c error_parser.c general.c \
                  object.c request.c request_context.c \
                  response_headers_handler.c service_access_logging.c \
                  service.c simplexml.c util.c multipart.c

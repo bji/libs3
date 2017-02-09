@@ -703,6 +703,9 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
     if (values->rangeHeader[0]) {
         sortedHeaders[headerCount++] = values->rangeHeader;
     }
+    if (values->md5Header[0]) {
+        sortedHeaders[headerCount++] = values->md5Header;
+    }
 
     // Now sort these
     kv_gnome_sort(sortedHeaders, headerCount, ':');

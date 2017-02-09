@@ -251,17 +251,24 @@ static void usageExit(FILE *out)
 "   setacl               : Set the ACL of a bucket or key\n"
 "     <bucket>[/<key>]   : Bucket or bucket/key to set the ACL of\n"
 "     [filename]         : Input filename for ACL (default is stdin)\n"
+"   getlifecycle         : Get the lifecycle of a bucket\n"
+"     <bucket>           : Bucket or bucket to get the lifecycle of\n"
+"     [filename]         : Output filename for lifecycle (default is stdout)\n"
+"\n"
+"   setlifecycle         : Set the lifecycle of a bucket or key\n"
+"     <bucket>           : Bucket or bucket to set the lifecycle of\n"
+"     [filename]         : Input filename for lifecycle (default is stdin)\n"
 "\n"
 "   getlogging           : Get the logging status of a bucket\n"
 "     <bucket>           : Bucket to get the logging status of\n"
-"     [filename]         : Output filename for ACL (default is stdout)\n"
+"     [filename]         : Output filename for logging (default is stdout)\n"
 "\n"
 "   setlogging           : Set the logging status of a bucket\n"
 "     <bucket>           : Bucket to set the logging status of\n"
 "     [targetBucket]     : Target bucket to log to; if not present, disables\n"
 "                          logging\n"
 "     [targetPrefix]     : Key prefix to use for logs\n"
-"     [filename]         : Input filename for ACL (default is stdin)\n"
+"     [filename]         : Input filename for logging (default is stdin)\n"
 "\n"
 "   put                  : Puts an object\n"
 "     <bucket>/<key>     : Bucket/key to put object to\n"
@@ -3381,7 +3388,7 @@ void set_acl(int argc, char **argv, int optindex)
 
     // Read in the complete ACL
     char aclBuf[65536];
-    aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
+    aclBuf[fread(aclBuf, 1, sizeof(aclBuf) - 1, infile)] = 0;
     char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
     char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
 
@@ -3419,6 +3426,178 @@ void set_acl(int argc, char **argv, int optindex)
         S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
                    aclGrantCount, aclGrants, 0,
                    timeoutMsG, &responseHandler, 0);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+
+    if (statusG != S3StatusOK) {
+        printError();
+    }
+
+    fclose(infile);
+
+    S3_deinitialize();
+}
+
+// get lifecycle -------------------------------------------------------------------
+
+void get_lifecycle(int argc, char **argv, int optindex)
+{
+    if (optindex == argc) {
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
+        usageExit(stderr);
+    }
+
+    const char *bucketName = argv[optindex++];
+
+    const char *filename = 0;
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    FILE *outfile = 0;
+
+    if (filename) {
+        // Stat the file, and if it doesn't exist, open it in w mode
+        struct stat buf;
+        if (stat(filename, &buf) == -1) {
+            outfile = fopen(filename, "w" FOPEN_EXTRA_FLAGS);
+        }
+        else {
+            // Open in r+ so that we don't truncate the file, just in case
+            // there is an error and we write no bytes, we leave the file
+            // unmodified
+            outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
+        }
+
+        if (!outfile) {
+            fprintf(stderr, "\nERROR: Failed to open output file %s: ",
+                    filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else if (showResponsePropertiesG) {
+        fprintf(stderr, "\nERROR: getlifecycle -s requires a filename parameter\n");
+        usageExit(stderr);
+    }
+    else {
+        outfile = stdout;
+    }
+
+    char lifecycleBuffer[64 * 1024];
+
+    S3_init();
+
+    S3BucketContext bucketContext =
+    {
+        0,
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG,
+        0,
+        awsRegionG
+    };
+
+    S3ResponseHandler responseHandler =
+    {
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    do {
+        S3_get_lifecycle(&bucketContext,
+                         lifecycleBuffer, sizeof(lifecycleBuffer),
+                         0, timeoutMsG, &responseHandler, 0);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+
+    if (statusG == S3StatusOK) {
+        fprintf(outfile, "%s", lifecycleBuffer);
+    }
+    else {
+        printError();
+    }
+
+    fclose(outfile);
+
+    S3_deinitialize();
+}
+
+
+// set lifecycle -------------------------------------------------------------------
+
+void set_lifecycle(int argc, char **argv, int optindex)
+{
+    if (optindex == argc) {
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
+        usageExit(stderr);
+    }
+
+    const char *bucketName = argv[optindex++];
+
+    const char *filename = 0;
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    FILE *infile;
+
+    if (filename) {
+        if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
+            fprintf(stderr, "\nERROR: Failed to open input file %s: ",
+                    filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else {
+        infile = stdin;
+    }
+
+    // Read in the complete ACL
+    char lifecycleBuf[65536];
+    lifecycleBuf[fread(lifecycleBuf, 1, sizeof(lifecycleBuf) - 1, infile)] = 0;
+
+    S3_init();
+
+    S3BucketContext bucketContext =
+    {
+        0,
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG,
+        0,
+        awsRegionG
+    };
+
+    S3ResponseHandler responseHandler =
+    {
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    do {
+        S3_set_lifecycle(&bucketContext,
+                         lifecycleBuf,
+                         0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3830,6 +4009,12 @@ int main(int argc, char **argv)
     }
     else if (!strcmp(command, "setacl")) {
         set_acl(argc, argv, optind);
+    }
+    else if (!strcmp(command, "getlifecycle")) {
+        get_lifecycle(argc, argv, optind);
+    }
+    else if (!strcmp(command, "setlifecycle")) {
+        set_lifecycle(argc, argv, optind);
     }
     else if (!strcmp(command, "getlogging")) {
         get_logging(argc, argv, optind);

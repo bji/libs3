@@ -1,5 +1,5 @@
 /** **************************************************************************
- * acl.c
+ * bucket_metadata.c
  *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
  *
@@ -26,6 +26,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef __APPLE__
+    #include <openssl/md5.h>
+    #include <openssl/bio.h>
+    #include <openssl/evp.h>
+    #include <openssl/buffer.h>
+#endif
+
 #include "libs3.h"
 #include "request.h"
 
@@ -47,7 +55,7 @@ typedef struct GetAclData
     S3AclGrant *aclGrants;
     char *ownerId;
     char *ownerDisplayName;
-    string_buffer(aclXmlDocument, ACL_XML_DOC_MAXSIZE);
+    string_buffer(xmlDocument, ACL_XML_DOC_MAXSIZE);
 } GetAclData;
 
 
@@ -68,7 +76,7 @@ static S3Status getAclDataCallback(int bufferSize, const char *buffer,
 
     int fit;
 
-    string_buffer_append(gaData->aclXmlDocument, buffer, bufferSize, fit);
+    string_buffer_append(gaData->xmlDocument, buffer, bufferSize, fit);
 
     return fit ? S3StatusOK : S3StatusXmlDocumentTooLarge;
 }
@@ -83,7 +91,7 @@ static void getAclCompleteCallback(S3Status requestStatus,
     if (requestStatus == S3StatusOK) {
         // Parse the document
         requestStatus = S3_convert_acl
-            (gaData->aclXmlDocument, gaData->ownerId, gaData->ownerDisplayName,
+            (gaData->xmlDocument, gaData->ownerId, gaData->ownerDisplayName,
              gaData->aclGrantCountReturn, gaData->aclGrants);
     }
 
@@ -116,7 +124,7 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
     gaData->aclGrants = aclGrants;
     gaData->ownerId = ownerId;
     gaData->ownerDisplayName = ownerDisplayName;
-    string_buffer_initialize(gaData->aclXmlDocument);
+    string_buffer_initialize(gaData->xmlDocument);
     *aclGrantCountReturn = 0;
 
     // Set up the RequestParams
@@ -227,35 +235,35 @@ static S3Status generateAclXmlDocument(const char *ownerId,
 }
 
 
-typedef struct SetAclData
+typedef struct SetXmlData
 {
     S3ResponsePropertiesCallback *responsePropertiesCallback;
     S3ResponseCompleteCallback *responseCompleteCallback;
     void *callbackData;
 
-    int aclXmlDocumentLen;
-    char aclXmlDocument[ACL_XML_DOC_MAXSIZE];
-    int aclXmlDocumentBytesWritten;
+    int xmlDocumentLen;
+    const char *xmlDocument;
+    int xmlDocumentBytesWritten;
 
-} SetAclData;
+} SetXmlData;
 
 
-static S3Status setAclPropertiesCallback
+static S3Status setXmlPropertiesCallback
     (const S3ResponseProperties *responseProperties, void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
     return (*(paData->responsePropertiesCallback))
         (responseProperties, paData->callbackData);
 }
 
 
-static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
+static int setXmlDataCallback(int bufferSize, char *buffer, void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
-    int remaining = (paData->aclXmlDocumentLen -
-                     paData->aclXmlDocumentBytesWritten);
+    int remaining = (paData->xmlDocumentLen -
+                     paData->xmlDocumentBytesWritten);
 
     int toCopy = bufferSize > remaining ? remaining : bufferSize;
 
@@ -263,20 +271,20 @@ static int setAclDataCallback(int bufferSize, char *buffer, void *callbackData)
         return 0;
     }
 
-    memcpy(buffer, &(paData->aclXmlDocument
-                     [paData->aclXmlDocumentBytesWritten]), toCopy);
+    memcpy(buffer, &(paData->xmlDocument
+                     [paData->xmlDocumentBytesWritten]), toCopy);
 
-    paData->aclXmlDocumentBytesWritten += toCopy;
+    paData->xmlDocumentBytesWritten += toCopy;
 
     return toCopy;
 }
 
 
-static void setAclCompleteCallback(S3Status requestStatus,
+static void setXmlCompleteCallback(S3Status requestStatus,
                                    const S3ErrorDetails *s3ErrorDetails,
                                    void *callbackData)
 {
-    SetAclData *paData = (SetAclData *) callbackData;
+    SetXmlData *paData = (SetXmlData *) callbackData;
 
     (*(paData->responseCompleteCallback))
         (requestStatus, s3ErrorDetails, paData->callbackData);
@@ -292,23 +300,27 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
                 int timeoutMs,
                 const S3ResponseHandler *handler, void *callbackData)
 {
+    char aclBuffer[ACL_XML_DOC_MAXSIZE];
+
     if (aclGrantCount > S3_MAX_ACL_GRANT_COUNT) {
         (*(handler->completeCallback))
             (S3StatusTooManyGrants, 0, callbackData);
         return;
     }
 
-    SetAclData *data = (SetAclData *) malloc(sizeof(SetAclData));
+    SetXmlData *data = (SetXmlData *) malloc(sizeof(SetXmlData));
     if (!data) {
         (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
         return;
     }
 
+    data->xmlDocument = aclBuffer;
+
     // Convert aclGrants to XML document
     S3Status status = generateAclXmlDocument
         (ownerId, ownerDisplayName, aclGrantCount, aclGrants,
-         &(data->aclXmlDocumentLen), data->aclXmlDocument,
-         sizeof(data->aclXmlDocument));
+         &(data->xmlDocumentLen), aclBuffer,
+         sizeof(aclBuffer));
     if (status != S3StatusOK) {
         free(data);
         (*(handler->completeCallback))(status, 0, callbackData);
@@ -319,7 +331,7 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     data->responseCompleteCallback = handler->completeCallback;
     data->callbackData = callbackData;
 
-    data->aclXmlDocumentBytesWritten = 0;
+    data->xmlDocumentBytesWritten = 0;
 
     // Set up the RequestParams
     RequestParams params =
@@ -342,11 +354,11 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
         0,                                            // startByte
         0,                                            // byteCount
         0,                                            // putProperties
-        &setAclPropertiesCallback,                    // propertiesCallback
-        &setAclDataCallback,                          // toS3Callback
-        data->aclXmlDocumentLen,                      // toS3CallbackTotalSize
+        &setXmlPropertiesCallback,                    // propertiesCallback
+        &setXmlDataCallback,                          // toS3Callback
+        data->xmlDocumentLen,                         // toS3CallbackTotalSize
         0,                                            // fromS3Callback
-        &setAclCompleteCallback,                      // completeCallback
+        &setXmlCompleteCallback,                      // completeCallback
         data,                                         // callbackData
         timeoutMs                                     // timeoutMs
     };
@@ -354,3 +366,237 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
     // Perform the request
     request_perform(&params, requestContext);
 }
+
+
+// get lifecycle -------------------------------------------------------------------
+
+typedef struct GetLifecycleData
+{
+    S3ResponsePropertiesCallback *responsePropertiesCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
+
+    char *lifecycleXmlDocumentReturn;
+    int lifecycleXmlDocumentBufferSize;
+    int lifecycleXmlDocumentWritten;
+} GetLifecycleData;
+
+
+static S3Status getLifecyclePropertiesCallback
+    (const S3ResponseProperties *responseProperties, void *callbackData)
+{
+    GetLifecycleData *gaData = (GetLifecycleData *) callbackData;
+
+    return (*(gaData->responsePropertiesCallback))
+        (responseProperties, gaData->callbackData);
+}
+
+
+static S3Status getLifecycleDataCallback(int bufferSize, const char *buffer,
+                                   void *callbackData)
+{
+    GetLifecycleData *gaData = (GetLifecycleData *) callbackData;
+
+    if ((gaData->lifecycleXmlDocumentWritten + bufferSize) >= gaData->lifecycleXmlDocumentBufferSize)
+        return S3StatusXmlDocumentTooLarge;
+
+    snprintf(gaData->lifecycleXmlDocumentReturn + gaData->lifecycleXmlDocumentWritten, bufferSize + 1, "%s", buffer);
+    gaData->lifecycleXmlDocumentWritten += bufferSize;
+
+    return S3StatusOK;
+}
+
+
+static void getLifecycleCompleteCallback(S3Status requestStatus,
+                                         const S3ErrorDetails *s3ErrorDetails,
+                                         void *callbackData)
+{
+    GetLifecycleData *gaData = (GetLifecycleData *) callbackData;
+
+    (*(gaData->responseCompleteCallback))
+        (requestStatus, s3ErrorDetails, gaData->callbackData);
+
+    free(gaData);
+}
+
+
+void S3_get_lifecycle(const S3BucketContext *bucketContext,
+                      char *lifecycleXmlDocumentReturn, int lifecycleXmlDocumentBufferSize,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData)
+{
+    // Create the callback data
+    GetLifecycleData *gaData = (GetLifecycleData *) malloc(sizeof(GetLifecycleData));
+    if (!gaData) {
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
+        return;
+    }
+
+    gaData->responsePropertiesCallback = handler->propertiesCallback;
+    gaData->responseCompleteCallback = handler->completeCallback;
+    gaData->callbackData = callbackData;
+
+    gaData->lifecycleXmlDocumentReturn = lifecycleXmlDocumentReturn;
+    gaData->lifecycleXmlDocumentBufferSize = lifecycleXmlDocumentBufferSize;
+    gaData->lifecycleXmlDocumentWritten = 0;
+
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypeGET,                           // httpRequestType
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
+        0,                                            // key
+        0,                                            // queryParams
+        "lifecycle",                                  // subResource
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        0,                                            // putProperties
+        &getLifecyclePropertiesCallback,              // propertiesCallback
+        0,                                            // toS3Callback
+        0,                                            // toS3CallbackTotalSize
+        &getLifecycleDataCallback,                    // fromS3Callback
+        &getLifecycleCompleteCallback,                // completeCallback
+        gaData,                                       // callbackData
+        timeoutMs                                     // timeoutMs
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
+}
+
+
+#ifndef __APPLE__
+// Calculate MD5 and encode it as base64
+void generate_content_md5(const char* data, int size,
+                          char* retBuffer, int retBufferSize) {
+    MD5_CTX mdContext;
+    BIO *bio, *b64;
+    BUF_MEM *bufferPtr;
+
+    char md5Buffer[MD5_DIGEST_LENGTH];
+
+    MD5_Init(&mdContext);
+    MD5_Update(&mdContext, data, size);
+    MD5_Final((unsigned char*)md5Buffer, &mdContext);
+
+
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new(BIO_s_mem());
+    bio = BIO_push(b64, bio);
+
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //Ignore newlines - write everything in one line
+    BIO_write(bio, md5Buffer, sizeof(md5Buffer));
+    BIO_flush(bio);
+    BIO_get_mem_ptr(bio, &bufferPtr);
+    BIO_set_close(bio, BIO_NOCLOSE);
+
+    if ((unsigned int)retBufferSize + 1 < bufferPtr->length) {
+        retBuffer[0] = '\0';
+        BIO_free_all(bio);
+        return;
+    }
+
+    memcpy(retBuffer, bufferPtr->data, bufferPtr->length);
+    retBuffer[bufferPtr->length] = '\0';
+
+    BIO_free_all(bio);
+}
+#endif
+
+
+void S3_set_lifecycle(const S3BucketContext *bucketContext,
+                      const char *lifecycleXmlDocument,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData)
+{
+#ifdef __APPLE__
+    /* This request requires calculating MD5 sum.
+     * MD5 sum requires OpenSSL library, which is not used on Apple.
+     * TODO Implement some MD5+Base64 caculation on Apple
+     */
+    (*(handler->completeCallback))(S3StatusNotSupported, 0, callbackData);
+    return;
+#else
+    char md5Base64[MD5_DIGEST_LENGTH * 2];
+
+    SetXmlData *data = (SetXmlData *) malloc(sizeof(SetXmlData));
+    if (!data) {
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
+        return;
+    }
+
+
+    data->xmlDocument = lifecycleXmlDocument;
+    data->xmlDocumentLen = strlen(lifecycleXmlDocument);
+
+    data->responsePropertiesCallback = handler->propertiesCallback;
+    data->responseCompleteCallback = handler->completeCallback;
+    data->callbackData = callbackData;
+
+    data->xmlDocumentBytesWritten = 0;
+
+    generate_content_md5(data->xmlDocument, data->xmlDocumentLen,
+                         md5Base64, sizeof (md5Base64));
+
+    // Set up S3PutProperties
+    S3PutProperties properties =
+    {
+        0,                                       // contentType
+        md5Base64,                               // md5
+        0,                                       // cacheControl
+        0,                                       // contentDispositionFilename
+        0,                                       // contentEncoding
+       -1,                                       // expires
+        0,                                       // cannedAcl
+        0,                                       // metaDataCount
+        0,                                       // metaData
+        0                                        // useServerSideEncryption
+    };
+
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypePUT,                           // httpRequestType
+        { bucketContext->hostName,                    // hostName
+          bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
+        0,                                            // key
+        0,                                            // queryParams
+        "lifecycle",                                  // subResource
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        &properties,                                  // putProperties
+        &setXmlPropertiesCallback,                    // propertiesCallback
+        &setXmlDataCallback,                          // toS3Callback
+        data->xmlDocumentLen,                         // toS3CallbackTotalSize
+        0,                                            // fromS3Callback
+        &setXmlCompleteCallback,                      // completeCallback
+        data,                                         // callbackData
+        timeoutMs                                     // timeoutMs
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
+#endif
+}
+
