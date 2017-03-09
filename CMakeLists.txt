@@ -1,0 +1,160 @@
+PROJECT (s3 C)
+CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
+
+OPTION (ENABLE_SO_VERSION "Enable so version" ON)
+OPTION (ENABLE_SHARED "Enable building shared" ON)
+OPTION (ENABLE_STATIC "Enable building static" ON)
+OPTION (ENABLE_CLIENT "Enable building S3 client" ON)
+
+IF (NOT ENABLE_SHARED AND NOT ENABLE_STATIC)
+    MESSAGE (FATAL_ERROR "It is invalid that both ENABLE_SHARED and ENABLE_STATIC are OFF.")
+ENDIF (NOT ENABLE_SHARED AND NOT ENABLE_STATIC)
+
+SET (LIBS3_VER_MAJOR 4)
+SET (LIBS3_VER_MINOR 1)
+SET (LIBS3_VER ${LIBS3_VER_MAJOR}.${LIBS3_VER_MINOR})
+
+SET (libs3_SRCS
+    src/bucket.c
+    src/bucket_metadata.c
+    src/error_parser.c
+    src/general.c
+    src/multipart.c
+    src/object.c
+    src/request.c
+    src/request_context.c
+    src/response_headers_handler.c
+    src/service_access_logging.c
+    src/service.c
+    src/simplexml.c
+    src/util.c
+)
+
+IF (MSVC)
+    ADD_DEFINITIONS (-D_CRT_SECURE_NO_WARNINGS=1)
+ELSEIF (CMAKE_COMPILER_IS_GNUCC)
+    INCLUDE (CheckCCompilerFlag)
+
+    SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wshadow")
+
+    CHECK_C_COMPILER_FLAG (-Wextra HAVE_GCC_WEXTRA)
+    IF (HAVE_GCC_WEXTRA)
+        SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
+    ENDIF (HAVE_GCC_WEXTRA)
+
+    IF (CMAKE_SYSTEM MATCHES "AIX")
+        CHECK_C_COMPILER_FLAG (-Wl,-bnoipath HAVE_LD_BNOIPATH)
+        IF (HAVE_LD_BNOIPATH)
+            SET (YAJL_EXE_LINKER_FLAGS "${YAJL_EXE_LINKER_FLAGS} -Wl,-bnoipath")
+        ENDIF (HAVE_LD_BNOIPATH)
+    ENDIF (CMAKE_SYSTEM MATCHES "AIX")
+ENDIF (MSVC)
+
+IF (NOT LIBXML2_LIBRARIES)
+    FIND_PACKAGE (LibXml2 REQUIRED)
+ENDIF (NOT LIBXML2_LIBRARIES)
+
+IF (NOT CURL_LIBRARIES)
+    FIND_PACKAGE (CURL REQUIRED)
+ENDIF (NOT CURL_LIBRARIES)
+
+IF (NOT OPENSSL_CRYPTO_LIBRARIES)
+    FIND_PACKAGE (OpenSSL REQUIRED)
+ENDIF (NOT OPENSSL_CRYPTO_LIBRARIES)
+
+INCLUDE_DIRECTORIES (
+    inc
+    ${LIBXML2_INCLUDE_DIR}
+    ${CURL_INCLUDE_DIRS}
+    ${OPENSSL_INCLUDE_DIR}
+)
+
+ADD_DEFINITIONS (
+    ${LIBXML2_DEFINITIONS}
+    -DLIBS3_VER_MAJOR="${LIBS3_VER_MAJOR}"
+    -DLIBS3_VER_MINOR="${LIBS3_VER_MINOR}"
+    -DLIBS3_VER="${LIBS3_VER}"
+    -D__STRICT_ANSI__
+    -D_ISOC99_SOURCE
+    -D_POSIX_C_SOURCE=200112L
+)
+
+SET (LIBS ${LIBXML2_LIBRARIES} ${CURL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARIES})
+
+IF (MINGW)
+    INCLUDE_DIRECTORIES (inc/mingw)
+    ADD_DEFINITIONS (
+        -Dsleep=Sleep
+        -DSLEEP_UNITS_PER_SECOND=1000
+        -DFOPEN_EXTRA_FLAGS=\"b\"
+    )
+
+    LIST (APPEND libs3_SRCS
+          src/mingw_functions.c
+          src/mingw_s3_functions.c
+          mswin/libs3.def)
+
+    LIST (APPEND LIBS ws2_32)
+ENDIF (MINGW)
+
+IF (ENABLE_SHARED)
+    ADD_LIBRARY (s3 SHARED ${libs3_SRCS})
+    TARGET_LINK_LIBRARIES (s3 ${LIBS})
+    IF (ENABLE_SO_VERSION)
+        SET_TARGET_PROPERTIES (s3 PROPERTIES
+                               SOVERSION ${LIBS3_VER_MAJOR}
+                               VERSION ${LIBS3_VER})
+    ENDIF (ENABLE_SO_VERSION)
+
+    SET_TARGET_PROPERTIES (s3 PROPERTIES
+                           LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/src/libs3.sym")
+
+    # at build time you may specify the cmake variable LIB_SUFFIX to handle
+    # 64-bit systems which use 'lib64'
+    #
+    # rpmbuild in Ubuntu 12.04 excludes *.so.* from provides and requires list
+    # without executable permission.
+    INSTALL (TARGETS s3
+             RUNTIME DESTINATION bin
+             LIBRARY DESTINATION lib${LIB_SUFFIX}
+                     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                                 GROUP_READ GROUP_EXECUTE
+                                 WORLD_READ WORLD_EXECUTE
+             ARCHIVE DESTINATION lib${LIB_SUFFIX})
+ENDIF (ENABLE_SHARED)
+
+IF (ENABLE_STATIC)
+    ADD_LIBRARY (s3_s STATIC ${libs3_SRCS})
+
+    IF (UNIX)
+        IF (CMAKE_COMPILER_IS_GNUCC)
+            SET_TARGET_PROPERTIES (s3_s PROPERTIES COMPILE_FLAGS "-fPIC")
+        ENDIF (CMAKE_COMPILER_IS_GNUCC)
+
+        IF (CMAKE_SYSTEM_NAME STREQUAL "AIX")
+            SET (CMAKE_C_ARCHIVE_CREATE
+                 "<CMAKE_AR> -X32_64 cr <TARGET> <LINK_FLAGS> <OBJECTS>")
+        ENDIF (CMAKE_SYSTEM_NAME STREQUAL "AIX")
+    ENDIF (UNIX)
+
+    SET_TARGET_PROPERTIES (s3_s PROPERTIES OUTPUT_NAME s3)
+
+    # at build time you may specify the cmake variable LIB_SUFFIX to handle
+    # 64-bit systems which use 'lib64'
+    INSTALL (TARGETS s3_s ARCHIVE DESTINATION lib${LIB_SUFFIX})
+ENDIF (ENABLE_STATIC)
+
+IF (ENABLE_CLIENT)
+    ADD_EXECUTABLE (s3c src/s3.c)
+    IF (ENABLE_SHARED)
+        TARGET_LINK_LIBRARIES (s3c s3)
+    ELSEIF (ENABLE_STATIC)
+        TARGET_LINK_LIBRARIES (s3c s3_s ${LIBS})
+    ENDIF (ENABLE_SHARED)
+
+    SET_TARGET_PROPERTIES (s3c PROPERTIES OUTPUT_NAME s3)
+    INSTALL (TARGETS s3c RUNTIME DESTINATION bin)
+ENDIF (ENABLE_CLIENT)
+
+INSTALL (FILES inc/libs3.h DESTINATION include)
+# vim: set ts=4 sw=4 sts=4 et:
