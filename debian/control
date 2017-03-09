@@ -1,12 +1,24 @@
-Package: libs3
-Source: THIS LINE WILL BE REMOVED, dpkg-shlibdepends NEEDS IT
-Version: LIBS3_VERSION
-Architecture: DEBIAN_ARCHITECTURE
+Source: libs3
 Section: net
 Priority: extra
-Maintainer: Bryan Ischo <bryan@ischo.com>
-Homepage: https://github.com/bji/libs3
+Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
+Build-Depends: debhelper (>= 8), libxml2-dev, libcurl4-openssl-dev, libssl-dev
+Standards-Version: 3.9.3
+Homepage: http://libs3.ischo.com/index.html
+
+Package: libs3-4
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: libs3-2
 Description: C Library and Tools for Amazon S3 Access
  This package includes the libs3 shared object library, needed to run
  applications compiled against libs3, and additionally contains the s3
  utility for accessing Amazon S3.
+
+Package: libs3-dev
+Architecture: any
+Section: libdevel
+Depends: ${misc:Depends}, libs3-4 (= ${binary:Version})
+Description: C Development Library for Amazon S3 Access
+ This package includes the libs3 header, needed to compile applications
+ against libs3.
