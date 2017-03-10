@@ -27,6 +27,9 @@
 #ifndef PTHREAD_H
 #define PTHREAD_H
 
+#include <winsock2.h>
+#include <windows.h>
+
 // This is a minimal implementation of pthreads on Windows, implementing just
 // the APIs needed by libs3
 

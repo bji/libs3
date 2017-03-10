@@ -28,8 +28,12 @@
 #define LIBS3_H
 
 #include <stdint.h>
-#include <sys/select.h>
 
+#ifdef _WIN32
+#   include <winsock2.h>
+#else
+#   include <sys/select.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

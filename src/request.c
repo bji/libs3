@@ -43,6 +43,21 @@
 #define S3_SHA256_DIGEST_LENGTH SHA256_DIGEST_LENGTH
 #endif
 
+#ifdef _WIN32
+#ifndef gmtime_r
+#define gmtime_r(_Time,_Tm)	({ struct tm *___tmp_tm =		\
+						gmtime((_Time));	\
+						if (___tmp_tm) {	\
+						  *(_Tm) = *___tmp_tm;	\
+						  ___tmp_tm = (_Tm);	\
+						}			\
+						___tmp_tm;	})
+#endif /* gmtime_r */
+#ifndef strtok_r
+#define strtok_r(__s, __sep, __last)  (*(__last) = strtok((__s), (__sep)))
+#endif /* strtok_r */
+#endif /* _WIN32 */
+
 #define USER_AGENT_SIZE 256
 #define REQUEST_STACK_SIZE 32
 #define SIGNATURE_SCOPE_SIZE 64
