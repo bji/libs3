@@ -285,8 +285,8 @@ static S3Status append_amz_header(RequestComputedValues *values,
     values->amzHeaders[values->amzHeadersCount++] = &(values->amzHeadersRaw[rawPos]);
 
     const char *headerStr = headerName;
+    char headerNameWithPrefix[S3_MAX_METADATA_SIZE - sizeof(": v")];
     if (addPrefix) {
-        char headerNameWithPrefix[S3_MAX_METADATA_SIZE - sizeof(": v")];
         snprintf(headerNameWithPrefix, sizeof(headerNameWithPrefix),
                  S3_METADATA_HEADER_NAME_PREFIX "%s", headerName);
         headerStr = headerNameWithPrefix;
@@ -893,7 +893,8 @@ static void canonicalize_query_string(const char *queryParams,
             append("&");
         }
         append(subResource);
-        append("=");
+        if (!strchr(subResource, '='))
+            append("=");
     }
 
 #undef append
