@@ -147,6 +147,9 @@ CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
 
 LDFLAGS = $(CURL_LIBS) $(LIBXML2_LIBS) $(OPENSSL_LIBS) -lpthread
 
+STRIP ?= strip
+INSTALL := install --strip-program=$(STRIP)
+
 
 # --------------------------------------------------------------------------
 # Default targets are everything
@@ -168,11 +171,11 @@ exported: libs3 s3 headers
 .PHONY: install
 install: exported
 	$(QUIET_ECHO) $(DESTDIR)/bin/s3: Installing executable
-	$(VERBOSE_SHOW) install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 \
+	$(VERBOSE_SHOW) $(INSTALL) -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 \
                     $(DESTDIR)/bin/s3
 	$(QUIET_ECHO) \
         $(LIBDIR)/libs3.so.$(LIBS3_VER): Installing shared library
-	$(VERBOSE_SHOW) install -Dps -m u+rw,go+r \
+	$(VERBOSE_SHOW) $(INSTALL) -Dps -m u+rw,go+r \
                $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
                $(LIBDIR)/libs3.so.$(LIBS3_VER)
 	$(QUIET_ECHO) \
@@ -182,10 +185,10 @@ install: exported
 	$(QUIET_ECHO) $(LIBDIR)/libs3.so: Linking shared library
 	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(LIBDIR)/libs3.so
 	$(QUIET_ECHO) $(LIBDIR)/libs3.a: Installing static library
-	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a \
+	$(VERBOSE_SHOW) $(INSTALL) -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a \
                     $(LIBDIR)/libs3.a
 	$(QUIET_ECHO) $(DESTDIR)/include/libs3.h: Installing header
-	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
+	$(VERBOSE_SHOW) $(INSTALL) -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
                     $(DESTDIR)/include/libs3.h
 
 
