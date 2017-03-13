@@ -328,7 +328,8 @@ static S3Status append_amz_header(RequestComputedValues *values,
     }
     rawPos--;
 
-    while (isblank(values->amzHeadersRaw[rawPos])) {
+    while (values->amzHeadersRaw[rawPos] == ' ' ||
+           values->amzHeadersRaw[rawPos] == '\t') {
         rawPos--;
     }
     values->amzHeadersRaw[++rawPos] = '\0';
