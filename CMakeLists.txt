@@ -37,6 +37,11 @@ ELSEIF (CMAKE_COMPILER_IS_GNUCC)
 
     SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wshadow")
 
+    CHECK_C_COMPILER_FLAG (-fvisibility=hidden HAVE_GCC_VISIBILITY)
+    IF (HAVE_GCC_VISIBILITY)
+        SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    ENDIF (HAVE_GCC_VISIBILITY)
+
     CHECK_C_COMPILER_FLAG (-Wextra HAVE_GCC_WEXTRA)
     IF (HAVE_GCC_WEXTRA)
         SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
@@ -91,8 +96,7 @@ IF (MINGW)
 
     LIST (APPEND libs3_SRCS
           src/mingw_functions.c
-          src/mingw_s3_functions.c
-          mswin/libs3.def)
+          src/mingw_s3_functions.c)
 
     LIST (APPEND LIBS ws2_32)
 ENDIF (MINGW)
@@ -106,8 +110,7 @@ IF (ENABLE_SHARED)
                                VERSION ${LIBS3_VER})
     ENDIF (ENABLE_SO_VERSION)
 
-    SET_TARGET_PROPERTIES (s3 PROPERTIES
-                           LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/src/libs3.sym")
+    SET_TARGET_PROPERTIES (s3 PROPERTIES DEFINE_SYMBOL S3_BUILD_DLL)
 
     # at build time you may specify the cmake variable LIB_SUFFIX to handle
     # 64-bit systems which use 'lib64'
