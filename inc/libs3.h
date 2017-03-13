@@ -27,7 +27,9 @@
 #ifndef LIBS3_H
 #define LIBS3_H
 
-#include <stdint.h>
+#ifndef _AIX
+#   include <stdint.h>
+#endif /* !_AIX */
 
 #ifdef _WIN32
 #   include <winsock2.h>
