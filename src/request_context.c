@@ -27,7 +27,17 @@
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
+
+#ifdef _WIN32
+#   include <winsock2.h>
+#else /* !_WIN32 */
+#   ifdef __hppa
+#       include <sys/time.h>
+#   else /* !__hppa */
+#       include <sys/select.h>
+#   endif /* __hppa */
+#endif /* _WIN32 */
+
 #include "request.h"
 #include "request_context.h"
 

@@ -33,9 +33,14 @@
 
 #ifdef _WIN32
 #   include <winsock2.h>
-#else
-#   include <sys/select.h>
-#endif
+#else /* !_WIN32 */
+#   ifdef __hppa
+#       include <sys/time.h>
+#   else /* !__hppa */
+#       include <sys/select.h>
+#   endif /* __hppa */
+#   include <sys/types.h>
+#endif /* _WIN32 */
 
 #ifdef _WIN32
 #    ifdef S3_BUILD_DLL
