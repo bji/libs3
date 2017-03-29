@@ -1,3 +1,9 @@
+libs3 (4.1-6) unstable; urgency=medium
+
+  * Use cmake for debian multiarch.
+
+ -- Like Ma <likemartinma@gmail.com>  Thu, 30 Mar 2017 03:42:07 +0800
+
 libs3 (4.1-5) unstable; urgency=medium
 
   * Fix conflicts with libs3-2.

@@ -2,7 +2,7 @@ Source: libs3
 Section: net
 Priority: extra
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
-Build-Depends: debhelper (>= 8), libxml2-dev, libcurl4-openssl-dev, libssl-dev
+Build-Depends: debhelper (>= 8), cmake (>= 2.8), libxml2-dev, libcurl4-openssl-dev, libssl-dev
 Standards-Version: 3.9.3
 Homepage: http://libs3.ischo.com/index.html
 
@@ -22,3 +22,12 @@ Depends: ${misc:Depends}, libs3-4 (= ${binary:Version})
 Description: C Development Library for Amazon S3 Access
  This package includes the libs3 header, needed to compile applications
  against libs3.
+
+Package: libs3-dbg
+Architecture: any
+Multi-Arch: same
+Section: debug
+Depends: libs3-4 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Debugging symbols for Amazon S3 Access
+ This package includes the libs3 debugging symbols, needed to debug
+ applications compiled against libs3.

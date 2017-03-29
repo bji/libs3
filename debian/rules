@@ -1,63 +1,29 @@
 #!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-DESTDIR = $(CURDIR)/debian/tmp/usr/
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
-# These are used for cross-compiling and for saving the configure script
-# from having to guess our platform (since we know it already)
-DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+%:
+	dh $@ --parallel
 
-ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -g
-endif
-ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
-	INSTALL_PROGRAM += -s
-endif
+override_dh_auto_configure:
+	dh_auto_configure -- -G"Unix Makefiles" \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DLIB_SUFFIX=/$(DEB_HOST_MULTIARCH)
 
-clean:
-	dh_testdir
+override_dh_auto_install: debian/libs3-4.install debian/libs3-dev.install
+	dh_auto_install
 
-	rm -f install-stamp build-stamp
-	$(MAKE) clean
-	dh_clean
+override_dh_strip:
+	dh_strip --dbg-package=libs3-dbg
 
-build-arch: build-stamp
-build-indep: build-stamp
-
-build: build-arch build-indep
-
-build-stamp:
-	dh_testdir
-	$(MAKE)
-	touch $@
-
-install: install-stamp
-
-install-stamp: build
-	dh_testdir
-
-	$(MAKE) install DESTDIR=$(DESTDIR)
-	touch $@
-
-binary-indep: build install
-
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installdocs -a
-	dh_installchangelogs -a
-	dh_install -a
-	dh_makeshlibs -a
-	dh_strip -a
-	dh_compress -a
-	dh_fixperms -a
-	dh_installdeb -a
-	dh_shlibdeps -a
-	dh_gencontrol -a
-	dh_md5sums -a
-	dh_builddeb -a
-
-binary: binary-indep binary-arch
-.PHONY: clean build binary-indep binary-arch binary install
+%.install: %.install.in
+	sed 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/' $< > $@
