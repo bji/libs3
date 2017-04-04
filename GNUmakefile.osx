@@ -125,7 +125,12 @@ ifndef CFLAGS
     endif
 endif
 
-CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
+# --------------------------------------------------------------------------
+# -Werror breaks the build on the macOS Sierra rendering build unusable 
+# so we use -Wunused-parameter flag instead that will only issue a warning
+# with the newest clang compiler
+
+CFLAGS += -Wall -Wunused-parameter -Wshadow -Wextra -Iinc \
           $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
           -DLIBS3_VER_MINOR=\"$(LIBS3_VER_MINOR)\" \
