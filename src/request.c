@@ -1474,7 +1474,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
 }
 
 
-void request_api_deinitialize()
+void request_api_deinitialize(void)
 {
     pthread_mutex_destroy(&requestStackMutexG);
 

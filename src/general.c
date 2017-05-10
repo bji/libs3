@@ -43,7 +43,7 @@ S3Status S3_initialize(const char *userAgentInfo, int flags,
 }
 
 
-void S3_deinitialize()
+void S3_deinitialize(void)
 {
     if (--initializeCountG) {
         return;
