@@ -326,6 +326,7 @@ typedef enum
     S3StatusErrorInvalidBucketName                          ,
     S3StatusErrorInvalidBucketState                         ,
     S3StatusErrorInvalidDigest                              ,
+    S3StatusErrorInvalidEncryptionAlgorithmError            ,
     S3StatusErrorInvalidLocationConstraint                  ,
     S3StatusErrorInvalidObjectState                         ,
     S3StatusErrorInvalidPart                                ,
@@ -361,7 +362,7 @@ typedef enum
     S3StatusErrorNoSuchVersion                              ,
     S3StatusErrorNotImplemented                             ,
     S3StatusErrorNotSignedUp                                ,
-    S3StatusErrorNotSuchBucketPolicy                        ,
+    S3StatusErrorNoSuchBucketPolicy                         ,
     S3StatusErrorOperationAborted                           ,
     S3StatusErrorPermanentRedirect                          ,
     S3StatusErrorPreconditionFailed                         ,
@@ -380,6 +381,7 @@ typedef enum
     S3StatusErrorUnexpectedContent                          ,
     S3StatusErrorUnresolvableGrantByEmailAddress            ,
     S3StatusErrorUserKeyMustBeSpecified                     ,
+    S3StatusErrorQuotaExceeded                              ,
     S3StatusErrorUnknown                                    ,
 
     /**
