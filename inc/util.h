@@ -76,7 +76,7 @@
 // 3x the number of characters that [source] has.   At most [maxSrcSize] bytes
 // from [src] are encoded; if more are present in [src], 0 is returned from
 // urlEncode, else nonzero is returned.
-int urlEncode(char *dest, const char *src, int maxSrcSize);
+int urlEncode(char *dest, const char *src, int maxSrcSize, int encodeSlash);
 
 // Returns < 0 on failure >= 0 on success
 int64_t parseIso8601Time(const char *str);
