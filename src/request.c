@@ -893,7 +893,9 @@ static void canonicalize_query_string(const char *queryParams,
             append("&");
         }
         append(subResource);
-        append("=");
+        if (!strchr(subResource, '=')) {
+            append("=");
+        }
     }
 
 #undef append
