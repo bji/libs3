@@ -805,8 +805,7 @@ static void canonicalize_resource(const S3BucketContext *context,
 }
 
 
-static void sort_and_urlencode_query_string(const char *queryString,
-                                            char *result)
+static void sort_query_string(const char *queryString, char *result)
 {
 #ifdef SIGNATURE_DEBUG
     printf("\n--\nsort_and_urlencode\nqueryString: %s\n", queryString);
@@ -865,7 +864,7 @@ static void canonicalize_query_string(const char *queryParams,
     if (queryParams && queryParams[0]) {
         char sorted[strlen(queryParams) * 2];
         sorted[0] = '\0';
-        sort_and_urlencode_query_string(queryParams, sorted);
+        sort_query_string(queryParams, sorted);
         append(sorted);
     }
 
