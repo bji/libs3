@@ -872,7 +872,7 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
             }                                                               \
             amp = 1;                                                        \
             char encoded[3 * 1024];                                         \
-            if (!urlEncode(encoded, value, 1024)) {                         \
+            if (!urlEncode(encoded, value, 1024, 1)) {                      \
                 (*(handler->responseHandler.completeCallback))              \
                     (S3StatusQueryParamsTooLong, 0, callbackData);          \
                 return;                                                     \
@@ -1000,7 +1000,7 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
             }                                                               \
             amp = 1;                                                        \
             char encoded[3 * 1024];                                         \
-            if (!urlEncode(encoded, value, 1024)) {                         \
+            if (!urlEncode(encoded, value, 1024, 1)) {                      \
                 (*(handler->responseHandler.completeCallback))              \
                     (S3StatusQueryParamsTooLong, 0, callbackData);          \
                 return;                                                     \

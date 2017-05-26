@@ -629,7 +629,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
 static S3Status encode_key(const RequestParams *params,
                            RequestComputedValues *values)
 {
-    return (urlEncode(values->urlEncodedKey, params->key, S3_MAX_KEY_SIZE) ?
+    return (urlEncode(values->urlEncodedKey, params->key, S3_MAX_KEY_SIZE, 0) ?
             S3StatusOK : S3StatusUriTooLong);
 }
 
@@ -805,8 +805,7 @@ static void canonicalize_resource(const S3BucketContext *context,
 }
 
 
-static void sort_and_urlencode_query_string(const char *queryString,
-                                            char *result)
+static void sort_query_string(const char *queryString, char *result)
 {
 #ifdef SIGNATURE_DEBUG
     printf("\n--\nsort_and_urlencode\nqueryString: %s\n", queryString);
@@ -843,28 +842,9 @@ static void sort_and_urlencode_query_string(const char *queryString,
 #endif
 
     unsigned int pi = 0;
-    char appendage[4];
-
     for (; pi < numParams; pi++) {
-        const char *param = params[pi];
-        int foundEquals = 0;
-        for (i = 0; i < strlen(param); i++) {
-            char c = param[i];
-            if (isalnum(c) || (c == '_') || (c == '-') || (c == '~')
-                || (c == '.')) {
-                appendage[0] = c;
-                appendage[1] = '\0';
-            }
-            else if ((c == '=') && !foundEquals) {
-                appendage[0] = c;
-                appendage[1] = '\0';
-                foundEquals = 1;
-            }
-            else {
-                snprintf(appendage, 4, "%%%02X", c);
-            }
-            strncat(result, appendage, strlen(appendage));
-        }
+        // All params are urlEncoded
+        strncat(result, params[pi], strlen(params[pi]));
         strncat(result, "&", 1);
     }
     result[strlen(result) - 1] = '\0';
@@ -884,7 +864,7 @@ static void canonicalize_query_string(const char *queryParams,
     if (queryParams && queryParams[0]) {
         char sorted[strlen(queryParams) * 2];
         sorted[0] = '\0';
-        sort_and_urlencode_query_string(queryParams, sorted);
+        sort_query_string(queryParams, sorted);
         append(sorted);
     }
 
