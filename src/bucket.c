@@ -231,6 +231,11 @@ static S3Status createBucketFromS3Callback(int bufferSize, const char *buffer,
                                            void *callbackData)
 {
     // Sometimes S3 sends response body. We sillently ignore it.
+
+    (void)bufferSize;  // avoid unused parameter warning
+    (void)buffer;  // avoid unused parameter warning
+    (void)callbackData;  // avoid unused parameter warning
+
     return S3StatusOK;
 }
 
