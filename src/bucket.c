@@ -227,6 +227,18 @@ static void createBucketCompleteCallback(S3Status requestStatus,
     free(cbData);
 }
 
+static S3Status createBucketFromS3Callback(int bufferSize, const char *buffer,
+                                           void *callbackData)
+{
+    // Sometimes S3 sends response body. We sillently ignore it.
+
+    (void)bufferSize;  // avoid unused parameter warning
+    (void)buffer;  // avoid unused parameter warning
+    (void)callbackData;  // avoid unused parameter warning
+
+    return S3StatusOK;
+}
+
 void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
                       const char *secretAccessKey, const char *securityToken,
                       const char *hostName, const char *bucketName,
@@ -299,7 +311,7 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
         &createBucketPropertiesCallback,              // propertiesCallback
         &createBucketDataCallback,                    // toS3Callback
         cbData->docLen,                               // toS3CallbackTotalSize
-        0,                                            // fromS3Callback
+        createBucketFromS3Callback,                   // fromS3Callback
         &createBucketCompleteCallback,                // completeCallback
         cbData,                                       // callbackData
         timeoutMs                                     // timeoutMs

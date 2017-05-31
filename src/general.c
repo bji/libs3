@@ -131,6 +131,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorInvalidBucketName);
         handlecase(ErrorInvalidBucketState);
         handlecase(ErrorInvalidDigest);
+        handlecase(ErrorInvalidEncryptionAlgorithmError);
         handlecase(ErrorInvalidLocationConstraint);
         handlecase(ErrorInvalidObjectState);
         handlecase(ErrorInvalidPart);
@@ -166,7 +167,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorNoSuchVersion);
         handlecase(ErrorNotImplemented);
         handlecase(ErrorNotSignedUp);
-        handlecase(ErrorNotSuchBucketPolicy);
+        handlecase(ErrorNoSuchBucketPolicy);
         handlecase(ErrorOperationAborted);
         handlecase(ErrorPermanentRedirect);
         handlecase(ErrorPreconditionFailed);
@@ -185,6 +186,7 @@ const char *S3_get_status_name(S3Status status)
         handlecase(ErrorUnexpectedContent);
         handlecase(ErrorUnresolvableGrantByEmailAddress);
         handlecase(ErrorUserKeyMustBeSpecified);
+        handlecase(ErrorQuotaExceeded);
         handlecase(ErrorUnknown);
         handlecase(HttpErrorMovedTemporarily);
         handlecase(HttpErrorBadRequest);
