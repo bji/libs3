@@ -205,7 +205,7 @@ void response_headers_handler_done(ResponseHeadersHandler *handler, CURL *curl)
 {
     // Now get the last modification time from curl, since it's easiest to let
     // curl parse it
-    time_t lastModified;
+    long lastModified;
     if (curl_easy_getinfo
         (curl, CURLINFO_FILETIME, &lastModified) == CURLE_OK) {
         handler->responseProperties.lastModified = lastModified;

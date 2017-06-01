@@ -1,5 +1,50 @@
-libs3 (all) unstable; urgency=low
+libs3 (4.1-6) unstable; urgency=medium
 
-  * This file is not maintained.  See project source code for changes.
+  * Use cmake for debian multiarch.
 
- -- Bryan Ischo <bryan@ischo.com>  Wed, 06 Aug 2008 09:36:43 -0400
+ -- Like Ma <likemartinma@gmail.com>  Thu, 30 Mar 2017 03:42:07 +0800
+
+libs3 (4.1-5) unstable; urgency=medium
+
+  * Fix conflicts with libs3-2.
+
+ -- Like Ma <likemartinma@gmail.com>  Fri, 10 Mar 2017 01:55:43 +0800
+
+libs3 (4.1-4) unstable; urgency=medium
+
+  * Add libssl-dev into build depends.
+
+ -- Like Ma <likemartinma@gmail.com>  Fri, 10 Mar 2017 01:26:45 +0800
+
+libs3 (4.1-3) unstable; urgency=medium
+
+  * Fix building error in Ubuntu 12.04
+  * Use libcurl4-openssl instead of libcurl4-gnutls.
+
+ -- Like Ma <likemartinma@gmail.com>  Fri, 10 Mar 2017 01:18:37 +0800
+
+libs3 (4.1-2) unstable; urgency=medium
+
+  * Ignore case while matching http headers.
+  * Fix signature error of request with sub-resource.
+  * Add libssl-dev into build depends.
+
+ -- Like Ma <likemartinma@gmail.com>  Fri, 10 Mar 2017 00:37:47 +0800
+
+libs3 (4.1-1) unstable; urgency=medium
+
+  * Import debian files from Ubuntu 14.04 libs3 source.
+
+ -- Like Ma <likemartinma@gmail.com>  Thu, 09 Mar 2017 14:00:45 +0800
+
+libs3 (2.0-2) unstable; urgency=low
+
+  * Add missing s3 binary (closes: #686094).
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Tue, 28 Aug 2012 19:03:11 +0200
+
+libs3 (2.0-1) unstable; urgency=low
+
+  * Initial upload (closes: #676912).
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Sun, 10 Jun 2012 13:42:33 +0200

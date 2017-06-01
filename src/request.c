@@ -43,6 +43,49 @@
 #define S3_SHA256_DIGEST_LENGTH SHA256_DIGEST_LENGTH
 #endif
 
+#ifdef _WIN32
+#ifndef gmtime_r
+#define gmtime_r(_Time,_Tm)	({ struct tm *___tmp_tm =		\
+						gmtime((_Time));	\
+						if (___tmp_tm) {	\
+						  *(_Tm) = *___tmp_tm;	\
+						  ___tmp_tm = (_Tm);	\
+						}			\
+						___tmp_tm;	})
+#endif /* gmtime_r */
+#ifndef strtok_r
+#define strtok_r(__s, __sep, __last)  (*(__last) = strtok((__s), (__sep)))
+#endif /* strtok_r */
+#endif /* _WIN32 */
+
+#ifdef _WIN32
+#   define INT64_FORMAT_SPECIFIER "%I64u"
+#else /* !_WIN32 */
+#   if defined(SIZEOF_LONG) && SIZEOF_LONG == 8
+#       define INT64_FORMAT_SPECIFIER "%lu"
+#   else /* SIZEOF_LONG == 4 */
+#       define INT64_FORMAT_SPECIFIER "%llu"
+#   endif /* SIZEOF_LONG == 8 */
+#endif /* _WIN32 */
+
+#ifdef _WIN32
+#   if defined(SIZEOF_SIZE_T) && SIZEOF_SIZE_T == 8
+#       define SIZE_T_FORMAT_SPECIFIER "%I64u"
+#   else /* SIZEOF_SIZE_T == 4 */
+#       define SIZE_T_FORMAT_SPECIFIER "%u"
+#   endif /* SIZEOF_SIZE_T == 8 */
+#elif _AIX
+#   define SIZE_T_FORMAT_SPECIFIER "%lu"
+#elif __sun
+#   define SIZE_T_FORMAT_SPECIFIER "%zu"
+#else /* !__sun */
+#   if defined(SIZEOF_SIZE_T) && SIZEOF_SIZE_T == 8
+#       define SIZE_T_FORMAT_SPECIFIER "%lu"
+#   else /* SIZEOF_SIZE_T == 4 */
+#       define SIZE_T_FORMAT_SPECIFIER "%u"
+#   endif /* SIZEOF_SIZE_T == 8 */
+#endif /* _WIN32 */
+
 #define USER_AGENT_SIZE 256
 #define REQUEST_STACK_SIZE 32
 #define SIGNATURE_SCOPE_SIZE 64
@@ -313,7 +356,8 @@ static S3Status append_amz_header(RequestComputedValues *values,
     }
     rawPos--;
 
-    while (isblank(values->amzHeadersRaw[rawPos])) {
+    while (values->amzHeadersRaw[rawPos] == ' ' ||
+           values->amzHeadersRaw[rawPos] == '\t') {
         rawPos--;
     }
     values->amzHeadersRaw[++rawPos] = '\0';
@@ -391,7 +435,8 @@ static S3Status compose_amz_headers(const RequestParams *params,
         // If byteCount != 0 then we're just copying a range, add header
         if (params->byteCount > 0) {
             char byteRange[S3_MAX_METADATA_SIZE];
-            snprintf(byteRange, sizeof(byteRange), "bytes=%zd-%zd",
+            snprintf(byteRange, sizeof(byteRange),
+                     "bytes=" SIZE_T_FORMAT_SPECIFIER "-" SIZE_T_FORMAT_SPECIFIER,
                      params->startByte, params->startByte + params->byteCount);
             append_amz_header(values, 0, "x-amz-copy-source-range", byteRange);
         }
@@ -607,15 +652,13 @@ static S3Status compose_standard_headers(const RequestParams *params,
     if (params->startByte || params->byteCount) {
         if (params->byteCount) {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-%llu",
-                     (unsigned long long) params->startByte,
-                     (unsigned long long) (params->startByte +
-                                           params->byteCount - 1));
+                     "Range: bytes=" SIZE_T_FORMAT_SPECIFIER "-" SIZE_T_FORMAT_SPECIFIER,
+                     params->startByte, (params->startByte + params->byteCount - 1));
         }
         else {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-",
-                     (unsigned long long) params->startByte);
+                     "Range: bytes=" SIZE_T_FORMAT_SPECIFIER "-",
+					 params->startByte);
         }
     }
     else {
@@ -1220,8 +1263,8 @@ static S3Status setup_curl(Request *request,
     if ((params->httpRequestType == HttpRequestTypePUT) ||
         (params->httpRequestType == HttpRequestTypePOST)) {
         char header[256];
-        snprintf(header, sizeof(header), "Content-Length: %llu",
-                 (unsigned long long) params->toS3CallbackTotalSize);
+        snprintf(header, sizeof(header), "Content-Length: " INT64_FORMAT_SPECIFIER,
+                 params->toS3CallbackTotalSize);
         request->headers = curl_slist_append(request->headers, header);
         request->headers = curl_slist_append(request->headers,
                                              "Transfer-Encoding:");

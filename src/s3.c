@@ -52,8 +52,10 @@
 #define SLEEP_UNITS_PER_SECOND 1
 #endif
 
+#ifdef _WIN32
 // Also needed for Windows, because somehow MinGW doesn't define this
-extern int putenv(char *);
+extern int putenv(const char *);
+#endif /* _WIN32 */
 
 
 // Command-line options, saved as globals ------------------------------------

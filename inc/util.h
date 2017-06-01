@@ -29,7 +29,6 @@
 
 #include <curl/curl.h>
 #include <curl/multi.h>
-#include <stdint.h>
 #include "libs3.h"
 
 // acl groups

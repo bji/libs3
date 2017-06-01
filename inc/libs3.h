@@ -27,9 +27,32 @@
 #ifndef LIBS3_H
 #define LIBS3_H
 
-#include <stdint.h>
-#include <sys/select.h>
+#ifndef _AIX
+#   include <stdint.h>
+#endif /* !_AIX */
 
+#ifdef _WIN32
+#   include <winsock2.h>
+#else /* !_WIN32 */
+#   ifdef __hppa
+#       include <sys/time.h>
+#   else /* !__hppa */
+#       include <sys/select.h>
+#   endif /* __hppa */
+#   include <sys/types.h>
+#endif /* _WIN32 */
+
+#ifdef _WIN32
+#    ifdef S3_BUILD_DLL
+#        define S3_API __declspec(dllexport)
+#    else /* !S3_BUILD_DLL */
+#        define S3_API __declspec(dllimport)
+#    endif /* S3_BUILD_DLL */
+#elif defined(S3_BUILD_DLL) && defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) >= 303
+#   define S3_API __attribute__ ((visibility("default")))
+#else /* !S3_BUILD_DLL || GCC < 3.03 */
+#   define S3_API
+#endif /* S3_BUILD_DLL && GCC >= 3.03 */
 
 #ifdef __cplusplus
 extern "C" {
@@ -1448,8 +1471,8 @@ typedef struct S3AbortMultipartUploadHandler
  *             initialized
  *         S3StatusOutOfMemory on failure due to out of memory
  **/
-S3Status S3_initialize(const char *userAgentInfo, int flags,
-                       const char *defaultS3HostName);
+S3_API S3Status S3_initialize(const char *userAgentInfo, int flags,
+                              const char *defaultS3HostName);
 
 
 /**
@@ -1457,7 +1480,7 @@ S3Status S3_initialize(const char *userAgentInfo, int flags,
  * this call is complete, no libs3 function may be called except
  * S3_initialize().
  **/
-void S3_deinitialize();
+S3_API void S3_deinitialize();
 
 
 /**
@@ -1466,7 +1489,7 @@ void S3_deinitialize();
  * @param status is S3Status code for which the textual name will be returned
  * @return a string with the textual name of an S3Status code
  **/
-const char *S3_get_status_name(S3Status status);
+S3_API const char *S3_get_status_name(S3Status status);
 
 
 /**
@@ -1512,7 +1535,7 @@ const char *S3_get_status_name(S3Status status);
  *             dot-quad notation, i.e. the form of an IP address, which is
  *             not allowed by Amazon S3.
  **/
-S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
+S3_API S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
 
 
 /**
@@ -1541,8 +1564,8 @@ S3Status S3_validate_bucket_name(const char *bucketName, S3UriStyle uriStyle);
  *             libs3 library
  *         S3StatusXmlParseFailure if the XML document was malformed
  **/
-S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
-                        int *aclGrantCountReturn, S3AclGrant *aclGrants);
+S3_API S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
+                               int *aclGrantCountReturn, S3AclGrant *aclGrants);
 
 
 /**
@@ -1555,7 +1578,7 @@ S3Status S3_convert_acl(char *aclXml, char *ownerId, char *ownerDisplayName,
  * @param status is the status to evaluate
  * @return nonzero if the status indicates a retryable error, 0 otherwise
  **/
-int S3_status_is_retryable(S3Status status);
+S3_API int S3_status_is_retryable(S3Status status);
 
 
 /** **************************************************************************
@@ -1580,7 +1603,7 @@ int S3_status_is_retryable(S3Status status);
  *         S3StatusOutOfMemory if the request context could not be created due
  *             to an out of memory error
  **/
-S3Status S3_create_request_context(S3RequestContext **requestContextReturn);
+S3_API S3Status S3_create_request_context(S3RequestContext **requestContextReturn);
 
 
 /**
@@ -1591,7 +1614,7 @@ S3Status S3_create_request_context(S3RequestContext **requestContextReturn);
  *
  * @param requestContext is the S3RequestContext to destroy
  **/
-void S3_destroy_request_context(S3RequestContext *requestContext);
+S3_API void S3_destroy_request_context(S3RequestContext *requestContext);
 
 
 /**
@@ -1611,7 +1634,7 @@ void S3_destroy_request_context(S3RequestContext *requestContext);
  *         S3StatusOutOfMemory if requests could not be run to completion
  *             due to an out of memory error
  **/
-S3Status S3_runall_request_context(S3RequestContext *requestContext);
+S3_API S3Status S3_runall_request_context(S3RequestContext *requestContext);
 
 
 /**
@@ -1636,8 +1659,8 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext);
  *         S3StatusOutOfMemory if requests could not be processed due to
  *             an out of memory error
  **/
-S3Status S3_runonce_request_context(S3RequestContext *requestContext,
-                                    int *requestsRemainingReturn);
+S3_API S3Status S3_runonce_request_context(S3RequestContext *requestContext,
+                                           int *requestsRemainingReturn);
 
 
 /**
@@ -1670,9 +1693,9 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
  *         S3StatusInternalError if an internal error prevented this function
  *             from completing successfully
  **/
-S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
-                                       fd_set *readFdSet, fd_set *writeFdSet,
-                                       fd_set *exceptFdSet, int *maxFd);
+S3_API S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
+                                              fd_set *readFdSet, fd_set *writeFdSet,
+                                              fd_set *exceptFdSet, int *maxFd);
 
 
 /**
@@ -1689,7 +1712,7 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
  * @return the maximum number of milliseconds to select() on fdsets.  Callers
  *         could wait a shorter time if they wish, but not longer.
  **/
-int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
+S3_API int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
 
 /**
  * This function enables SSL peer certificate verification on a per-request
@@ -1701,8 +1724,8 @@ int64_t S3_get_request_context_timeout(S3RequestContext *requestContext);
  * @param verifyPeer a boolean value indicating whether to verify the peer
  *        certificate or not.
  */
-void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
-                                        int verifyPeer);
+S3_API void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
+                                               int verifyPeer);
 
 
 /** **************************************************************************
@@ -1736,7 +1759,7 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
  *             length and thus will not fit into the supplied buffer
  *         S3StatusOK on success
  **/
-S3Status S3_generate_authenticated_query_string
+S3_API S3Status S3_generate_authenticated_query_string
     (char *buffer, const S3BucketContext *bucketContext,
      const char *key, int expires, const char *resource,
      const char *httpMethod);
@@ -1768,12 +1791,12 @@ S3Status S3_generate_authenticated_query_string
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_list_service(S3Protocol protocol, const char *accessKeyId,
-                     const char *secretAccessKey, const char *securityToken,
-                     const char *hostName, const char *authRegion,
-                     S3RequestContext *requestContext,
-                     int timeoutMs,
-                     const S3ListServiceHandler *handler, void *callbackData);
+S3_API void S3_list_service(S3Protocol protocol, const char *accessKeyId,
+                            const char *secretAccessKey, const char *securityToken,
+                            const char *hostName, const char *authRegion,
+                            S3RequestContext *requestContext,
+                            int timeoutMs,
+                            const S3ListServiceHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -1813,15 +1836,15 @@ void S3_list_service(S3Protocol protocol, const char *accessKeyId,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
-                    const char *accessKeyId, const char *secretAccessKey,
-                    const char *securityToken, const char *hostName,
-                    const char *bucketName, const char *authRegion,
-                    int locationConstraintReturnSize,
-                    char *locationConstraintReturn,
-                    S3RequestContext *requestContext,
-                    int timeoutMs,
-                    const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                           const char *accessKeyId, const char *secretAccessKey,
+                           const char *securityToken, const char *hostName,
+                           const char *bucketName, const char *authRegion,
+                           int locationConstraintReturnSize,
+                           char *locationConstraintReturn,
+                           S3RequestContext *requestContext,
+                           int timeoutMs,
+                           const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -1850,14 +1873,14 @@ void S3_test_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
-                      const char *secretAccessKey, const char *securityToken,
-                      const char *hostName, const char *bucketName,
-                      const char *authRegion, S3CannedAcl cannedAcl,
-                      const char *locationConstraint,
-                      S3RequestContext *requestContext,
-                      int timeoutMs,
-                      const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
+                             const char *secretAccessKey, const char *securityToken,
+                             const char *hostName, const char *bucketName,
+                             const char *authRegion, S3CannedAcl cannedAcl,
+                             const char *locationConstraint,
+                             S3RequestContext *requestContext,
+                             int timeoutMs,
+                             const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -1885,13 +1908,13 @@ void S3_create_bucket(S3Protocol protocol, const char *accessKeyId,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
-                      const char *accessKeyId, const char *secretAccessKey,
-                      const char *securityToken, const char *hostName,
-                      const char *bucketName, const char *authRegion,
-                      S3RequestContext *requestContext,
-                      int timeoutMs,
-                      const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
+                             const char *accessKeyId, const char *secretAccessKey,
+                             const char *securityToken, const char *hostName,
+                             const char *bucketName, const char *authRegion,
+                             S3RequestContext *requestContext,
+                             int timeoutMs,
+                             const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -1915,12 +1938,12 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_list_bucket(const S3BucketContext *bucketContext,
-                    const char *prefix, const char *marker,
-                    const char *delimiter, int maxkeys,
-                    S3RequestContext *requestContext,
-                    int timeoutMs,
-                    const S3ListBucketHandler *handler, void *callbackData);
+S3_API void S3_list_bucket(const S3BucketContext *bucketContext,
+                           const char *prefix, const char *marker,
+                           const char *delimiter, int maxkeys,
+                           S3RequestContext *requestContext,
+                           int timeoutMs,
+                           const S3ListBucketHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -1948,12 +1971,12 @@ void S3_list_bucket(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_put_object(const S3BucketContext *bucketContext, const char *key,
-                   uint64_t contentLength,
-                   const S3PutProperties *putProperties,
-                   S3RequestContext *requestContext,
-                   int timeoutMs,
-                   const S3PutObjectHandler *handler, void *callbackData);
+S3_API void S3_put_object(const S3BucketContext *bucketContext, const char *key,
+                          uint64_t contentLength,
+                          const S3PutProperties *putProperties,
+                          S3RequestContext *requestContext,
+                          int timeoutMs,
+                          const S3PutObjectHandler *handler, void *callbackData);
 
 
 /**
@@ -1991,14 +2014,14 @@ void S3_put_object(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_copy_object(const S3BucketContext *bucketContext,
-                    const char *key, const char *destinationBucket,
-                    const char *destinationKey,
-                    const S3PutProperties *putProperties,
-                    int64_t *lastModifiedReturn, int eTagReturnSize,
-                    char *eTagReturn, S3RequestContext *requestContext,
-                    int timeoutMs,
-                    const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_copy_object(const S3BucketContext *bucketContext,
+                           const char *key, const char *destinationBucket,
+                           const char *destinationKey,
+                           const S3PutProperties *putProperties,
+                           int64_t *lastModifiedReturn, int eTagReturnSize,
+                           char *eTagReturn, S3RequestContext *requestContext,
+                           int timeoutMs,
+                           const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -2042,16 +2065,16 @@ void S3_copy_object(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_copy_object_range(const S3BucketContext *bucketContext,
-                          const char *key, const char *destinationBucket,
-                          const char *destinationKey,
-                          const int partNo, const char *uploadId,
-                          const unsigned long startOffset, const unsigned long count,
-                          const S3PutProperties *putProperties,
-                          int64_t *lastModifiedReturn, int eTagReturnSize,
-                          char *eTagReturn, S3RequestContext *requestContext,
-                          int timeoutMs,
-                          const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_copy_object_range(const S3BucketContext *bucketContext,
+                                 const char *key, const char *destinationBucket,
+                                 const char *destinationKey,
+                                 const int partNo, const char *uploadId,
+                                 const unsigned long startOffset, const unsigned long count,
+                                 const S3PutProperties *putProperties,
+                                 int64_t *lastModifiedReturn, int eTagReturnSize,
+                                 char *eTagReturn, S3RequestContext *requestContext,
+                                 int timeoutMs,
+                                 const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -2076,12 +2099,12 @@ void S3_copy_object_range(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_get_object(const S3BucketContext *bucketContext, const char *key,
-                   const S3GetConditions *getConditions,
-                   uint64_t startByte, uint64_t byteCount,
-                   S3RequestContext *requestContext,
-                   int timeoutMs,
-                   const S3GetObjectHandler *handler, void *callbackData);
+S3_API void S3_get_object(const S3BucketContext *bucketContext, const char *key,
+                          const S3GetConditions *getConditions,
+                          uint64_t startByte, uint64_t byteCount,
+                          S3RequestContext *requestContext,
+                          int timeoutMs,
+                          const S3GetObjectHandler *handler, void *callbackData);
 
 
 /**
@@ -2099,10 +2122,10 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_head_object(const S3BucketContext *bucketContext, const char *key,
-                    S3RequestContext *requestContext,
-                    int timeoutMs,
-                    const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_head_object(const S3BucketContext *bucketContext, const char *key,
+                           S3RequestContext *requestContext,
+                           int timeoutMs,
+                           const S3ResponseHandler *handler, void *callbackData);
 
 /**
  * Deletes an object from S3.
@@ -2119,10 +2142,10 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
-                      S3RequestContext *requestContext,
-                      int timeoutMs,
-                      const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
+                             S3RequestContext *requestContext,
+                             int timeoutMs,
+                             const S3ResponseHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -2156,12 +2179,12 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
-                char *ownerId, char *ownerDisplayName,
-                int *aclGrantCountReturn, S3AclGrant *aclGrants,
-                S3RequestContext *requestContext,
-                int timeoutMs,
-                const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
+                       char *ownerId, char *ownerDisplayName,
+                       int *aclGrantCountReturn, S3AclGrant *aclGrants,
+                       S3RequestContext *requestContext,
+                       int timeoutMs,
+                       const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -2190,12 +2213,12 @@ void S3_get_acl(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
-                const char *ownerId, const char *ownerDisplayName,
-                int aclGrantCount, const S3AclGrant *aclGrants,
-                S3RequestContext *requestContext,
-                int timeoutMs,
-                const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
+                       const char *ownerId, const char *ownerDisplayName,
+                       int aclGrantCount, const S3AclGrant *aclGrants,
+                       S3RequestContext *requestContext,
+                       int timeoutMs,
+                       const S3ResponseHandler *handler, void *callbackData);
 
 
 /** **************************************************************************
@@ -2218,11 +2241,11 @@ void S3_set_acl(const S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_get_lifecycle(const S3BucketContext *bucketContext,
-                      char *lifecycleXmlDocumentReturn, int lifecycleXmlDocumentBufferSize,
-                      S3RequestContext *requestContext,
-                      int timeoutMs,
-                      const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_get_lifecycle(const S3BucketContext *bucketContext,
+                             char *lifecycleXmlDocumentReturn, int lifecycleXmlDocumentBufferSize,
+                             S3RequestContext *requestContext,
+                             int timeoutMs,
+                             const S3ResponseHandler *handler, void *callbackData);
 
 
 /**
@@ -2240,11 +2263,11 @@ void S3_get_lifecycle(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_set_lifecycle(const S3BucketContext *bucketContext,
-                      const char *lifecycleXmlDocument,
-                      S3RequestContext *requestContext,
-                      int timeoutMs,
-                      const S3ResponseHandler *handler, void *callbackData);
+S3_API void S3_set_lifecycle(const S3BucketContext *bucketContext,
+                             const char *lifecycleXmlDocument,
+                             S3RequestContext *requestContext,
+                             int timeoutMs,
+                             const S3ResponseHandler *handler, void *callbackData);
 
 /** **************************************************************************
  * Server Access Log Functions
@@ -2287,15 +2310,15 @@ void S3_set_lifecycle(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_get_server_access_logging(const S3BucketContext *bucketContext,
-                                  char *targetBucketReturn,
-                                  char *targetPrefixReturn,
-                                  int *aclGrantCountReturn,
-                                  S3AclGrant *aclGrants,
-                                  S3RequestContext *requestContext,
-                                  int timeoutMs,
-                                  const S3ResponseHandler *handler,
-                                  void *callbackData);
+S3_API void S3_get_server_access_logging(const S3BucketContext *bucketContext,
+                                         char *targetBucketReturn,
+                                         char *targetPrefixReturn,
+                                         int *aclGrantCountReturn,
+                                         S3AclGrant *aclGrants,
+                                         S3RequestContext *requestContext,
+                                         int timeoutMs,
+                                         const S3ResponseHandler *handler,
+                                         void *callbackData);
 
 
 /**
@@ -2328,14 +2351,14 @@ void S3_get_server_access_logging(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_set_server_access_logging(const S3BucketContext *bucketContext,
-                                  const char *targetBucket,
-                                  const char *targetPrefix, int aclGrantCount,
-                                  const S3AclGrant *aclGrants,
-                                  S3RequestContext *requestContext,
-                                  int timeoutMs,
-                                  const S3ResponseHandler *handler,
-                                  void *callbackData);
+S3_API void S3_set_server_access_logging(const S3BucketContext *bucketContext,
+                                         const char *targetBucket,
+                                         const char *targetPrefix, int aclGrantCount,
+                                         const S3AclGrant *aclGrants,
+                                         S3RequestContext *requestContext,
+                                         int timeoutMs,
+                                         const S3ResponseHandler *handler,
+                                         void *callbackData);
 
 
 /**
@@ -2359,12 +2382,12 @@ void S3_set_server_access_logging(const S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
-                           S3PutProperties *putProperties,
-                           S3MultipartInitialHandler *handler,
-                           S3RequestContext *requestContext,
-                           int timeoutMs,
-                           void *callbackData);
+S3_API void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
+                                  S3PutProperties *putProperties,
+                                  S3MultipartInitialHandler *handler,
+                                  S3RequestContext *requestContext,
+                                  int timeoutMs,
+                                  void *callbackData);
 
 
 /**
@@ -2389,13 +2412,13 @@ void S3_initiate_multipart(S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_upload_part(S3BucketContext *bucketContext, const char *key,
-                    S3PutProperties * putProperties,
-                    S3PutObjectHandler *handler,
-                    int seq, const char *upload_id, int partContentLength,
-                    S3RequestContext *requestContext,
-                    int timeoutMs,
-                    void *callbackData);
+S3_API void S3_upload_part(S3BucketContext *bucketContext, const char *key,
+                           S3PutProperties * putProperties,
+                           S3PutObjectHandler *handler,
+                           int seq, const char *upload_id, int partContentLength,
+                           S3RequestContext *requestContext,
+                           int timeoutMs,
+                           void *callbackData);
 
 
 /**
@@ -2417,14 +2440,14 @@ void S3_upload_part(S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_complete_multipart_upload(S3BucketContext *bucketContext,
-                                  const char *key,
-                                  S3MultipartCommitHandler *handler,
-                                  const char *upload_id,
-                                  int contentLength,
-                                  S3RequestContext *requestContext,
-                                  int timeoutMs,
-                                  void *callbackData);
+S3_API void S3_complete_multipart_upload(S3BucketContext *bucketContext,
+                                         const char *key,
+                                         S3MultipartCommitHandler *handler,
+                                         const char *upload_id,
+                                         int contentLength,
+                                         S3RequestContext *requestContext,
+                                         int timeoutMs,
+                                         void *callbackData);
 
 
 /**
@@ -2453,12 +2476,12 @@ void S3_complete_multipart_upload(S3BucketContext *bucketContext,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_list_parts(S3BucketContext *bucketContext, const char *key,
-                   const char *partnumbermarker,
-                   const char *uploadid, const char *encodingtype,
-                   int maxparts, S3RequestContext *requestContext,
-                   int timeoutMs,
-                   const S3ListPartsHandler *handler, void *callbackData);
+S3_API void S3_list_parts(S3BucketContext *bucketContext, const char *key,
+                          const char *partnumbermarker,
+                          const char *uploadid, const char *encodingtype,
+                          int maxparts, S3RequestContext *requestContext,
+                          int timeoutMs,
+                          const S3ListPartsHandler *handler, void *callbackData);
 
 
 /**
@@ -2475,10 +2498,10 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
  * @param handler gives the callbacks to call as the request is processed and
  *        completed
  **/
-void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
-                               const char *uploadId,
-                               int timeoutMs,
-                               S3AbortMultipartUploadHandler *handler);
+S3_API void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
+                                      const char *uploadId,
+                                      int timeoutMs,
+                                      S3AbortMultipartUploadHandler *handler);
 
 
 /**
@@ -2512,14 +2535,14 @@ void S3_abort_multipart_upload(S3BucketContext *bucketContext, const char *key,
  * @param callbackData will be passed in as the callbackData parameter to
  *        all callbacks for this request
  **/
-void S3_list_multipart_uploads(S3BucketContext *bucketContext,
-                               const char *prefix, const char *keymarker,
-                               const char *uploadidmarker,
-                               const char *encodingtype, const char *delimiter,
-                               int maxuploads, S3RequestContext *requestContext,
-                               int timeoutMs,
-                               const S3ListMultipartUploadsHandler *handler,
-                               void *callbackData);
+S3_API void S3_list_multipart_uploads(S3BucketContext *bucketContext,
+                                      const char *prefix, const char *keymarker,
+                                      const char *uploadidmarker,
+                                      const char *encodingtype, const char *delimiter,
+                                      int maxuploads, S3RequestContext *requestContext,
+                                      int timeoutMs,
+                                      const S3ListMultipartUploadsHandler *handler,
+                                      void *callbackData);
 
 #ifdef __cplusplus
 }
