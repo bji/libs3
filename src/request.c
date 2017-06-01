@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <libxml/parser.h>
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
@@ -1452,6 +1453,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
              "Mozilla/4.0 (Compatible; %s; libs3 %s.%s; %s)",
              userAgentInfo, LIBS3_VER_MAJOR, LIBS3_VER_MINOR, platform);
 
+    xmlInitParser();
     return S3StatusOK;
 }
 
@@ -1460,6 +1462,7 @@ void request_api_deinitialize()
 {
     pthread_mutex_destroy(&requestStackMutexG);
 
+    xmlCleanupParser();
     while (requestStackCountG--) {
         request_destroy(requestStackG[requestStackCountG]);
     }
