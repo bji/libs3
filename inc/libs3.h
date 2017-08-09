@@ -28,7 +28,11 @@
 #define LIBS3_H
 
 #include <stdint.h>
+#ifndef WIN32
 #include <sys/select.h>
+#else
+#include <winsock.h>
+#endif
 
 
 #ifdef __cplusplus

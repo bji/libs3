@@ -24,6 +24,10 @@
  *
  ************************************************************************** **/
 
+#ifdef WIN32
+#include <sdkddkver.h>
+#include <Windows.h>
+#endif
 #include <pthread.h>
 #include <sys/utsname.h>
 

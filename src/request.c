@@ -24,12 +24,17 @@
  *
  ************************************************************************** **/
 
+#ifdef WIN32
+#include <sdkddkver.h>
+#include <Windows.h>
+#endif
 #include <ctype.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
 #include <libxml/parser.h>
+#include <assert.h>
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
@@ -143,6 +148,13 @@ typedef struct RequestComputedValues
     // Hex string of hash of request payload
     char payloadHash[S3_SHA256_DIGEST_LENGTH * 2 + 1];
 } RequestComputedValues;
+
+
+#ifdef WIN32
+static struct tm *gmtime_r(const time_t *timep, struct tm *result) {
+    return gmtime_s(result, timep) ? NULL : result;
+}
+#endif
 
 
 // Called whenever we detect that the request headers have been completely
@@ -690,7 +702,7 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
     // Make a copy of the headers that will be sorted
     const char *sortedHeaders[S3_MAX_METADATA_COUNT + 3];
 
-    memcpy(sortedHeaders, values->amzHeaders,
+    memcpy((void *)sortedHeaders, values->amzHeaders,
            (values->amzHeadersCount * sizeof(sortedHeaders[0])));
 
     // add the content-type header and host header
@@ -819,10 +831,13 @@ static void sort_query_string(const char *queryString, char *result)
         tmp++;
     }
 
-    const char* params[numParams];
+    const char **params = (const char **)malloc(sizeof(const char *) * numParams);
+    assert(params);
 
-    char tokenized[strlen(queryString) + 1];
-    strncpy(tokenized, queryString, strlen(queryString) + 1);
+    size_t slen = strlen(queryString) + 1;
+    char *tokenized = (char *)malloc(slen);
+    assert(tokenized);
+    memcpy(tokenized, queryString, slen);
 
     char *tok = tokenized;
     const char *token = NULL;
@@ -849,6 +864,9 @@ static void sort_query_string(const char *queryString, char *result)
         strncat(result, "&", 1);
     }
     result[strlen(result) - 1] = '\0';
+
+    free(tokenized);
+    free((void *)params);
 }
 
 
@@ -863,10 +881,12 @@ static void canonicalize_query_string(const char *queryParams,
 #define append(str) len += sprintf(&(buffer[len]), "%s", str)
 
     if (queryParams && queryParams[0]) {
-        char sorted[strlen(queryParams) * 2];
+        char *sorted = (char *)malloc(strlen(queryParams) * 2);
+        assert(sorted);
         sorted[0] = '\0';
         sort_query_string(queryParams, sorted);
         append(sorted);
+        free(sorted);
     }
 
     if (subResource && subResource[0]) {
@@ -943,10 +963,11 @@ static S3Status compose_auth_header(const RequestParams *params,
 
     int len = 0;
 
-    char canonicalRequest[canonicalRequestLen];
+    char *canonicalRequest = (char *)malloc(canonicalRequestLen);
+    assert(canonicalRequest);
 
 #define buf_append(buf, format, ...)                    \
-    len += snprintf(&(buf[len]), sizeof(buf) - len,     \
+    len += snprintf(&(buf[len]), canonicalRequestLen - len,     \
                     format, __VA_ARGS__)
 
     canonicalRequest[0] = '\0';
@@ -970,6 +991,7 @@ static S3Status compose_auth_header(const RequestParams *params,
     const unsigned char *rqstData = (const unsigned char*) canonicalRequest;
     SHA256(rqstData, strlen(canonicalRequest), canonicalRequestHash);
 #endif
+    free(canonicalRequest);
     char canonicalRequestHashHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
     canonicalRequestHashHex[0] = '\0';
     int i = 0;
@@ -985,9 +1007,10 @@ static S3Status compose_auth_header(const RequestParams *params,
     snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request",
              values->requestDateISO8601, awsRegion);
 
-    char stringToSign[17 + 17 + SIGNATURE_SCOPE_SIZE + 1
-        + strlen(canonicalRequestHashHex)];
-    snprintf(stringToSign, sizeof(stringToSign), "AWS4-HMAC-SHA256\n%s\n%s\n%s",
+    size_t strBufLen = 17 + 17 + SIGNATURE_SCOPE_SIZE + 1 + strlen(canonicalRequestHashHex);
+    char *stringToSign = (char *)malloc(strBufLen);
+    assert(stringToSign);
+    snprintf(stringToSign, strBufLen, "AWS4-HMAC-SHA256\n%s\n%s\n%s",
              values->requestDateISO8601, scope, canonicalRequestHashHex);
 
 #ifdef SIGNATURE_DEBUG
@@ -995,8 +1018,10 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     const char *secretAccessKey = params->bucketContext.secretAccessKey;
-    char accessKey[strlen(secretAccessKey) + 5];
-    snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
+    strBufLen = strlen(secretAccessKey) + 5;
+    char *accessKey = (char *)malloc(strBufLen);
+    assert(accessKey);
+    snprintf(accessKey, strBufLen, "AWS4%s", secretAccessKey);
 
 #ifdef __APPLE__
     unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
@@ -1039,6 +1064,8 @@ static S3Status compose_auth_header(const RequestParams *params,
          (const unsigned char*) stringToSign, strlen(stringToSign),
          finalSignature, NULL);
 #endif
+    free(accessKey);
+    free(stringToSign);
 
     len = 0;
     values->requestSignatureHex[0] = '\0';
@@ -1723,10 +1750,12 @@ S3Status S3_generate_authenticated_query_string
         expires = MAX_EXPIRES;
     }
 
-    RequestParams params =
-    { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
-        resource,
-        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
+    RequestParams params;
+    memset(&params, 0, sizeof(RequestParams));
+    params.httpRequestType = http_request_method_to_type(httpMethod);
+    params.bucketContext = *bucketContext;
+    params.key = key;
+    params.subResource = resource;
 
     RequestComputedValues computed;
     S3Status status = setup_request(&params, &computed, 1);
