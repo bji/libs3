@@ -1,10 +1,10 @@
 /** **************************************************************************
  * request.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <libxml/parser.h>
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
@@ -159,7 +160,7 @@ static void request_headers_done(Request *request)
     // Get the http response code
     long httpResponseCode;
     request->httpResponseCode = 0;
-    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, 
+    if (curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE,
                           &httpResponseCode) != CURLE_OK) {
         // Not able to get the HTTP response code - error
         request->status = S3StatusInternalError;
@@ -169,7 +170,7 @@ static void request_headers_done(Request *request)
         request->httpResponseCode = httpResponseCode;
     }
 
-    response_headers_handler_done(&(request->responseHeadersHandler), 
+    response_headers_handler_done(&(request->responseHeadersHandler),
                                   request->curl);
 
     // Only make the callback if it was a successful request; otherwise we're
@@ -178,7 +179,7 @@ static void request_headers_done(Request *request)
         (request->httpResponseCode >= 200) &&
         (request->httpResponseCode <= 299)) {
         request->status = (*(request->propertiesCallback))
-            (&(request->responseHeadersHandler.responseProperties), 
+            (&(request->responseHeadersHandler.responseProperties),
              request->callbackData);
     }
 }
@@ -256,7 +257,7 @@ static size_t curl_write_func(void *ptr, size_t size, size_t nmemb,
     }
 
     // On HTTP error, we expect to parse an HTTP error response
-    if ((request->httpResponseCode < 200) || 
+    if ((request->httpResponseCode < 200) ||
         (request->httpResponseCode > 299)) {
         request->status = error_parser_add
             (&(request->errorParser), (char *) ptr, len);
@@ -552,7 +553,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
                   S3StatusContentDispositionFilenameTooLong);
 
     // ContentEncoding
-    do_put_header("Content-Encoding: %s", contentEncoding, 
+    do_put_header("Content-Encoding: %s", contentEncoding,
                   contentEncodingHeader, S3StatusBadContentEncoding,
                   S3StatusContentEncodingTooLong);
 
@@ -599,21 +600,21 @@ static S3Status compose_standard_headers(const RequestParams *params,
 
     // If-None-Match header
     do_get_header("If-None-Match: %s", ifNotMatchETag, ifNoneMatchHeader,
-                  S3StatusBadIfNotMatchETag, 
+                  S3StatusBadIfNotMatchETag,
                   S3StatusIfNotMatchETagTooLong);
 
     // Range header
     if (params->startByte || params->byteCount) {
         if (params->byteCount) {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-%llu", 
+                     "Range: bytes=%llu-%llu",
                      (unsigned long long) params->startByte,
-                     (unsigned long long) (params->startByte + 
+                     (unsigned long long) (params->startByte +
                                            params->byteCount - 1));
         }
         else {
             snprintf(values->rangeHeader, sizeof(values->rangeHeader),
-                     "Range: bytes=%llu-", 
+                     "Range: bytes=%llu-",
                      (unsigned long long) params->startByte);
         }
     }
@@ -629,7 +630,7 @@ static S3Status compose_standard_headers(const RequestParams *params,
 static S3Status encode_key(const RequestParams *params,
                            RequestComputedValues *values)
 {
-    return (urlEncode(values->urlEncodedKey, params->key, S3_MAX_KEY_SIZE) ?
+    return (urlEncode(values->urlEncodedKey, params->key, S3_MAX_KEY_SIZE, 0) ?
             S3StatusOK : S3StatusUriTooLong);
 }
 
@@ -703,6 +704,9 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
     if (values->rangeHeader[0]) {
         sortedHeaders[headerCount++] = values->rangeHeader;
     }
+    if (values->md5Header[0]) {
+        sortedHeaders[headerCount++] = values->md5Header;
+    }
 
     // Now sort these
     kv_gnome_sort(sortedHeaders, headerCount, ':');
@@ -720,7 +724,7 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
         const char *c = header;
         char v;
         // If the header names are the same, append the next value
-        if ((i > 0) && 
+        if ((i > 0) &&
             !strncmp(header, sortedHeaders[i - 1], lastHeaderLen)) {
             // Replacing the previous newline with a comma
             *(buffer - 1) = ',';
@@ -802,8 +806,7 @@ static void canonicalize_resource(const S3BucketContext *context,
 }
 
 
-static void sort_and_urlencode_query_string(const char *queryString,
-                                            char *result)
+static void sort_query_string(const char *queryString, char *result)
 {
 #ifdef SIGNATURE_DEBUG
     printf("\n--\nsort_and_urlencode\nqueryString: %s\n", queryString);
@@ -840,28 +843,9 @@ static void sort_and_urlencode_query_string(const char *queryString,
 #endif
 
     unsigned int pi = 0;
-    char appendage[4];
-
     for (; pi < numParams; pi++) {
-        const char *param = params[pi];
-        int foundEquals = 0;
-        for (i = 0; i < strlen(param); i++) {
-            char c = param[i];
-            if (isalnum(c) || (c == '_') || (c == '-') || (c == '~')
-                || (c == '.')) {
-                appendage[0] = c;
-                appendage[1] = '\0';
-            }
-            else if ((c == '=') && !foundEquals) {
-                appendage[0] = c;
-                appendage[1] = '\0';
-                foundEquals = 1;
-            }
-            else {
-                snprintf(appendage, 4, "%%%02X", c);
-            }
-            strncat(result, appendage, strlen(appendage));
-        }
+        // All params are urlEncoded
+        strncat(result, params[pi], strlen(params[pi]));
         strncat(result, "&", 1);
     }
     result[strlen(result) - 1] = '\0';
@@ -881,7 +865,7 @@ static void canonicalize_query_string(const char *queryParams,
     if (queryParams && queryParams[0]) {
         char sorted[strlen(queryParams) * 2];
         sorted[0] = '\0';
-        sort_and_urlencode_query_string(queryParams, sorted);
+        sort_query_string(queryParams, sorted);
         append(sorted);
     }
 
@@ -890,7 +874,9 @@ static void canonicalize_query_string(const char *queryParams,
             append("&");
         }
         append(subResource);
-        append("=");
+        if (!strchr(subResource, '=')) {
+            append("=");
+        }
     }
 
 #undef append
@@ -1156,18 +1142,18 @@ static S3Status setup_curl(Request *request,
 
     // Debugging only
     // curl_easy_setopt_safe(CURLOPT_VERBOSE, 1);
-    
+
     // Set private data to request for the benefit of S3RequestContext
     curl_easy_setopt_safe(CURLOPT_PRIVATE, request);
-    
+
     // Set header callback and data
     curl_easy_setopt_safe(CURLOPT_HEADERDATA, request);
     curl_easy_setopt_safe(CURLOPT_HEADERFUNCTION, &curl_header_func);
-    
+
     // Set read callback, data, and readSize
     curl_easy_setopt_safe(CURLOPT_READFUNCTION, &curl_read_func);
     curl_easy_setopt_safe(CURLOPT_READDATA, request);
-    
+
     // Set write callback and data
     curl_easy_setopt_safe(CURLOPT_WRITEFUNCTION, &curl_write_func);
     curl_easy_setopt_safe(CURLOPT_WRITEDATA, request);
@@ -1193,7 +1179,7 @@ static S3Status setup_curl(Request *request,
     // I think this is useful - we don't need interactive performance, we need
     // to complete large operations quickly
     curl_easy_setopt_safe(CURLOPT_TCP_NODELAY, 1);
-    
+
     // Don't use Curl's 'netrc' feature
     curl_easy_setopt_safe(CURLOPT_NETRC, CURL_NETRC_IGNORED);
 
@@ -1217,6 +1203,12 @@ static S3Status setup_curl(Request *request,
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_LIMIT, 1024);
     curl_easy_setopt_safe(CURLOPT_LOW_SPEED_TIME, 15);
 
+
+    if (params->timeoutMs > 0) {
+        curl_easy_setopt_safe(CURLOPT_TIMEOUT_MS, params->timeoutMs);
+    }
+
+
     // Append standard headers
 #define append_standard_header(fieldName)                               \
     if (values-> fieldName [0]) {                                       \
@@ -1231,6 +1223,12 @@ static S3Status setup_curl(Request *request,
         snprintf(header, sizeof(header), "Content-Length: %llu",
                  (unsigned long long) params->toS3CallbackTotalSize);
         request->headers = curl_slist_append(request->headers, header);
+        request->headers = curl_slist_append(request->headers,
+                                             "Transfer-Encoding:");
+    }
+    else if (params->httpRequestType == HttpRequestTypeCOPY) {
+        request->headers = curl_slist_append(request->headers,
+                                             "Transfer-Encoding:");
     }
 
     append_standard_header(hostHeader);
@@ -1250,7 +1248,7 @@ static S3Status setup_curl(Request *request,
     // Append x-amz- headers
     int i;
     for (i = 0; i < values->amzHeadersCount; i++) {
-        request->headers = 
+        request->headers =
             curl_slist_append(request->headers, values->amzHeaders[i]);
     }
 
@@ -1280,7 +1278,7 @@ static S3Status setup_curl(Request *request,
     default: // HttpRequestTypeGET
         break;
     }
-    
+
     return S3StatusOK;
 }
 
@@ -1290,7 +1288,7 @@ static void request_deinitialize(Request *request)
     if (request->headers) {
         curl_slist_free_all(request->headers);
     }
-    
+
     error_parser_deinitialize(&(request->errorParser));
 
     // curl_easy_reset prevents connections from being re-used for some
@@ -1347,7 +1345,7 @@ static S3Status request_get(const RequestParams *params,
 
     // Compute the URL
     if ((status = compose_uri
-         (request->uri, sizeof(request->uri), 
+         (request->uri, sizeof(request->uri),
           &(params->bucketContext), values->urlEncodedKey,
           params->subResource, params->queryParams)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
@@ -1417,7 +1415,7 @@ static void request_release(Request *request)
 S3Status request_api_initialize(const char *userAgentInfo, int flags,
                                 const char *defaultHostName)
 {
-    if (curl_global_init(CURL_GLOBAL_ALL & 
+    if (curl_global_init(CURL_GLOBAL_ALL &
                          ~((flags & S3_INIT_WINSOCK) ? 0 : CURL_GLOBAL_WIN32))
         != CURLE_OK) {
         return S3StatusInternalError;
@@ -1428,7 +1426,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
         defaultHostName = S3_DEFAULT_HOSTNAME;
     }
 
-    if (snprintf(defaultHostNameG, S3_MAX_HOSTNAME_SIZE, 
+    if (snprintf(defaultHostNameG, S3_MAX_HOSTNAME_SIZE,
                  "%s", defaultHostName) >= S3_MAX_HOSTNAME_SIZE) {
         return S3StatusUriTooLong;
     }
@@ -1447,14 +1445,15 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
         snprintf(platform, sizeof(platform), "Unknown");
     }
     else {
-        snprintf(platform, sizeof(platform), "%s%s%s", utsn.sysname, 
+        snprintf(platform, sizeof(platform), "%s%s%s", utsn.sysname,
                  utsn.machine[0] ? " " : "", utsn.machine);
     }
 
-    snprintf(userAgentG, sizeof(userAgentG), 
+    snprintf(userAgentG, sizeof(userAgentG),
              "Mozilla/4.0 (Compatible; %s; libs3 %s.%s; %s)",
              userAgentInfo, LIBS3_VER_MAJOR, LIBS3_VER_MINOR, platform);
 
+    xmlInitParser();
     return S3StatusOK;
 }
 
@@ -1463,6 +1462,7 @@ void request_api_deinitialize()
 {
     pthread_mutex_destroy(&requestStackMutexG);
 
+    xmlCleanupParser();
     while (requestStackCountG--) {
         request_destroy(requestStackG[requestStackCountG]);
     }
@@ -1605,11 +1605,11 @@ void request_finish(Request *request)
     // If we haven't detected this already, we now know that the headers are
     // definitely done being read in
     request_headers_done(request);
-    
+
     // If there was no error processing the request, then possibly there was
     // an S3 error parsed, which should be converted into the request status
     if (request->status == S3StatusOK) {
-        error_parser_convert_status(&(request->errorParser), 
+        error_parser_convert_status(&(request->errorParser),
                                     &(request->status));
         // If there still was no error recorded, then it is possible that
         // there was in fact an error but that there was no error XML
@@ -1635,7 +1635,7 @@ void request_finish(Request *request)
             case 400:
                 request->status = S3StatusHttpErrorBadRequest;
                 break;
-            case 403: 
+            case 403:
                 request->status = S3StatusHttpErrorForbidden;
                 break;
             case 404:
@@ -1692,10 +1692,14 @@ S3Status request_curl_code_to_status(CURLcode code)
         return S3StatusFailedToConnect;
     case CURLE_WRITE_ERROR:
     case CURLE_OPERATION_TIMEDOUT:
-        return S3StatusConnectionFailed;
+        return S3StatusErrorRequestTimeout;
     case CURLE_PARTIAL_FILE:
         return S3StatusOK;
+#if LIBCURL_VERSION_NUM >= 0x071101 /* 7.17.1 */
     case CURLE_PEER_FAILED_VERIFICATION:
+#else
+    case CURLE_SSL_PEER_CERTIFICATE:
+#endif
     case CURLE_SSL_CACERT:
         return S3StatusServerFailedVerification;
     default:
@@ -1722,7 +1726,7 @@ S3Status S3_generate_authenticated_query_string
     RequestParams params =
     { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
         resource,
-        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL };
+        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
 
     RequestComputedValues computed;
     S3Status status = setup_request(&params, &computed, 1);

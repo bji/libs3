@@ -81,11 +81,6 @@ This is Amazon's "user" management API; not part of S3 although IAM users can be
 - POST /?delete -- 4 hours
 
 
-=== Object Expiration Support ===
-
-- Handle the /?lifecycle property: 8 hours
-
-
 === MFA Authentication ===
 
 (part of Bucket Policy)

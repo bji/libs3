@@ -182,6 +182,7 @@ void error_parser_convert_status(ErrorParser *errorParser, S3Status *status)
     HANDLE_CODE(InvalidBucketName);
     HANDLE_CODE(InvalidBucketState); 
     HANDLE_CODE(InvalidDigest);
+    HANDLE_CODE(InvalidEncryptionAlgorithmError);
     HANDLE_CODE(InvalidLocationConstraint);
     HANDLE_CODE(InvalidObjectState); 
     HANDLE_CODE(InvalidPart); 
@@ -217,7 +218,7 @@ void error_parser_convert_status(ErrorParser *errorParser, S3Status *status)
     HANDLE_CODE(NoSuchVersion);
     HANDLE_CODE(NotImplemented);
     HANDLE_CODE(NotSignedUp);
-    HANDLE_CODE(NotSuchBucketPolicy);
+    HANDLE_CODE(NoSuchBucketPolicy);
     HANDLE_CODE(OperationAborted);
     HANDLE_CODE(PermanentRedirect);
     HANDLE_CODE(PreconditionFailed);
@@ -236,6 +237,7 @@ void error_parser_convert_status(ErrorParser *errorParser, S3Status *status)
     HANDLE_CODE(UnexpectedContent);
     HANDLE_CODE(UnresolvableGrantByEmailAddress);
     HANDLE_CODE(UserKeyMustBeSpecified);
+    HANDLE_CODE(QuotaExceeded);
     *status = S3StatusErrorUnknown;
 
  code_set:

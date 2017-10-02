@@ -53,8 +53,14 @@ static int checkString(const char *str, const char *format)
     return 1;
 }
 
-
-int urlEncode(char *dest, const char *src, int maxSrcSize)
+/*
+ * Encode rules:
+ * 1. Every byte except: 'A'-'Z', 'a'-'z', '0'-'9', '-', '.', '_', and '~'
+ * 2. The space must be encoded as "%20" (and not as "+")
+ * 3. Letters in the hexadecimal value must be uppercase, for example "%1A"
+ * 4. Encode the forward slash character, '/', everywhere except in the object key name
+ */
+int urlEncode(char *dest, const char *src, int maxSrcSize, int encodeSlash)
 {
     static const char *hex = "0123456789ABCDEF";
 
@@ -67,9 +73,8 @@ int urlEncode(char *dest, const char *src, int maxSrcSize)
         }
         unsigned char c = *src;
         if (isalnum(c) ||
-            (c == '-') || (c == '_') || (c == '.') || (c == '!') || 
-            (c == '~') || (c == '*') || (c == '\'') || (c == '(') ||
-            (c == ')') || (c == '/')) {
+            (c == '-') || (c == '_') || (c == '.') ||
+            (c == '~') || (c == '/' && !encodeSlash)) {
             *dest++ = c;
         }
         else {

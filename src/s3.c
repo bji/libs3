@@ -1,10 +1,10 @@
 /** **************************************************************************
  * s3.c
- * 
+ *
  * Copyright 2008 Bryan Ischo <bryan@ischo.com>
- * 
+ *
  * This file is part of libs3.
- * 
+ *
  * libs3 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free
  * Software Foundation, version 3 of the License.
@@ -63,6 +63,7 @@ static int showResponsePropertiesG = 0;
 static S3Protocol protocolG = S3ProtocolHTTPS;
 static S3UriStyle uriStyleG = S3UriStylePath;
 static int retriesG = 5;
+static int timeoutMsG = 0;
 static int verifyPeerG = 0;
 static const char *awsRegionG = NULL;
 
@@ -170,7 +171,7 @@ static void S3_init()
 
     if ((status = S3_initialize("s3", verifyPeerG|S3_INIT_ALL, hostname))
         != S3StatusOK) {
-        fprintf(stderr, "Failed to initialize libs3: %s\n", 
+        fprintf(stderr, "Failed to initialize libs3: %s\n",
                 S3_get_status_name(status));
         exit(-1);
     }
@@ -203,6 +204,8 @@ static void usageExit(FILE *out)
 "   -s/--show-properties : show response properties on stdout\n"
 "   -r/--retries         : retry retryable failures this number of times\n"
 "                          (default is 5)\n"
+"   -t/--timeout         : request timeout, milliseconds. 0 if waiting forever\n"
+"                          (default is 0)\n"
 "   -v/--verify-peer     : verify peer SSL certificate (default is no)\n"
 "   -g/--region <REGION> : use <REGION> for request authorization\n"
 "\n"
@@ -248,17 +251,24 @@ static void usageExit(FILE *out)
 "   setacl               : Set the ACL of a bucket or key\n"
 "     <bucket>[/<key>]   : Bucket or bucket/key to set the ACL of\n"
 "     [filename]         : Input filename for ACL (default is stdin)\n"
+"   getlifecycle         : Get the lifecycle of a bucket\n"
+"     <bucket>           : Bucket or bucket to get the lifecycle of\n"
+"     [filename]         : Output filename for lifecycle (default is stdout)\n"
+"\n"
+"   setlifecycle         : Set the lifecycle of a bucket or key\n"
+"     <bucket>           : Bucket or bucket to set the lifecycle of\n"
+"     [filename]         : Input filename for lifecycle (default is stdin)\n"
 "\n"
 "   getlogging           : Get the logging status of a bucket\n"
 "     <bucket>           : Bucket to get the logging status of\n"
-"     [filename]         : Output filename for ACL (default is stdout)\n"
+"     [filename]         : Output filename for logging (default is stdout)\n"
 "\n"
 "   setlogging           : Set the logging status of a bucket\n"
 "     <bucket>           : Bucket to set the logging status of\n"
 "     [targetBucket]     : Target bucket to log to; if not present, disables\n"
 "                          logging\n"
 "     [targetPrefix]     : Key prefix to use for logs\n"
-"     [filename]         : Input filename for ACL (default is stdin)\n"
+"     [filename]         : Input filename for logging (default is stdin)\n"
 "\n"
 "   put                  : Puts an object\n"
 "     <bucket>/<key>     : Bucket/key to put object to\n"
@@ -389,7 +399,7 @@ static uint64_t convertInt(const char *str, const char *paramName)
 
     while (*str) {
         if (!isdigit(*str)) {
-            fprintf(stderr, "\nERROR: Nondigit in %s parameter: %c\n", 
+            fprintf(stderr, "\nERROR: Nondigit in %s parameter: %c\n",
                     paramName, *str);
             usageExit(stderr);
         }
@@ -452,7 +462,7 @@ static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
 }
 
 
-static void growbuffer_read(growbuffer **gb, int amt, int *amtReturn, 
+static void growbuffer_read(growbuffer **gb, int amt, int *amtReturn,
                             char *buffer)
 {
     *amtReturn = 0;
@@ -466,7 +476,7 @@ static void growbuffer_read(growbuffer **gb, int amt, int *amtReturn,
     *amtReturn = (buf->size > amt) ? amt : buf->size;
 
     memcpy(buffer, &(buf->data[buf->start]), *amtReturn);
-    
+
     buf->start += *amtReturn, buf->size -= *amtReturn;
 
     if (buf->size == 0) {
@@ -573,7 +583,7 @@ static int64_t parseIso8601Time(const char *str)
             str++;
         }
     }
-    
+
     if (checkString(str, "-dd:dd") || checkString(str, "+dd:dd")) {
         int sign = (*str++ == '-') ? -1 : 1;
         int hours = nextnum();
@@ -614,7 +624,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
             return 0;                           \
         }                                       \
     } while (0)
-    
+
 #define COPY_STRING_MAXLEN(field, maxlen)               \
     do {                                                \
         SKIP_SPACE(1);                                  \
@@ -634,7 +644,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
         if (!*aclXml) {
             break;
         }
-        
+
         // Skip Type lines and dash lines
         if (!strncmp(aclXml, "Type", sizeof("Type") - 1) ||
             (*aclXml == '-')) {
@@ -643,7 +653,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
             }
             continue;
         }
-        
+
         if (!strncmp(aclXml, "OwnerID", sizeof("OwnerID") - 1)) {
             aclXml += sizeof("OwnerID") - 1;
             COPY_STRING_MAXLEN(ownerId, S3_MAX_GRANTEE_USER_ID_SIZE);
@@ -684,7 +694,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
                 grant->granteeType = S3GranteeTypeAllUsers;
                 aclXml += (sizeof("All Users") - 1);
             }
-            else if (!strncmp(aclXml, "Log Delivery", 
+            else if (!strncmp(aclXml, "Log Delivery",
                               sizeof("Log Delivery") - 1)) {
                 grant->granteeType = S3GranteeTypeLogDelivery;
                 aclXml += (sizeof("Log Delivery") - 1);
@@ -698,7 +708,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
         }
 
         SKIP_SPACE(1);
-        
+
         if (!strncmp(aclXml, "READ_ACP", sizeof("READ_ACP") - 1)) {
             grant->permission = S3PermissionReadACP;
             aclXml += (sizeof("READ_ACP") - 1);
@@ -715,7 +725,7 @@ static int convert_simple_acl(char *aclXml, char *ownerId,
             grant->permission = S3PermissionWrite;
             aclXml += (sizeof("WRITE") - 1);
         }
-        else if (!strncmp(aclXml, "FULL_CONTROL", 
+        else if (!strncmp(aclXml, "FULL_CONTROL",
                           sizeof("FULL_CONTROL") - 1)) {
             grant->permission = S3PermissionFullControl;
             aclXml += (sizeof("FULL_CONTROL") - 1);
@@ -747,6 +757,7 @@ static struct option longOptionsG[] =
     { "unencrypted",          no_argument,        0,  'u' },
     { "show-properties",      no_argument,        0,  's' },
     { "retries",              required_argument,  0,  'r' },
+    { "timeout",              required_argument,  0,  't' },
     { "verify-peer",          no_argument,        0,  'v' },
     { "region",               required_argument,  0,  'g' },
     { 0,                      0,                  0,   0  }
@@ -772,7 +783,7 @@ static S3Status responsePropertiesCallback
             printf("%s: %s\n", name, properties-> field);          \
         }                                                          \
     } while (0)
-    
+
     print_nonnull("Content-Type", contentType);
     print_nonnull("Request-Id", requestId);
     print_nonnull("Request-Id-2", requestId2);
@@ -834,8 +845,8 @@ static void responseCompleteCallback(S3Status status,
                         "%s", "  Extra Details:\n");
         int i;
         for (i = 0; i < error->extraDetailsCount; i++) {
-            len += snprintf(&(errorDetailsG[len]), 
-                            sizeof(errorDetailsG) - len, "    %s: %s\n", 
+            len += snprintf(&(errorDetailsG[len]),
+                            sizeof(errorDetailsG) - len, "    %s: %s\n",
                             error->extraDetails[i].name,
                             error->extraDetails[i].value);
         }
@@ -857,7 +868,7 @@ static void printListServiceHeader(int allDetails)
     printf("%-56s  %-20s", "                         Bucket",
            "      Created");
     if (allDetails) {
-        printf("  %-64s  %-12s", 
+        printf("  %-64s  %-12s",
                "                            Owner ID",
                "Display Name");
     }
@@ -872,7 +883,7 @@ static void printListServiceHeader(int allDetails)
 }
 
 
-static S3Status listServiceCallback(const char *ownerId, 
+static S3Status listServiceCallback(const char *ownerId,
                                     const char *ownerDisplayName,
                                     const char *bucketName,
                                     int64_t creationDate, void *callbackData)
@@ -895,7 +906,7 @@ static S3Status listServiceCallback(const char *ownerId,
 
     printf("%-56s  %-20s", bucketName, timebuf);
     if (data->allDetails) {
-        printf("  %-64s  %-12s", ownerId ? ownerId : "", 
+        printf("  %-64s  %-12s", ownerId ? ownerId : "",
                ownerDisplayName ? ownerDisplayName : "");
     }
     printf("\n");
@@ -921,7 +932,7 @@ static void list_service(int allDetails)
 
     do {
         S3_list_service(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0,
-                        awsRegionG, 0, &listServiceHandler, &data);
+                        awsRegionG, 0, timeoutMsG, &listServiceHandler, &data);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -965,7 +976,7 @@ static void test_bucket(int argc, char **argv, int optindex)
     do {
         S3_test_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG, 0,
                        0, bucketName, awsRegionG, sizeof(locationConstraint),
-                       locationConstraint, 0, &responseHandler, 0);
+                       locationConstraint, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     const char *result;
@@ -1064,7 +1075,7 @@ static void create_bucket(int argc, char **argv, int optindex)
     do {
         S3_create_bucket(protocolG, accessKeyIdG, secretAccessKeyG, 0, 0,
                          bucketName, awsRegionG, cannedAcl, locationConstraint,
-                         0, &responseHandler, 0);
+                         0, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
@@ -1103,7 +1114,7 @@ static void delete_bucket(int argc, char **argv, int optindex)
 
     do {
         S3_delete_bucket(protocolG, uriStyleG, accessKeyIdG, secretAccessKeyG,
-                         0, 0, bucketName, awsRegionG, 0, &responseHandler, 0);
+                         0, 0, bucketName, awsRegionG, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -1127,12 +1138,12 @@ typedef struct list_bucket_callback_data
 
 static void printListBucketHeader(int allDetails)
 {
-    printf("%-50s  %-20s  %-5s", 
-           "                       Key", 
+    printf("%-50s  %-20s  %-5s",
+           "                       Key",
            "   Last Modified", "Size");
     if (allDetails) {
-        printf("  %-34s  %-64s  %-12s", 
-               "               ETag", 
+        printf("  %-34s  %-64s  %-12s",
+               "               ETag",
                "                            Owner ID",
                "Display Name");
     }
@@ -1149,13 +1160,13 @@ static void printListBucketHeader(int allDetails)
 
 
 static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
-                                   int contentsCount, 
+                                   int contentsCount,
                                    const S3ListBucketContent *contents,
                                    int commonPrefixesCount,
                                    const char **commonPrefixes,
                                    void *callbackData)
 {
-    list_bucket_callback_data *data = 
+    list_bucket_callback_data *data =
         (list_bucket_callback_data *) callbackData;
 
     data->isTruncated = isTruncated;
@@ -1167,13 +1178,13 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
         nextMarker = contents[contentsCount - 1].key;
     }
     if (nextMarker) {
-        snprintf(data->nextMarker, sizeof(data->nextMarker), "%s", 
+        snprintf(data->nextMarker, sizeof(data->nextMarker), "%s",
                  nextMarker);
     }
     else {
         data->nextMarker[0] = 0;
     }
-    
+
     if (contentsCount && !data->keyCount) {
         printListBucketHeader(data->allDetails);
     }
@@ -1199,14 +1210,14 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
         }
         else {
             time_t t = (time_t) content->lastModified;
-            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", 
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
                      gmtime(&t));
             char sizebuf[16];
             if (content->size < 100000) {
                 sprintf(sizebuf, "%5llu", (unsigned long long) content->size);
             }
             else if (content->size < (1024 * 1024)) {
-                sprintf(sizebuf, "%4lluK", 
+                sprintf(sizebuf, "%4lluK",
                         ((unsigned long long) content->size) / 1024ULL);
             }
             else if (content->size < (10 * 1024 * 1024)) {
@@ -1215,8 +1226,8 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                 sprintf(sizebuf, "%1.2fM", f);
             }
             else if (content->size < (1024 * 1024 * 1024)) {
-                sprintf(sizebuf, "%4lluM", 
-                        ((unsigned long long) content->size) / 
+                sprintf(sizebuf, "%4lluM",
+                        ((unsigned long long) content->size) /
                         (1024ULL * 1024ULL));
             }
             else {
@@ -1227,9 +1238,9 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
             printf("%-50s  %s  %s", content->key, timebuf, sizebuf);
             if (data->allDetails) {
                 printf("  %-34s  %-64s  %-12s",
-                       content->eTag, 
+                       content->eTag,
                        content->ownerId ? content->ownerId : "",
-                       content->ownerDisplayName ? 
+                       content->ownerDisplayName ?
                        content->ownerDisplayName : "");
             }
             printf("\n");
@@ -1284,7 +1295,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
         data.isTruncated = 0;
         do {
             S3_list_bucket(&bucketContext, prefix, data.nextMarker,
-                           delimiter, maxkeys, 0, &listBucketHandler, &data);
+                           delimiter, maxkeys, 0, timeoutMsG, &listBucketHandler, &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             break;
@@ -1333,7 +1344,7 @@ static void list(int argc, char **argv, int optindex)
         else if (!strncmp(param, ALL_DETAILS_PREFIX,
                           ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
-            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") || 
+            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") ||
                 !strcmp(ad, "yes") || !strcmp(ad, "YES") ||
                 !strcmp(ad, "1")) {
                 allDetails = 1;
@@ -1349,7 +1360,7 @@ static void list(int argc, char **argv, int optindex)
     }
 
     if (bucketName) {
-        list_bucket(bucketName, prefix, marker, delimiter, maxkeys, 
+        list_bucket(bucketName, prefix, marker, delimiter, maxkeys,
                     allDetails);
     }
     else {
@@ -1413,8 +1424,8 @@ static void printListMultipartHeader(int allDetails)
 
 static void printListPartsHeader()
 {
-    printf("%-25s  %-30s  %-30s   %-15s", 
-           "LastModified", 
+    printf("%-25s  %-30s  %-30s   %-15s",
+           "LastModified",
            "PartNumber", "ETag", "SIZE");
 
     printf("\n");
@@ -1428,13 +1439,13 @@ static void printListPartsHeader()
 
 static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker,
                                    const char *nextUploadIdMarker,
-                                   int uploadsCount, 
+                                   int uploadsCount,
                                    const S3ListMultipartUpload *uploads,
                                    int commonPrefixesCount,
                                    const char **commonPrefixes,
                                    void *callbackData)
 {
-    list_multiparts_callback_data *data = 
+    list_multiparts_callback_data *data =
         (list_multiparts_callback_data *) callbackData;
 
     data->isTruncated = isTruncated;
@@ -1447,7 +1458,7 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
         nextKeyMarker = uploads[uploadsCount - 1].key;
     }*/
     if (nextKeyMarker) {
-        snprintf(data->nextKeyMarker, sizeof(data->nextKeyMarker), "%s", 
+        snprintf(data->nextKeyMarker, sizeof(data->nextKeyMarker), "%s",
                  nextKeyMarker);
     }
     else {
@@ -1455,7 +1466,7 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
     }
 
     if (nextUploadIdMarker) {
-        snprintf(data->nextUploadIdMarker, sizeof(data->nextUploadIdMarker), "%s", 
+        snprintf(data->nextUploadIdMarker, sizeof(data->nextUploadIdMarker), "%s",
                  nextUploadIdMarker);
     }
     else {
@@ -1498,12 +1509,12 @@ static S3Status listMultipartCallback(int isTruncated, const char *nextKeyMarker
             printf("%-50s  %s %-50s", upload->key, timebuf, upload->uploadId);
             if (data->allDetails) {
                 printf("  %-34s  %-64s  %-12s  %-64s  %-12s",
-                       upload->storageClass, 
+                       upload->storageClass,
                        upload->ownerId ? upload->ownerId : "",
-                       upload->ownerDisplayName ? 
+                       upload->ownerDisplayName ?
                        upload->ownerDisplayName : "",
                        upload->initiatorId ? upload->initiatorId : "",
-                       upload->initiatorDisplayName ? 
+                       upload->initiatorDisplayName ?
                        upload->initiatorDisplayName : "");
             }
             printf("\n");
@@ -1532,7 +1543,7 @@ static S3Status listPartsCallback(int isTruncated,
                                   const S3ListPart *parts,
                                   void *callbackData)
 {
-    list_parts_callback_data *data = 
+    list_parts_callback_data *data =
         (list_parts_callback_data *) callbackData;
 
     data->isTruncated = isTruncated;
@@ -1548,7 +1559,7 @@ static S3Status listPartsCallback(int isTruncated,
     }*/
     if (nextPartNumberMarker) {
         snprintf(data->nextPartNumberMarker,
-                 sizeof(data->nextPartNumberMarker), "%s", 
+                 sizeof(data->nextPartNumberMarker), "%s",
                  nextPartNumberMarker);
     }
     else {
@@ -1556,7 +1567,7 @@ static S3Status listPartsCallback(int isTruncated,
     }
 
     if (initiatorId) {
-        snprintf(data->initiatorId, sizeof(data->initiatorId), "%s", 
+        snprintf(data->initiatorId, sizeof(data->initiatorId), "%s",
                  initiatorId);
     }
     else {
@@ -1565,7 +1576,7 @@ static S3Status listPartsCallback(int isTruncated,
 
     if (initiatorDisplayName) {
         snprintf(data->initiatorDisplayName,
-                 sizeof(data->initiatorDisplayName), "%s", 
+                 sizeof(data->initiatorDisplayName), "%s",
                  initiatorDisplayName);
     }
     else {
@@ -1573,7 +1584,7 @@ static S3Status listPartsCallback(int isTruncated,
     }
 
     if (ownerId) {
-        snprintf(data->ownerId, sizeof(data->ownerId), "%s", 
+        snprintf(data->ownerId, sizeof(data->ownerId), "%s",
                  ownerId);
     }
     else {
@@ -1581,7 +1592,7 @@ static S3Status listPartsCallback(int isTruncated,
     }
 
     if (ownerDisplayName) {
-        snprintf(data->ownerDisplayName, sizeof(data->ownerDisplayName), "%s", 
+        snprintf(data->ownerDisplayName, sizeof(data->ownerDisplayName), "%s",
                  ownerDisplayName);
     }
     else {
@@ -1589,13 +1600,13 @@ static S3Status listPartsCallback(int isTruncated,
     }
 
     if (storageClass) {
-        snprintf(data->storageClass, sizeof(data->storageClass), "%s", 
+        snprintf(data->storageClass, sizeof(data->storageClass), "%s",
                  storageClass);
     }
     else {
         data->storageClass[0] = 0;
     }
-    
+
     if (partsCount && !data->partsCount && !data->noPrint) {
         printListPartsHeader();
     }
@@ -1637,7 +1648,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
     const char *encodingtype = 0, *uploadidmarker = 0;
     int maxuploads = 0, allDetails = 0;
     while (optindex < argc) {
-        char *param = argv[optindex++]; 
+        char *param = argv[optindex++];
         if (!strncmp(param, PREFIX_PREFIX, PREFIX_PREFIX_LEN)) {
             prefix = &(param[PREFIX_PREFIX_LEN]);
         }
@@ -1661,7 +1672,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
         }
         else if (!strncmp(param, ALL_DETAILS_PREFIX, ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
-            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") || 
+            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") ||
                 !strcmp(ad, "yes") || !strcmp(ad, "YES") ||
                 !strcmp(ad, "1")) {
                 allDetails = 1;
@@ -1719,6 +1730,7 @@ static void list_multipart_uploads(int argc, char **argv, int optindex)
                                           data.nextKeyMarker,
                                           data.nextUploadIdMarker, encodingtype,
                                           delimiter, maxuploads, 0,
+                                          timeoutMsG,
                                           &listMultipartUploadsHandler, &data);
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
@@ -1767,7 +1779,7 @@ static void list_parts(int argc, char **argv, int optindex)
     const char *encodingtype = 0;
     int allDetails = 0, maxparts = 0;
     while (optindex < argc) {
-        char *param = argv[optindex++]; 
+        char *param = argv[optindex++];
         if (!strncmp(param, UPLOAD_ID_PREFIX, UPLOAD_ID_PREFIX_LEN)) {
             uploadid = &(param[UPLOAD_ID_PREFIX_LEN]);
         }
@@ -1788,7 +1800,7 @@ static void list_parts(int argc, char **argv, int optindex)
         else if (!strncmp(param, ALL_DETAILS_PREFIX,
                           ALL_DETAILS_PREFIX_LEN)) {
             const char *ad = &(param[ALL_DETAILS_PREFIX_LEN]);
-            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") || 
+            if (!strcmp(ad, "true") || !strcmp(ad, "TRUE") ||
                 !strcmp(ad, "yes") || !strcmp(ad, "YES") ||
                 !strcmp(ad, "1")) {
                 allDetails = 1;
@@ -1839,7 +1851,8 @@ static void list_parts(int argc, char **argv, int optindex)
                 S3_list_parts(&bucketContext, key, data.nextPartNumberMarker,
                                 uploadid, encodingtype,
                                 maxparts,
-                               0, &listPartsHandler, &data);
+                               0, timeoutMsG,
+                               &listPartsHandler, &data);
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
                 break;
@@ -1922,7 +1935,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
         list_multiparts_callback_data data;
 
         memset(&data, 0, sizeof(list_multiparts_callback_data));
-        if (keymarker != 0) {            
+        if (keymarker != 0) {
             snprintf(data.nextKeyMarker, sizeof(data.nextKeyMarker), "%s",
                      keymarker);
         }
@@ -1937,7 +1950,7 @@ static void abort_multipart_upload(int argc, char **argv, int optindex)
 
         do {
             S3_abort_multipart_upload(&bucketContext, key, uploadid,
-                           &abortMultipartUploadHandler);
+                           timeoutMsG, &abortMultipartUploadHandler);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         S3_deinitialize();
@@ -1984,7 +1997,7 @@ static void delete_object(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_delete_object(&bucketContext, key, 0, &responseHandler, 0);
+        S3_delete_object(&bucketContext, key, 0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
@@ -2011,7 +2024,7 @@ typedef struct put_object_callback_data
 static int putObjectDataCallback(int bufferSize, char *buffer,
                                  void *callbackData)
 {
-    put_object_callback_data *data = 
+    put_object_callback_data *data =
         (put_object_callback_data *) callbackData;
 
     int ret = 0;
@@ -2033,7 +2046,7 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     if (data->contentLength && !data->noStatus) {
         // Avoid a weird bug in MingW, which won't print the second integer
         // value properly when it's in the same call, so print separately
-        printf("%llu bytes remaining ", 
+        printf("%llu bytes remaining ",
                (unsigned long long) data->totalContentLength);
         printf("(%d%% complete) ...\n",
                (int) (((data->totalOriginalContentLength -
@@ -2090,7 +2103,7 @@ static int multipartPutXmlCallback(int bufferSize, char *buffer,
 }
 
 
-static int try_get_parts_info(const char *bucketName, const char *key, 
+static int try_get_parts_info(const char *bucketName, const char *key,
                               UploadManager *manager)
 {
     S3BucketContext bucketContext =
@@ -2123,7 +2136,7 @@ static int try_get_parts_info(const char *bucketName, const char *key,
         data.isTruncated = 0;
         do {
             S3_list_parts(&bucketContext, key, data.nextPartNumberMarker,
-                          manager->upload_id, 0, 0, 0, &listPartsHandler,
+                          manager->upload_id, 0, 0, 0, timeoutMsG, &listPartsHandler,
                           &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
@@ -2184,7 +2197,7 @@ static void put_object(int argc, char **argv, int optindex,
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
-        else if (!strncmp(param, CONTENT_LENGTH_PREFIX, 
+        else if (!strncmp(param, CONTENT_LENGTH_PREFIX,
                           CONTENT_LENGTH_PREFIX_LEN)) {
             contentLength = convertInt(&(param[CONTENT_LENGTH_PREFIX_LEN]),
                                        "contentLength");
@@ -2194,27 +2207,27 @@ static void put_object(int argc, char **argv, int optindex,
                 usageExit(stderr);
             }
         }
-        else if (!strncmp(param, CACHE_CONTROL_PREFIX, 
+        else if (!strncmp(param, CACHE_CONTROL_PREFIX,
                           CACHE_CONTROL_PREFIX_LEN)) {
             cacheControl = &(param[CACHE_CONTROL_PREFIX_LEN]);
         }
-        else if (!strncmp(param, CONTENT_TYPE_PREFIX, 
+        else if (!strncmp(param, CONTENT_TYPE_PREFIX,
                           CONTENT_TYPE_PREFIX_LEN)) {
             contentType = &(param[CONTENT_TYPE_PREFIX_LEN]);
         }
         else if (!strncmp(param, MD5_PREFIX, MD5_PREFIX_LEN)) {
             md5 = &(param[MD5_PREFIX_LEN]);
         }
-        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX, 
+        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX,
                           CONTENT_DISPOSITION_FILENAME_PREFIX_LEN)) {
-            contentDispositionFilename = 
+            contentDispositionFilename =
                 &(param[CONTENT_DISPOSITION_FILENAME_PREFIX_LEN]);
         }
-        else if (!strncmp(param, CONTENT_ENCODING_PREFIX, 
+        else if (!strncmp(param, CONTENT_ENCODING_PREFIX,
                           CONTENT_ENCODING_PREFIX_LEN)) {
             contentEncoding = &(param[CONTENT_ENCODING_PREFIX_LEN]);
         }
-        else if (!strncmp(param, UPLOAD_ID_PREFIX, 
+        else if (!strncmp(param, UPLOAD_ID_PREFIX,
                           UPLOAD_ID_PREFIX_LEN)) {
             uploadId = &(param[UPLOAD_ID_PREFIX_LEN]);
         }
@@ -2229,7 +2242,7 @@ static void put_object(int argc, char **argv, int optindex,
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
                 fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
-                        "limit %lu: %s\n", 
+                        "limit %lu: %s\n",
                         (unsigned long) S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
@@ -2249,7 +2262,7 @@ static void put_object(int argc, char **argv, int optindex,
         else if (!strncmp(param, USE_SERVER_SIDE_ENCRYPTION_PREFIX,
                           USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN)) {
             const char *val = &(param[USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN]);
-            if (!strcmp(val, "true") || !strcmp(val, "TRUE") || 
+            if (!strcmp(val, "true") || !strcmp(val, "TRUE") ||
                 !strcmp(val, "yes") || !strcmp(val, "YES") ||
                 !strcmp(val, "1")) {
                 useServerSideEncryption = 1;
@@ -2279,7 +2292,7 @@ static void put_object(int argc, char **argv, int optindex,
         }
         else if (!strncmp(param, NO_STATUS_PREFIX, NO_STATUS_PREFIX_LEN)) {
             const char *ns = &(param[NO_STATUS_PREFIX_LEN]);
-            if (!strcmp(ns, "true") || !strcmp(ns, "TRUE") || 
+            if (!strcmp(ns, "true") || !strcmp(ns, "TRUE") ||
                 !strcmp(ns, "yes") || !strcmp(ns, "YES") ||
                 !strcmp(ns, "1")) {
                 noStatus = 1;
@@ -2350,7 +2363,7 @@ static void put_object(int argc, char **argv, int optindex,
     }
 
     data.totalContentLength =
-    data.totalOriginalContentLength = 
+    data.totalOriginalContentLength =
     data.contentLength =
     data.originalContentLength =
             contentLength;
@@ -2392,7 +2405,7 @@ static void put_object(int argc, char **argv, int optindex,
 
         do {
             S3_put_object(&bucketContext, key, contentLength, &putProperties, 0,
-                          &putObjectHandler, &data);
+                          0, &putObjectHandler, &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         if (data.infile) {
@@ -2462,7 +2475,7 @@ static void put_object(int argc, char **argv, int optindex,
         }
 
         do {
-            S3_initiate_multipart(&bucketContext, key,0, &handler,0, &manager);
+            S3_initiate_multipart(&bucketContext, key,0, &handler,0, timeoutMsG, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
 
         if (manager.upload_id == 0 || statusG != S3StatusOK) {
@@ -2513,11 +2526,14 @@ upload:
                                          &putProperties,
                                          &lastModified, 512 /*TBD - magic # */,
                                          manager.etags[seq-1], 0,
+                                         timeoutMsG,
                                          &copyResponseHandler, 0);
                 } else {
                     S3_upload_part(&bucketContext, key, &putProperties,
                                    &putObjectHandler, seq, manager.upload_id,
-                                   partContentLength,0, &partData);
+                                   partContentLength,
+                                   0, timeoutMsG,
+                                   &partData);
                 }
             } while (S3_status_is_retryable(statusG) && should_retry());
             if (statusG != S3StatusOK) {
@@ -2546,7 +2562,7 @@ upload:
         do {
             S3_complete_multipart_upload(&bucketContext, key, &commit_handler,
                                          manager.upload_id, manager.remaining,
-                                         0,  &manager); 
+                                         0, timeoutMsG, &manager);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             printError();
@@ -2643,7 +2659,8 @@ static void copy_object(int argc, char **argv, int optindex)
     // Find size of existing key to determine if MP required
     do {
         S3_list_bucket(&listBucketContext, sourceKey, NULL,
-                       ".", 1, 0, &listBucketHandler, &sourceSize);
+                       ".", 1, 0,
+                       timeoutMsG, &listBucketHandler, &sourceSize);
     } while (S3_status_is_retryable(statusG) && should_retry());
     if (statusG != S3StatusOK) {
         fprintf(stderr, "\nERROR: Unable to get source object size (%s)\n",
@@ -2683,23 +2700,23 @@ static void copy_object(int argc, char **argv, int optindex)
 
     while (optindex < argc) {
         char *param = argv[optindex++];
-        if (!strncmp(param, CACHE_CONTROL_PREFIX, 
+        if (!strncmp(param, CACHE_CONTROL_PREFIX,
                           CACHE_CONTROL_PREFIX_LEN)) {
             cacheControl = &(param[CACHE_CONTROL_PREFIX_LEN]);
             anyPropertiesSet = 1;
         }
-        else if (!strncmp(param, CONTENT_TYPE_PREFIX, 
+        else if (!strncmp(param, CONTENT_TYPE_PREFIX,
                           CONTENT_TYPE_PREFIX_LEN)) {
             contentType = &(param[CONTENT_TYPE_PREFIX_LEN]);
             anyPropertiesSet = 1;
         }
-        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX, 
+        else if (!strncmp(param, CONTENT_DISPOSITION_FILENAME_PREFIX,
                           CONTENT_DISPOSITION_FILENAME_PREFIX_LEN)) {
-            contentDispositionFilename = 
+            contentDispositionFilename =
                 &(param[CONTENT_DISPOSITION_FILENAME_PREFIX_LEN]);
             anyPropertiesSet = 1;
         }
-        else if (!strncmp(param, CONTENT_ENCODING_PREFIX, 
+        else if (!strncmp(param, CONTENT_ENCODING_PREFIX,
                           CONTENT_ENCODING_PREFIX_LEN)) {
             contentEncoding = &(param[CONTENT_ENCODING_PREFIX_LEN]);
             anyPropertiesSet = 1;
@@ -2716,7 +2733,7 @@ static void copy_object(int argc, char **argv, int optindex)
         else if (!strncmp(param, X_AMZ_META_PREFIX, X_AMZ_META_PREFIX_LEN)) {
             if (metaPropertiesCount == S3_MAX_METADATA_COUNT) {
                 fprintf(stderr, "\nERROR: Too many x-amz-meta- properties, "
-                        "limit %lu: %s\n", 
+                        "limit %lu: %s\n",
                         (unsigned long) S3_MAX_METADATA_COUNT, param);
                 usageExit(stderr);
             }
@@ -2736,7 +2753,7 @@ static void copy_object(int argc, char **argv, int optindex)
         }
         else if (!strncmp(param, USE_SERVER_SIDE_ENCRYPTION_PREFIX,
                           USE_SERVER_SIDE_ENCRYPTION_PREFIX_LEN)) {
-            if (!strcmp(param, "true") || !strcmp(param, "TRUE") || 
+            if (!strcmp(param, "true") || !strcmp(param, "TRUE") ||
                 !strcmp(param, "yes") || !strcmp(param, "YES") ||
                 !strcmp(param, "1")) {
                 useServerSideEncryption = 1;
@@ -2811,6 +2828,7 @@ static void copy_object(int argc, char **argv, int optindex)
         S3_copy_object(&bucketContext, sourceKey, destinationBucketName,
                        destinationKey, anyPropertiesSet ? &putProperties : 0,
                        &lastModified, sizeof(eTag), eTag, 0,
+                       timeoutMsG,
                        &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -2843,7 +2861,7 @@ static S3Status getObjectDataCallback(int bufferSize, const char *buffer,
 
     size_t wrote = fwrite(buffer, 1, bufferSize, outfile);
 
-    return ((wrote < (size_t) bufferSize) ? 
+    return ((wrote < (size_t) bufferSize) ?
             S3StatusAbortedByCallback : S3StatusOK);
 }
 
@@ -2880,7 +2898,7 @@ static void get_object(int argc, char **argv, int optindex)
         if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
             filename = &(param[FILENAME_PREFIX_LEN]);
         }
-        else if (!strncmp(param, IF_MODIFIED_SINCE_PREFIX, 
+        else if (!strncmp(param, IF_MODIFIED_SINCE_PREFIX,
                      IF_MODIFIED_SINCE_PREFIX_LEN)) {
             // Parse ifModifiedSince
             ifModifiedSince = parseIso8601Time
@@ -2891,7 +2909,7 @@ static void get_object(int argc, char **argv, int optindex)
                 usageExit(stderr);
             }
         }
-        else if (!strncmp(param, IF_NOT_MODIFIED_SINCE_PREFIX, 
+        else if (!strncmp(param, IF_NOT_MODIFIED_SINCE_PREFIX,
                           IF_NOT_MODIFIED_SINCE_PREFIX_LEN)) {
             // Parse ifModifiedSince
             ifNotModifiedSince = parseIso8601Time
@@ -2983,7 +3001,7 @@ static void get_object(int argc, char **argv, int optindex)
 
     do {
         S3_get_object(&bucketContext, key, &getConditions, startByte,
-                      byteCount, 0, &getObjectHandler, outfile);
+                      byteCount, 0, 0, &getObjectHandler, outfile);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3044,13 +3062,13 @@ static void head_object(int argc, char **argv, int optindex)
     };
 
     S3ResponseHandler responseHandler =
-    { 
+    {
         &responsePropertiesCallback,
         &responseCompleteCallback
     };
 
     do {
-        S3_head_object(&bucketContext, key, 0, &responseHandler, 0);
+        S3_head_object(&bucketContext, key, 0, 0, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
@@ -3239,13 +3257,14 @@ void get_acl(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName, 
-                   &aclGrantCount, aclGrants, 0, &responseHandler, 0);
+        S3_get_acl(&bucketContext, key, ownerId, ownerDisplayName,
+                   &aclGrantCount, aclGrants, 0,
+                   timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG == S3StatusOK) {
         fprintf(outfile, "OwnerID %s %s\n", ownerId, ownerDisplayName);
-        fprintf(outfile, "%-6s  %-90s  %-12s\n", " Type", 
+        fprintf(outfile, "%-6s  %-90s  %-12s\n", " Type",
                 "                                   User Identifier",
                 " Permission");
         fprintf(outfile, "------  "
@@ -3255,7 +3274,7 @@ void get_acl(int argc, char **argv, int optindex)
         for (i = 0; i < aclGrantCount; i++) {
             S3AclGrant *grant = &(aclGrants[i]);
             const char *type;
-            char composedId[S3_MAX_GRANTEE_USER_ID_SIZE + 
+            char composedId[S3_MAX_GRANTEE_USER_ID_SIZE +
                             S3_MAX_GRANTEE_DISPLAY_NAME_SIZE + 16];
             const char *id;
 
@@ -3369,7 +3388,7 @@ void set_acl(int argc, char **argv, int optindex)
 
     // Read in the complete ACL
     char aclBuf[65536];
-    aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
+    aclBuf[fread(aclBuf, 1, sizeof(aclBuf) - 1, infile)] = 0;
     char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
     char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
 
@@ -3405,7 +3424,180 @@ void set_acl(int argc, char **argv, int optindex)
 
     do {
         S3_set_acl(&bucketContext, key, ownerId, ownerDisplayName,
-                   aclGrantCount, aclGrants, 0, &responseHandler, 0);
+                   aclGrantCount, aclGrants, 0,
+                   timeoutMsG, &responseHandler, 0);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+
+    if (statusG != S3StatusOK) {
+        printError();
+    }
+
+    fclose(infile);
+
+    S3_deinitialize();
+}
+
+// get lifecycle -------------------------------------------------------------------
+
+void get_lifecycle(int argc, char **argv, int optindex)
+{
+    if (optindex == argc) {
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
+        usageExit(stderr);
+    }
+
+    const char *bucketName = argv[optindex++];
+
+    const char *filename = 0;
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    FILE *outfile = 0;
+
+    if (filename) {
+        // Stat the file, and if it doesn't exist, open it in w mode
+        struct stat buf;
+        if (stat(filename, &buf) == -1) {
+            outfile = fopen(filename, "w" FOPEN_EXTRA_FLAGS);
+        }
+        else {
+            // Open in r+ so that we don't truncate the file, just in case
+            // there is an error and we write no bytes, we leave the file
+            // unmodified
+            outfile = fopen(filename, "r+" FOPEN_EXTRA_FLAGS);
+        }
+
+        if (!outfile) {
+            fprintf(stderr, "\nERROR: Failed to open output file %s: ",
+                    filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else if (showResponsePropertiesG) {
+        fprintf(stderr, "\nERROR: getlifecycle -s requires a filename parameter\n");
+        usageExit(stderr);
+    }
+    else {
+        outfile = stdout;
+    }
+
+    char lifecycleBuffer[64 * 1024];
+
+    S3_init();
+
+    S3BucketContext bucketContext =
+    {
+        0,
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG,
+        0,
+        awsRegionG
+    };
+
+    S3ResponseHandler responseHandler =
+    {
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    do {
+        S3_get_lifecycle(&bucketContext,
+                         lifecycleBuffer, sizeof(lifecycleBuffer),
+                         0, timeoutMsG, &responseHandler, 0);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+
+    if (statusG == S3StatusOK) {
+        fprintf(outfile, "%s", lifecycleBuffer);
+    }
+    else {
+        printError();
+    }
+
+    fclose(outfile);
+
+    S3_deinitialize();
+}
+
+
+// set lifecycle -------------------------------------------------------------------
+
+void set_lifecycle(int argc, char **argv, int optindex)
+{
+    if (optindex == argc) {
+        fprintf(stderr, "\nERROR: Missing parameter: bucket\n");
+        usageExit(stderr);
+    }
+
+    const char *bucketName = argv[optindex++];
+
+    const char *filename = 0;
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+            filename = &(param[FILENAME_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    FILE *infile;
+
+    if (filename) {
+        if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
+            fprintf(stderr, "\nERROR: Failed to open input file %s: ",
+                    filename);
+            perror(0);
+            exit(-1);
+        }
+    }
+    else {
+        infile = stdin;
+    }
+
+    // Read in the complete ACL
+    char lifecycleBuf[65536];
+    lifecycleBuf[fread(lifecycleBuf, 1, sizeof(lifecycleBuf) - 1, infile)] = 0;
+
+    S3_init();
+
+    S3BucketContext bucketContext =
+    {
+        0,
+        bucketName,
+        protocolG,
+        uriStyleG,
+        accessKeyIdG,
+        secretAccessKeyG,
+        0,
+        awsRegionG
+    };
+
+    S3ResponseHandler responseHandler =
+    {
+        &responsePropertiesCallback,
+        &responseCompleteCallback
+    };
+
+    do {
+        S3_set_lifecycle(&bucketContext,
+                         lifecycleBuf,
+                         0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3499,7 +3691,8 @@ void get_logging(int argc, char **argv, int optindex)
 
     do {
         S3_get_server_access_logging(&bucketContext, targetBucket, targetPrefix,
-                                     &aclGrantCount, aclGrants, 0, 
+                                     &aclGrantCount, aclGrants, 0,
+                                     timeoutMsG,
                                      &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
@@ -3509,7 +3702,7 @@ void get_logging(int argc, char **argv, int optindex)
             if (targetPrefix[0]) {
                 printf("Target Prefix: %s\n", targetPrefix);
             }
-            fprintf(outfile, "%-6s  %-90s  %-12s\n", " Type", 
+            fprintf(outfile, "%-6s  %-90s  %-12s\n", " Type",
                     "                                   User Identifier",
                     " Permission");
             fprintf(outfile, "------  "
@@ -3519,7 +3712,7 @@ void get_logging(int argc, char **argv, int optindex)
             for (i = 0; i < aclGrantCount; i++) {
                 S3AclGrant *grant = &(aclGrants[i]);
                 const char *type;
-                char composedId[S3_MAX_GRANTEE_USER_ID_SIZE + 
+                char composedId[S3_MAX_GRANTEE_USER_ID_SIZE +
                                 S3_MAX_GRANTEE_DISPLAY_NAME_SIZE + 16];
                 const char *id;
 
@@ -3597,7 +3790,7 @@ void set_logging(int argc, char **argv, int optindex)
         if (!strncmp(param, TARGET_BUCKET_PREFIX, TARGET_BUCKET_PREFIX_LEN)) {
             targetBucket = &(param[TARGET_BUCKET_PREFIX_LEN]);
         }
-        else if (!strncmp(param, TARGET_PREFIX_PREFIX, 
+        else if (!strncmp(param, TARGET_PREFIX_PREFIX,
                           TARGET_PREFIX_PREFIX_LEN)) {
             targetPrefix = &(param[TARGET_PREFIX_PREFIX_LEN]);
         }
@@ -3666,9 +3859,10 @@ void set_logging(int argc, char **argv, int optindex)
     };
 
     do {
-        S3_set_server_access_logging(&bucketContext, targetBucket, 
-                                     targetPrefix, aclGrantCount, aclGrants, 
-                                     0, &responseHandler, 0);
+        S3_set_server_access_logging(&bucketContext, targetBucket,
+                                     targetPrefix, aclGrantCount, aclGrants,
+                                     0,
+                                     timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
@@ -3686,7 +3880,7 @@ int main(int argc, char **argv)
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "vfhusr:g:", longOptionsG, &idx);
+        int c = getopt_long(argc, argv, "vfhusr:t:g:", longOptionsG, &idx);
 
         if (c == -1) {
             // End of options
@@ -3712,6 +3906,16 @@ int main(int argc, char **argv)
             while (*v) {
                 retriesG *= 10;
                 retriesG += *v - '0';
+                v++;
+            }
+            }
+            break;
+        case 't': {
+            const char *v = optarg;
+            timeoutMsG = 0;
+            while (*v) {
+                timeoutMsG *= 10;
+                timeoutMsG += *v - '0';
                 v++;
             }
             }
@@ -3750,7 +3954,7 @@ int main(int argc, char **argv)
     }
     secretAccessKeyG = getenv("S3_SECRET_ACCESS_KEY");
     if (!secretAccessKeyG) {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "Missing environment variable: S3_SECRET_ACCESS_KEY\n");
         return -1;
     }
@@ -3766,7 +3970,7 @@ int main(int argc, char **argv)
     }
     else if (!strcmp(command, "delete")) {
         if (optind == argc) {
-            fprintf(stderr, 
+            fprintf(stderr,
                     "\nERROR: Missing parameter: bucket or bucket/key\n");
             usageExit(stderr);
         }
@@ -3805,6 +4009,12 @@ int main(int argc, char **argv)
     }
     else if (!strcmp(command, "setacl")) {
         set_acl(argc, argv, optind);
+    }
+    else if (!strcmp(command, "getlifecycle")) {
+        get_lifecycle(argc, argv, optind);
+    }
+    else if (!strcmp(command, "setlifecycle")) {
+        set_lifecycle(argc, argv, optind);
     }
     else if (!strcmp(command, "getlogging")) {
         get_logging(argc, argv, optind);
