@@ -274,10 +274,20 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
 void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
+                   const char *versionId,
                    S3RequestContext *requestContext,
                    int timeoutMs,
                    const S3GetObjectHandler *handler, void *callbackData)
 {
+    string_buffer(queryParams, 1040);
+    string_buffer_initialize(queryParams);
+    int amp = 0;
+
+    if (versionId) {
+        string_buffer_safe_append(queryParams, "versionId", versionId,
+                                  &handler->responseHandler);
+    }
+
     // Set up the RequestParams
     RequestParams params =
     {
@@ -291,7 +301,7 @@ void S3_get_object(const S3BucketContext *bucketContext, const char *key,
           bucketContext->securityToken,               // securityToken
           bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
+        queryParams[0] ? queryParams : 0,             // queryParams
         0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey
@@ -358,10 +368,19 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
 // delete object --------------------------------------------------------------
 
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
+                      const char *versionId,
                       S3RequestContext *requestContext,
                       int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData)
 {
+    string_buffer(queryParams, 1040);
+    string_buffer_initialize(queryParams);
+    int amp = 0;
+
+    if (versionId) {
+        string_buffer_safe_append(queryParams, "versionId", versionId, handler);
+    }
+
     // Set up the RequestParams
     RequestParams params =
     {
@@ -375,7 +394,7 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
           bucketContext->securityToken,               // securityToken
           bucketContext->authRegion },                // authRegion
         key,                                          // key
-        0,                                            // queryParams
+        queryParams[0] ? queryParams : 0,             // queryParams
         0,                                            // subResource
         0,                                            // copySourceBucketName
         0,                                            // copySourceKey

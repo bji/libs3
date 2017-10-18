@@ -615,6 +615,19 @@ typedef struct S3ResponseProperties
      * encryption is in effect for the object.
      **/
     char usesServerSideEncryption;
+
+    /**
+     * Version ID of the object. 'null' if object was created before
+     * versioning was enabled on the corresponding bucket or while bucket
+     * versioning was suspended.
+     **/
+    const char *versionId;
+
+    /**
+     * deleteMarker is set to non zero if last version of the object
+     * has been deleted.
+     **/
+    char deleteMarker;
 } S3ResponseProperties;
 
 
@@ -769,6 +782,24 @@ typedef struct S3ListBucketContent
      * access permissions allow it to be viewed.
      **/
     const char *ownerDisplayName;
+
+    /**
+     * Is this the latest version of the object
+     * (only applies to listings with versions)
+     **/
+    char isLatest;
+
+    /**
+     * Is this a DeleteMarker
+     * (only applies to listings with versions)
+     **/
+    char isDeleteMarker;
+
+    /**
+     * Version id of the object
+     * (only applies to listings with versions)
+     **/
+    const char *versionId;
 } S3ListBucketContent;
 
 
@@ -1069,6 +1100,9 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
  *        returned in the response, which, if isTruncated is true, may be used
  *        as the marker in a subsequent list buckets operation to continue
  *        listing
+ * @param nextVersionId if present, gives the version of the nextMarker to be
+ *        used with subsequent list bucket operation if current result was
+ *        truncated (only used when versions is set in the list bucket operation)
  * @param contentsCount is the number of ListBucketContent structures in the
  *        contents parameter
  * @param contents is an array of ListBucketContent structures, each one
@@ -1087,6 +1121,7 @@ typedef S3Status (S3ListServiceCallback)(const char *ownerId,
  **/
 typedef S3Status (S3ListBucketCallback)(int isTruncated,
                                         const char *nextMarker,
+                                        const char *nextVersionId,
                                         int contentsCount,
                                         const S3ListBucketContent *contents,
                                         int commonPrefixesCount,
@@ -1906,6 +1941,9 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
  *        same string between the prefix and the first occurrence of the
  *        delimiter to be rolled up into a single result element
  * @param maxkeys is the maximum number of keys to return
+ * @param versions is to request list of each object versions
+ * @param versionIdMarker is another continuation token only used when
+ *        versions is set
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -1918,6 +1956,7 @@ void S3_delete_bucket(S3Protocol protocol, S3UriStyle uriStyle,
 void S3_list_bucket(const S3BucketContext *bucketContext,
                     const char *prefix, const char *marker,
                     const char *delimiter, int maxkeys,
+                    int versions, const char *versionIdMarker,
                     S3RequestContext *requestContext,
                     int timeoutMs,
                     const S3ListBucketHandler *handler, void *callbackData);
@@ -2067,6 +2106,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext,
  *        to be returned
  * @param byteCount gives the number of bytes to return; a value of 0
  *        indicates that the contents up to the end should be returned
+ * @param versionId if non-NULL, get specified version of the object
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -2079,6 +2119,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext,
 void S3_get_object(const S3BucketContext *bucketContext, const char *key,
                    const S3GetConditions *getConditions,
                    uint64_t startByte, uint64_t byteCount,
+                   const char *versionId,
                    S3RequestContext *requestContext,
                    int timeoutMs,
                    const S3GetObjectHandler *handler, void *callbackData);
@@ -2110,6 +2151,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
  * @param bucketContext gives the bucket and associated parameters for this
  *        request
  * @param key is the key of the object to delete
+ * @param versionId if non-NULL, delete specified version of the object
  * @param requestContext if non-NULL, gives the S3RequestContext to add this
  *        request to, and does not perform the request immediately.  If NULL,
  *        performs the request immediately and synchronously.
@@ -2120,6 +2162,7 @@ void S3_head_object(const S3BucketContext *bucketContext, const char *key,
  *        all callbacks for this request
  **/
 void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
+                      const char *versionId,
                       S3RequestContext *requestContext,
                       int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData);

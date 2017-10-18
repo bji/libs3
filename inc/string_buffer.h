@@ -104,4 +104,41 @@
     } while (0)
 
 
+#define string_buffer_safe_append(sb, name, value, rsp_handler)         \
+    do {                                                                \
+        int fit;                                                        \
+        if (amp) {                                                      \
+            string_buffer_append(sb, "&", 1, fit);                      \
+            if (!fit) {                                                 \
+                (*((rsp_handler)->completeCallback))                    \
+                    (S3StatusQueryParamsTooLong, 0, callbackData);      \
+                return;                                                 \
+            }                                                           \
+        }                                                               \
+        string_buffer_append(sb, name "=",                              \
+                             sizeof(name "=") - 1, fit);                \
+        if (!fit) {                                                     \
+            (*((rsp_handler)->completeCallback))                        \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
+            return;                                                     \
+        }                                                               \
+        amp = 1;                                                        \
+        if (value == NULL)                                              \
+            break;                                                      \
+        char encoded[3 * 1024];                                         \
+        if (!urlEncode(encoded, value, 1024, 1)) {                      \
+            (*((rsp_handler)->completeCallback))                        \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
+            return;                                                     \
+        }                                                               \
+        string_buffer_append(sb, encoded, strlen(encoded),              \
+                             fit);                                      \
+        if (!fit) {                                                     \
+            (*((rsp_handler)->completeCallback))                        \
+                (S3StatusQueryParamsTooLong, 0, callbackData);          \
+            return;                                                     \
+        }                                                               \
+    } while (0)
+
+
 #endif /* STRING_BUFFER_H */

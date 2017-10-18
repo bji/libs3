@@ -87,4 +87,10 @@ uint64_t parseUnsignedInt(const char *str);
 // easy function to write in any case
 int is_blank(char c);
 
+static inline int parseIsTrue(const char *str, int len)
+{
+    return ((len == 4 && str[0] == 't' && str[1] == 'r' && str[2] == 'u' && str[3] == 'e') ||
+            (len == 1 && str[0] == '1'));
+}
+
 #endif /* UTIL_H */
