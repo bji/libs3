@@ -1301,6 +1301,7 @@ static void request_deinitialize(Request *request)
 
 static S3Status request_get(const RequestParams *params,
                             const RequestComputedValues *values,
+                            const S3RequestContext *context,
                             Request **reqReturn)
 {
     Request *request = 0;
@@ -1355,6 +1356,15 @@ static S3Status request_get(const RequestParams *params,
 
     // Set all of the curl handle options
     if ((status = setup_curl(request, params, values)) != S3StatusOK) {
+        curl_easy_cleanup(request->curl);
+        free(request);
+        return status;
+    }
+
+    if (context && context->setupCurlCallback &&
+        (status = context->setupCurlCallback(
+                context->curlm, request->curl,
+                context->setupCurlCallbackData)) != S3StatusOK) {
         curl_easy_cleanup(request->curl);
         free(request);
         return status;
@@ -1548,7 +1558,7 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     }
 
     // Get an initialized Request structure now
-    if ((status = request_get(params, &computed, &request)) != S3StatusOK) {
+    if ((status = request_get(params, &computed, context, &request)) != S3StatusOK) {
         return_status(status);
     }
     if (context && context->verifyPeerSet) {
