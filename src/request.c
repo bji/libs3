@@ -796,7 +796,9 @@ static void canonicalize_resource(const S3BucketContext *context,
         }
     }
 
-    append("/");
+    if(*urlEncodedKey != '/') {
+        append("/");
+    }
 
     if (urlEncodedKey && urlEncodedKey[0]) {
         append(urlEncodedKey);
@@ -1111,7 +1113,9 @@ static S3Status compose_uri(char *buffer, int bufferSize,
         uri_append("%s", hostName);
     }
 
-    uri_append("%s", "/");
+    if(*urlEncodedKey != '/') {
+        uri_append("%s", "/");
+    }
 
     uri_append("%s", urlEncodedKey);
 
