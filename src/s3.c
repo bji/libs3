@@ -2282,6 +2282,9 @@ static void put_object(int argc, char **argv, int optindex,
             else if (!strcmp(val, "public-read-write")) {
                 cannedAcl = S3CannedAclPublicReadWrite;
             }
+            else if (!strcmp(val, "bucket-owner-full-control")) {
+                cannedAcl = S3CannedAclBucketOwnerFullControl;
+            }
             else if (!strcmp(val, "authenticated-read")) {
                 cannedAcl = S3CannedAclAuthenticatedRead;
             }

@@ -498,7 +498,8 @@ typedef enum
     S3CannedAclPrivate                  = 0, /* private */
     S3CannedAclPublicRead               = 1, /* public-read */
     S3CannedAclPublicReadWrite          = 2, /* public-read-write */
-    S3CannedAclAuthenticatedRead        = 3  /* authenticated-read */
+    S3CannedAclAuthenticatedRead        = 3, /* authenticated-read */
+    S3CannedAclBucketOwnerFullControl   = 4  /* bucket-owner-full-control */
 } S3CannedAcl;
 
 
