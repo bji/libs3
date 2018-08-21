@@ -2201,9 +2201,9 @@ static void put_object(int argc, char **argv, int optindex,
                           CONTENT_LENGTH_PREFIX_LEN)) {
             contentLength = convertInt(&(param[CONTENT_LENGTH_PREFIX_LEN]),
                                        "contentLength");
-            if (contentLength > (5LL * 1024 * 1024 * 1024)) {
+            if (contentLength > (5LL * 1024 * 1024 * 1024 * 1024)) {
                 fprintf(stderr, "\nERROR: contentLength must be no greater "
-                        "than 5 GB\n");
+                        "than 5 TB\n");
                 usageExit(stderr);
             }
         }
