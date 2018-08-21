@@ -426,7 +426,7 @@ typedef struct growbuffer
 // returns nonzero on success, zero on out of memory
 static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
 {
-    int toCopy = 0 ;
+    int origDataLen = dataLen;
     while (dataLen) {
         growbuffer *buf = *gb ? (*gb)->prev : 0;
         if (!buf || (buf->size == sizeof(buf->data))) {
@@ -448,7 +448,7 @@ static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
             }
         }
 
-        toCopy = (sizeof(buf->data) - buf->size);
+        int toCopy = (sizeof(buf->data) - buf->size);
         if (toCopy > dataLen) {
             toCopy = dataLen;
         }
@@ -458,7 +458,7 @@ static int growbuffer_append(growbuffer **gb, const char *data, int dataLen)
         buf->size += toCopy, data += toCopy, dataLen -= toCopy;
     }
 
-    return toCopy;
+    return origDataLen;
 }
 
 
