@@ -2057,7 +2057,7 @@ static int putObjectDataCallback(int bufferSize, char *buffer,
     return ret;
 }
 
-#define MULTIPART_CHUNK_SIZE (15 << 20) // multipart is 15M
+#define MULTIPART_CHUNK_SIZE (768 << 20) // multipart is 768M
 
 typedef struct MultipartPartData {
     put_object_callback_data put_object_data;
