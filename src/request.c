@@ -1719,7 +1719,9 @@ S3Status request_curl_code_to_status(CURLcode code)
 #else
     case CURLE_SSL_PEER_CERTIFICATE:
 #endif
+#if LIBCURL_VERSION_NUM < 0x073e00
     case CURLE_SSL_CACERT:
+#endif
         return S3StatusServerFailedVerification;
     default:
         return S3StatusInternalError;
