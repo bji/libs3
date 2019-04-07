@@ -25,7 +25,7 @@ if [ -z "$TEST_BUCKET_PREFIX" ]; then
 fi
 
 if [ -z "$S3_COMMAND" ]; then
-    S3_COMMAND=s3
+    S3_COMMAND="s3 -u"
 fi
 
 failures=0
@@ -68,6 +68,14 @@ diff seqdata testkey
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 rm -f seqdata testkey
 
+# Head bucket and object
+echo "$S3_COMMAND head $TEST_BUCKET"
+$S3_COMMAND head $TEST_BUCKET
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+echo "$S3_COMMAND head $TEST_BUCKET/testkey"
+$S3_COMMAND head $TEST_BUCKET/testkey
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+
 # Delete the file
 echo "$S3_COMMAND delete $TEST_BUCKET/testkey"
 $S3_COMMAND delete $TEST_BUCKET/testkey
@@ -78,11 +86,13 @@ echo "$S3_COMMAND delete $TEST_BUCKET"
 $S3_COMMAND delete $TEST_BUCKET
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
-# Make sure it's not there
+echo failures:$failures
+# Make sure it's not there, the failures will be added when it's normal
 echo "$S3_COMMAND list | grep $TEST_BUCKET"
 $S3_COMMAND list | grep $TEST_BUCKET
 failures=$(($failures + (($? == 1) ? 0 : 1)))
 
+echo failures:$failures
 # Now create it again
 echo "$S3_COMMAND create $TEST_BUCKET"
 $S3_COMMAND create $TEST_BUCKET
@@ -129,6 +139,7 @@ diff key_5 copykey
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 rm -f key_5 copykey
 
+echo failures:$failures
 # Delete the files
 for i in `seq 0 9`; do
     echo "$S3_COMMAND delete $TEST_BUCKET/key_$i"
@@ -149,6 +160,7 @@ echo "$S3_COMMAND put $TEST_BUCKET/aclkey < /dev/null"
 $S3_COMMAND put $TEST_BUCKET/aclkey < /dev/null
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
+echo failures:$failures
 # Get the bucket acl
 rm -f acl
 echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl"
@@ -166,7 +178,7 @@ echo "$S3_COMMAND setacl $TEST_BUCKET filename=acl"
 $S3_COMMAND setacl $TEST_BUCKET filename=acl
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
-# Test to make sure that it worked
+# Test to make sure that it worked, the failures will be added when using ceph s3
 rm -f acl_new
 echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl_new"
 $S3_COMMAND getacl $TEST_BUCKET filename=acl_new
@@ -192,7 +204,7 @@ echo "$S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl"
 $S3_COMMAND setacl $TEST_BUCKET/aclkey filename=acl
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 
-# Test to make sure that it worked
+# Test to make sure that it worked, the failures will be added when using ceph s3
 rm -f acl_new
 echo "$S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new"
 $S3_COMMAND getacl $TEST_BUCKET/aclkey filename=acl_new
@@ -212,6 +224,38 @@ failures=$(($failures + (($? == 0) ? 0 : 1)))
 diff mpfile mpfile.get
 failures=$(($failures + (($? == 0) ? 0 : 1)))
 rm -f mpfile mpfile.get
+
+rm -f lifecycleconf lifecycleconf_new
+echo -n '<?xml version="1.0" encoding="UTF-8"?><LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Rule><ID>Rule1</ID><Filter><Prefix>logs/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>3</Days></Expiration></Rule></LifecycleConfiguration>' > lifecycleconf
+echo "$S3_COMMAND setlifecycle $TEST_BUCKET filename=lifecycleconf"
+$S3_COMMAND setlifecycle $TEST_BUCKET filename=lifecycleconf
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+echo "$S3_COMMAND getlifecycle $TEST_BUCKET filename=lifecycleconf_new"
+$S3_COMMAND getlifecycle $TEST_BUCKET filename=lifecycleconf_new
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+diff lifecycleconf lifecycleconf_new
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+
+
+rm -f acl
+echo "$S3_COMMAND getacl $TEST_BUCKET filename=acl"
+$S3_COMMAND getacl $TEST_BUCKET filename=acl
+cat <<EOF >> acl
+Group   Authenticated AWS Users                                                                   READ
+Group   All Users                                                                                 READ_ACP
+UserID  LogDeliver (LogDeliver)                                                                   WRITE
+UserID  LogDeliver (LogDeliver)                                                                   READ_ACP
+EOF
+$S3_COMMAND create $TEST_BUCKET-log
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+echo "$S3_COMMAND setacl $TEST_BUCKET-log filename=acl"
+$S3_COMMAND setacl $TEST_BUCKET-log filename=acl
+echo "$S3_COMMAND setlogging $TEST_BUCKET targetBucket=$TEST_BUCKET-log"
+$S3_COMMAND setlogging $TEST_BUCKET targetBucket=$TEST_BUCKET-log
+failures=$(($failures + (($? == 0) ? 0 : 1)))
+echo "$S3_COMMAND getlogging $TEST_BUCKET"
+$S3_COMMAND getlogging $TEST_BUCKET
+failures=$(($failures + (($? == 0) ? 0 : 1)))
 
 # Remove the test files
 echo "$S3_COMMAND delete $TEST_BUCKET/mpfile"

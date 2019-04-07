@@ -3032,12 +3032,14 @@ static void head_object(int argc, char **argv, int optindex)
     while (*slash && (*slash != '/')) {
         slash++;
     }
-    if (!*slash || !*(slash + 1)) {
-        fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
-                argv[optindex]);
-        usageExit(stderr);
+    //if (!*slash || !*(slash + 1)) {
+    //    fprintf(stderr, "\nERROR: Invalid bucket/key name: %s\n",
+    //            argv[optindex]);
+    //    usageExit(stderr);
+    //}
+    if (*slash) {
+        *slash++ = 0;
     }
-    *slash++ = 0;
 
     const char *bucketName = argv[optindex++];
     const char *key = slash;
@@ -3783,7 +3785,8 @@ void set_logging(int argc, char **argv, int optindex)
 
     const char *bucketName = argv[optindex++];
 
-    const char *targetBucket = 0, *targetPrefix = 0, *filename = 0;
+    //const char *targetBucket = 0, *targetPrefix = 0, *filename = 0;
+    const char *targetBucket = 0, *targetPrefix = 0;
 
     while (optindex < argc) {
         char *param = argv[optindex++];
@@ -3794,49 +3797,49 @@ void set_logging(int argc, char **argv, int optindex)
                           TARGET_PREFIX_PREFIX_LEN)) {
             targetPrefix = &(param[TARGET_PREFIX_PREFIX_LEN]);
         }
-        else if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
-            filename = &(param[FILENAME_PREFIX_LEN]);
-        }
+        //else if (!strncmp(param, FILENAME_PREFIX, FILENAME_PREFIX_LEN)) {
+        //    filename = &(param[FILENAME_PREFIX_LEN]);
+        //}
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
             usageExit(stderr);
         }
     }
 
-    int aclGrantCount = 0;
-    S3AclGrant aclGrants[S3_MAX_ACL_GRANT_COUNT];
+    //int aclGrantCount = 0;
+    //S3AclGrant aclGrants[S3_MAX_ACL_GRANT_COUNT];
 
-    if (targetBucket) {
-        FILE *infile;
+    //if (targetBucket) {
+    //    FILE *infile;
 
-        if (filename) {
-            if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
-                fprintf(stderr, "\nERROR: Failed to open input file %s: ",
-                        filename);
-                perror(0);
-                exit(-1);
-            }
-        }
-        else {
-            infile = stdin;
-        }
+    //    if (filename) {
+    //        if (!(infile = fopen(filename, "r" FOPEN_EXTRA_FLAGS))) {
+    //            fprintf(stderr, "\nERROR: Failed to open input file %s: ",
+    //                    filename);
+    //            perror(0);
+    //            exit(-1);
+    //        }
+    //    }
+    //    else {
+    //        infile = stdin;
+    //    }
 
-        // Read in the complete ACL
-        char aclBuf[65536];
-        aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
-        char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
-        char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
+    //    // Read in the complete ACL
+    //    char aclBuf[65536];
+    //    aclBuf[fread(aclBuf, 1, sizeof(aclBuf), infile)] = 0;
+    //    char ownerId[S3_MAX_GRANTEE_USER_ID_SIZE];
+    //    char ownerDisplayName[S3_MAX_GRANTEE_DISPLAY_NAME_SIZE];
 
-        // Parse it
-        if (!convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
-                                &aclGrantCount, aclGrants)) {
-            fprintf(stderr, "\nERROR: Failed to parse ACLs\n");
-            fclose(infile);
-            exit(-1);
-        }
+    //    // Parse it
+    //    if (!convert_simple_acl(aclBuf, ownerId, ownerDisplayName,
+    //                            &aclGrantCount, aclGrants)) {
+    //        fprintf(stderr, "\nERROR: Failed to parse ACLs\n");
+    //        fclose(infile);
+    //        exit(-1);
+    //    }
 
-        fclose(infile);
-    }
+    //    fclose(infile);
+    //}
 
     S3_init();
 
@@ -3860,7 +3863,7 @@ void set_logging(int argc, char **argv, int optindex)
 
     do {
         S3_set_server_access_logging(&bucketContext, targetBucket,
-                                     targetPrefix, aclGrantCount, aclGrants,
+                                     targetPrefix, 0, 0,
                                      0,
                                      timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
