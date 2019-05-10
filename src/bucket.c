@@ -426,6 +426,9 @@ typedef struct ListBucketContents
     string_buffer(size, 24);
     string_buffer(ownerId, 256);
     string_buffer(ownerDisplayName, 256);
+    string_buffer(versionId, 1024);
+    char isLatest;
+    char isDeleteMarker;
 } ListBucketContents;
 
 
@@ -437,6 +440,9 @@ static void initialize_list_bucket_contents(ListBucketContents *contents)
     string_buffer_initialize(contents->size);
     string_buffer_initialize(contents->ownerId);
     string_buffer_initialize(contents->ownerDisplayName);
+    string_buffer_initialize(contents->versionId);
+    contents->isLatest = -1;
+    contents->isDeleteMarker = 0;
 }
 
 // We read up to 32 Contents at a time
@@ -455,6 +461,7 @@ typedef struct ListBucketData
 
     string_buffer(isTruncated, 64);
     string_buffer(nextMarker, 1024);
+    string_buffer(nextVersionId, 1024);
 
     int contentsCount;
     ListBucketContents contents[MAX_CONTENTS];
@@ -499,6 +506,10 @@ static S3Status make_list_bucket_callback(ListBucketData *lbData)
             contentSrc->ownerId[0] ?contentSrc->ownerId : 0;
         contentDest->ownerDisplayName = (contentSrc->ownerDisplayName[0] ?
                                          contentSrc->ownerDisplayName : 0);
+        contentDest->isLatest = contentSrc->isLatest;
+        contentDest->isDeleteMarker = contentSrc->isDeleteMarker;
+        contentDest->versionId = (contentSrc->versionId[0] ?
+                                  contentSrc->versionId : 0);
     }
 
     // Make the common prefixes array
@@ -509,7 +520,7 @@ static S3Status make_list_bucket_callback(ListBucketData *lbData)
     }
 
     return (*(lbData->listBucketCallback))
-        (isTruncated, lbData->nextMarker,
+        (isTruncated, lbData->nextMarker, lbData->nextVersionId,
          contentsCount, contents, commonPrefixesCount,
          (const char **) commonPrefixes, lbData->callbackData);
 }
@@ -524,44 +535,75 @@ static S3Status listBucketXmlCallback(const char *elementPath,
     int fit;
 
     if (data) {
-        if (!strcmp(elementPath, "ListBucketResult/IsTruncated")) {
+        if (!strcmp(elementPath, "ListBucketResult/IsTruncated") ||
+            !strcmp(elementPath, "ListVersionsResult/IsTruncated")) {
             string_buffer_append(lbData->isTruncated, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListBucketResult/NextMarker")) {
+        else if (!strcmp(elementPath, "ListBucketResult/NextMarker") ||
+                 !strcmp(elementPath, "ListVersionsResult/NextKeyMarker")) {
             string_buffer_append(lbData->nextMarker, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListBucketResult/Contents/Key")) {
+        else if (!strcmp(elementPath, "ListVersionsResult/NextVersionIdMarker")) {
+            string_buffer_append(lbData->nextVersionId, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Key") ||
+                 !strcmp(elementPath, "ListVersionsResult/Version/Key") ||
+                 !strcmp(elementPath, "ListVersionsResult/DeleteMarker/Key")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append(contents->key, data, dataLen, fit);
         }
         else if (!strcmp(elementPath,
-                         "ListBucketResult/Contents/LastModified")) {
+                         "ListBucketResult/Contents/LastModified") ||
+                 !strcmp(elementPath,
+                         "ListVersionsResult/Version/LastModified") ||
+                 !strcmp(elementPath,
+                         "ListVersionsResult/DeleteMarker/LastModified")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append(contents->lastModified, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListBucketResult/Contents/ETag")) {
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/ETag") ||
+                 !strcmp(elementPath, "ListVersionsResult/Version/ETag")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append(contents->eTag, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListBucketResult/Contents/Size")) {
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Size") ||
+                 !strcmp(elementPath, "ListVersionsResult/Version/Size")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append(contents->size, data, dataLen, fit);
         }
-        else if (!strcmp(elementPath, "ListBucketResult/Contents/Owner/ID")) {
+        else if (!strcmp(elementPath, "ListBucketResult/Contents/Owner/ID") ||
+                 !strcmp(elementPath, "ListVersionsResult/Version/Owner/ID") ||
+                 !strcmp(elementPath, "ListVersionsResult/DeleteMarker/Owner/ID")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append(contents->ownerId, data, dataLen, fit);
         }
         else if (!strcmp(elementPath,
-                         "ListBucketResult/Contents/Owner/DisplayName")) {
+                         "ListBucketResult/Contents/Owner/DisplayName") ||
+                 !strcmp(elementPath,
+                         "ListVersionsResult/Version/Owner/DisplayName") ||
+                 !strcmp(elementPath,
+                         "ListVersionsResult/DeleteMarker/Owner/DisplayName")) {
             ListBucketContents *contents =
                 &(lbData->contents[lbData->contentsCount]);
             string_buffer_append
                 (contents->ownerDisplayName, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListVersionsResult/Version/VersionId") ||
+                 !strcmp(elementPath, "ListVersionsResult/DeleteMarker/VersionId")) {
+            ListBucketContents *contents =
+                &(lbData->contents[lbData->contentsCount]);
+            string_buffer_append(contents->versionId, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "ListVersionsResult/Version/IsLatest") ||
+                 !strcmp(elementPath, "ListVersionsResult/DeleteMarker/IsLatest")) {
+            ListBucketContents *contents =
+                &(lbData->contents[lbData->contentsCount]);
+            contents->isLatest = parseIsTrue(data, dataLen);
         }
         else if (!strcmp(elementPath,
                          "ListBucketResult/CommonPrefixes/Prefix")) {
@@ -579,7 +621,11 @@ static S3Status listBucketXmlCallback(const char *elementPath,
         }
     }
     else {
-        if (!strcmp(elementPath, "ListBucketResult/Contents")) {
+        if (!strcmp(elementPath, "ListBucketResult/Contents") ||
+            !strcmp(elementPath, "ListVersionsResult/Version") ||
+            !strcmp(elementPath, "ListVersionsResult/DeleteMarker")) {
+            lbData->contents[lbData->contentsCount].isDeleteMarker =
+                !strcmp(elementPath, "ListVersionsResult/DeleteMarker");
             // Finished a Contents
             lbData->contentsCount++;
             if (lbData->contentsCount == MAX_CONTENTS) {
@@ -664,6 +710,7 @@ static void listBucketCompleteCallback(S3Status requestStatus,
 
 void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
                     const char *marker, const char *delimiter, int maxkeys,
+                    int versions, const char *versionIdMarker,
                     S3RequestContext *requestContext,
                     int timeoutMs,
                     const S3ListBucketHandler *handler, void *callbackData)
@@ -672,55 +719,36 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
     string_buffer(queryParams, 4096);
     string_buffer_initialize(queryParams);
 
-#define safe_append(name, value)                                        \
-    do {                                                                \
-        int fit;                                                        \
-        if (amp) {                                                      \
-            string_buffer_append(queryParams, "&", 1, fit);             \
-            if (!fit) {                                                 \
-                (*(handler->responseHandler.completeCallback))          \
-                    (S3StatusQueryParamsTooLong, 0, callbackData);      \
-                return;                                                 \
-            }                                                           \
-        }                                                               \
-        string_buffer_append(queryParams, name "=",                     \
-                             sizeof(name "=") - 1, fit);                \
-        if (!fit) {                                                     \
-            (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, callbackData);          \
-            return;                                                     \
-        }                                                               \
-        amp = 1;                                                        \
-        char encoded[3 * 1024];                                         \
-        if (!urlEncode(encoded, value, 1024, 1)) {                   \
-            (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, callbackData);          \
-            return;                                                     \
-        }                                                               \
-        string_buffer_append(queryParams, encoded, strlen(encoded),     \
-                             fit);                                      \
-        if (!fit) {                                                     \
-            (*(handler->responseHandler.completeCallback))              \
-                (S3StatusQueryParamsTooLong, 0, callbackData);          \
-            return;                                                     \
-        }                                                               \
-    } while (0)
-
-
     int amp = 0;
     if (prefix && *prefix) {
-        safe_append("prefix", prefix);
+        string_buffer_safe_append(queryParams, "prefix", prefix,
+                                  &handler->responseHandler);
     }
     if (marker && *marker) {
-        safe_append("marker", marker);
+        if (versions)
+            string_buffer_safe_append(queryParams, "key-marker", marker,
+                                      &handler->responseHandler);
+        else
+            string_buffer_safe_append(queryParams, "marker", marker,
+                                      &handler->responseHandler);
     }
     if (delimiter && *delimiter) {
-        safe_append("delimiter", delimiter);
+        string_buffer_safe_append(queryParams, "delimiter", delimiter,
+                                  &handler->responseHandler);
     }
     if (maxkeys) {
         char maxKeysString[64];
         snprintf(maxKeysString, sizeof(maxKeysString), "%d", maxkeys);
-        safe_append("max-keys", maxKeysString);
+        string_buffer_safe_append(queryParams, "max-keys", maxKeysString,
+                                  &handler->responseHandler);
+    }
+    if (versions) {
+        string_buffer_safe_append(queryParams, "versions", NULL,
+                                  &handler->responseHandler);
+    }
+    if (versionIdMarker) {
+        string_buffer_safe_append(queryParams, "version-id-marker", versionIdMarker,
+                                  &handler->responseHandler);
     }
 
     ListBucketData *lbData =
@@ -743,6 +771,7 @@ void S3_list_bucket(const S3BucketContext *bucketContext, const char *prefix,
 
     string_buffer_initialize(lbData->isTruncated);
     string_buffer_initialize(lbData->nextMarker);
+    string_buffer_initialize(lbData->nextVersionId);
     initialize_list_bucket_data(lbData);
 
     // Set up the RequestParams

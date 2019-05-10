@@ -166,6 +166,10 @@ static char putenvBufG[256];
 #define TARGET_PREFIX_PREFIX_LEN (sizeof(TARGET_PREFIX_PREFIX) - 1)
 #define HTTP_METHOD_PREFIX "method="
 #define HTTP_METHOD_PREFIX_LEN (sizeof(HTTP_METHOD_PREFIX) - 1)
+#define VERSION_ID_PREFIX "versionId="
+#define VERSION_ID_PREFIX_LEN (sizeof(VERSION_ID_PREFIX) - 1)
+#define VERSIONS_PREFIX "versions="
+#define VERSIONS_PREFIX_LEN (sizeof(VERSIONS_PREFIX) - 1)
 
 
 // util ----------------------------------------------------------------------
@@ -241,6 +245,7 @@ static void usageExit(FILE *out)
 "\n"
 "   delete               : Delete a bucket or key\n"
 "     <bucket>[/<key>]   : Bucket or bucket/key to delete\n"
+"     [versionId]        : Optional version id of the object to delete\n"
 "\n"
 "   list                 : List bucket contents\n"
 "     <bucket>           : Bucket to list\n"
@@ -249,6 +254,8 @@ static void usageExit(FILE *out)
 "     [delimiter]        : Delimiter for rolling up results set\n"
 "     [maxkeys]          : Maximum number of keys to return in results set\n"
 "     [allDetails]       : Show full details for each key\n"
+"     [versions]         : Show all available versions for each key\n"
+"                          Flags: D=DeleteMarker, L=LastVersion\n"
 "\n"
 "   getacl               : Get the ACL of a bucket or key\n"
 "     <bucket>[/<key>]   : Bucket or bucket/key to get the ACL of\n"
@@ -333,6 +340,7 @@ static void usageExit(FILE *out)
 "                          match this string\n"
 "     [startByte]        : First byte of byte range to return\n"
 "     [byteCount]        : Number of bytes of byte range to return\n"
+"     [versionId]        : Optional version id of the object to get\n"
 "\n"
 "   head                 : Gets only the headers of an object, implies -s\n"
 "     <bucket>/<key>     : Bucket/key of object to get headers of\n"
@@ -815,6 +823,10 @@ static S3Status responsePropertiesCallback
     if (properties->usesServerSideEncryption) {
         printf("UsesServerSideEncryption: true\n");
     }
+    print_nonnull("Version-Id", versionId);
+    if (properties->deleteMarker) {
+        printf("DeleteMarker: true\n");
+    }
 
     return S3StatusOK;
 }
@@ -1138,16 +1150,22 @@ typedef struct list_bucket_callback_data
 {
     int isTruncated;
     char nextMarker[1024];
+    char nextVersionId[1024];
     int keyCount;
     int allDetails;
+    int versions;
 } list_bucket_callback_data;
 
 
-static void printListBucketHeader(int allDetails)
+static void printListBucketHeader(int allDetails, int versions)
 {
     printf("%-50s  %-20s  %-5s",
            "                       Key",
            "   Last Modified", "Size");
+    if (versions) {
+        printf("  Flags  %-32s",
+               "           Version ID");
+    }
     if (allDetails) {
         printf("  %-34s  %-64s  %-12s",
                "               ETag",
@@ -1157,6 +1175,9 @@ static void printListBucketHeader(int allDetails)
     printf("\n");
     printf("--------------------------------------------------  "
            "--------------------  -----");
+    if (versions) {
+        printf("  -----  --------------------------------");
+    }
     if (allDetails) {
         printf("  ----------------------------------  "
                "-------------------------------------------------"
@@ -1167,7 +1188,7 @@ static void printListBucketHeader(int allDetails)
 
 
 static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
-                                   int contentsCount,
+                                   const char *nextVersionId, int contentsCount,
                                    const S3ListBucketContent *contents,
                                    int commonPrefixesCount,
                                    const char **commonPrefixes,
@@ -1180,8 +1201,8 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
     // This is tricky.  S3 doesn't return the NextMarker if there is no
     // delimiter.  Why, I don't know, since it's still useful for paging
     // through results.  We want NextMarker to be the last content in the
-    // list, so set it to that if necessary.
-    if ((!nextMarker || !nextMarker[0]) && contentsCount) {
+    // list, so set it to that if necessary (only for list v1).
+    if ((!nextMarker || !nextMarker[0]) && contentsCount && !data->versions) {
         nextMarker = contents[contentsCount - 1].key;
     }
     if (nextMarker) {
@@ -1191,9 +1212,16 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
     else {
         data->nextMarker[0] = 0;
     }
+    if (nextVersionId) {
+        snprintf(data->nextVersionId, sizeof(data->nextVersionId), "%s",
+                 nextVersionId);
+    }
+    else {
+        data->nextVersionId[0] = 0;
+    }
 
     if (contentsCount && !data->keyCount) {
-        printListBucketHeader(data->allDetails);
+        printListBucketHeader(data->allDetails, data->versions);
     }
 
     int i;
@@ -1243,6 +1271,12 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
                 sprintf(sizebuf, "%1.2fG", f);
             }
             printf("%-50s  %s  %s", content->key, timebuf, sizebuf);
+            if (data->versions) {
+                printf("     %c%c  %-32s",
+                       content->isDeleteMarker ? 'D' : ' ',
+                       !content->isLatest ? ' ' : content->isLatest == 1 ? 'L' : '?',
+                       content->versionId);
+            }
             if (data->allDetails) {
                 printf("  %-34s  %-64s  %-12s",
                        content->eTag,
@@ -1266,7 +1300,7 @@ static S3Status listBucketCallback(int isTruncated, const char *nextMarker,
 
 static void list_bucket(const char *bucketName, const char *prefix,
                         const char *marker, const char *delimiter,
-                        int maxkeys, int allDetails)
+                        int maxkeys, int allDetails, int versions)
 {
     S3_init();
 
@@ -1295,14 +1329,18 @@ static void list_bucket(const char *bucketName, const char *prefix,
     } else {
         data.nextMarker[0] = 0;
     }
+    data.nextVersionId[0] = 0;
     data.keyCount = 0;
     data.allDetails = allDetails;
+    data.versions = versions;
 
     do {
         data.isTruncated = 0;
         do {
             S3_list_bucket(&bucketContext, prefix, data.nextMarker,
-                           delimiter, maxkeys, 0, timeoutMsG, &listBucketHandler, &data);
+                           delimiter, maxkeys, versions,
+                           data.nextVersionId[0] ? data.nextVersionId : NULL,
+                           0, timeoutMsG, &listBucketHandler, &data);
         } while (S3_status_is_retryable(statusG) && should_retry());
         if (statusG != S3StatusOK) {
             break;
@@ -1311,7 +1349,7 @@ static void list_bucket(const char *bucketName, const char *prefix,
 
     if (statusG == S3StatusOK) {
         if (!data.keyCount) {
-            printListBucketHeader(allDetails);
+            printListBucketHeader(allDetails, versions);
         }
     }
     else {
@@ -1332,7 +1370,7 @@ static void list(int argc, char **argv, int optindex)
     const char *bucketName = 0;
 
     const char *prefix = 0, *marker = 0, *delimiter = 0;
-    int maxkeys = 0, allDetails = 0;
+    int maxkeys = 0, allDetails = 0, versions = 0;
     while (optindex < argc) {
         char *param = argv[optindex++];
 
@@ -1357,6 +1395,14 @@ static void list(int argc, char **argv, int optindex)
                 allDetails = 1;
             }
         }
+        else if (!strncmp(param, VERSIONS_PREFIX, VERSIONS_PREFIX_LEN)) {
+            const char *val = &(param[VERSIONS_PREFIX_LEN]);
+            if (!strcmp(val, "true") || !strcmp(val, "TRUE") ||
+                !strcmp(val, "yes") || !strcmp(val, "YES") ||
+                !strcmp(val, "1")) {
+                versions = 1;
+            }
+        }
         else if (!bucketName) {
             bucketName = param;
         }
@@ -1368,7 +1414,7 @@ static void list(int argc, char **argv, int optindex)
 
     if (bucketName) {
         list_bucket(bucketName, prefix, marker, delimiter, maxkeys,
-                    allDetails);
+                    allDetails, versions);
     }
     else {
         list_service(allDetails);
@@ -1983,6 +2029,19 @@ static void delete_object(int argc, char **argv, int optindex)
     const char *bucketName = argv[optindex++];
     const char *key = slash;
 
+    const char *versionId = 0;
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, VERSION_ID_PREFIX, VERSION_ID_PREFIX_LEN)) {
+            versionId = &(param[VERSION_ID_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
     S3_init();
 
     S3BucketContext bucketContext =
@@ -1999,12 +2058,13 @@ static void delete_object(int argc, char **argv, int optindex)
 
     S3ResponseHandler responseHandler =
     {
-        0,
+        &responsePropertiesCallback,
         &responseCompleteCallback
     };
 
     do {
-        S3_delete_object(&bucketContext, key, 0, timeoutMsG, &responseHandler, 0);
+        S3_delete_object(&bucketContext, key, versionId,
+                         0, timeoutMsG, &responseHandler, 0);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if ((statusG != S3StatusOK) &&
@@ -2598,7 +2658,7 @@ upload:
 
 // copy object ---------------------------------------------------------------
 static S3Status copyListKeyCallback(int isTruncated, const char *nextMarker,
-                                    int contentsCount,
+                                    const char *nextVersionId, int contentsCount,
                                     const S3ListBucketContent *contents,
                                     int commonPrefixesCount,
                                     const char **commonPrefixes,
@@ -2608,6 +2668,7 @@ static S3Status copyListKeyCallback(int isTruncated, const char *nextMarker,
 
     // These are unused, avoid warnings in a hopefully portable way
     (void)(nextMarker);
+    (void)(nextVersionId);
     (void)(commonPrefixesCount);
     (void)(commonPrefixes);
     (void)(isTruncated);
@@ -2671,7 +2732,7 @@ static void copy_object(int argc, char **argv, int optindex)
     // Find size of existing key to determine if MP required
     do {
         S3_list_bucket(&listBucketContext, sourceKey, NULL,
-                       ".", 1, 0,
+                       ".", 1, 0, NULL, 0,
                        timeoutMsG, &listBucketHandler, &sourceSize);
     } while (S3_status_is_retryable(statusG) && should_retry());
     if (statusG != S3StatusOK) {
@@ -2904,6 +2965,7 @@ static void get_object(int argc, char **argv, int optindex)
     int64_t ifModifiedSince = -1, ifNotModifiedSince = -1;
     const char *ifMatch = 0, *ifNotMatch = 0;
     uint64_t startByte = 0, byteCount = 0;
+    const char *versionId = 0;
 
     while (optindex < argc) {
         char *param = argv[optindex++];
@@ -2946,6 +3008,9 @@ static void get_object(int argc, char **argv, int optindex)
         else if (!strncmp(param, BYTE_COUNT_PREFIX, BYTE_COUNT_PREFIX_LEN)) {
             byteCount = convertInt
                 (&(param[BYTE_COUNT_PREFIX_LEN]), "byteCount");
+        }
+        else if (!strncmp(param, VERSION_ID_PREFIX, VERSION_ID_PREFIX_LEN)) {
+            versionId = &(param[VERSION_ID_PREFIX_LEN]);
         }
         else {
             fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
@@ -3013,7 +3078,7 @@ static void get_object(int argc, char **argv, int optindex)
 
     do {
         S3_get_object(&bucketContext, key, &getConditions, startByte,
-                      byteCount, 0, 0, &getObjectHandler, outfile);
+                      byteCount, versionId, 0, 0, &getObjectHandler, outfile);
     } while (S3_status_is_retryable(statusG) && should_retry());
 
     if (statusG != S3StatusOK) {
