@@ -26,8 +26,8 @@ add_library(
 )
 
 hunter_add_package(libxml2)
-find_package(libxml-2.0 CONFIG REQUIRED)
-target_link_libraries(s3 PUBLIC PkgConfig::libxml-2.0)
+find_package(libxml2 CONFIG REQUIRED)
+target_link_libraries(s3 PUBLIC libxml2::libxml2)
 
 hunter_add_package(CURL)
 find_package(CURL CONFIG REQUIRED)
