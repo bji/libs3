@@ -33,15 +33,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef __APPLE__
-    #include <openssl/md5.h>
-    #include <openssl/bio.h>
-    #include <openssl/evp.h>
-    #include <openssl/buffer.h>
-#endif
-
 #include "libs3.h"
 #include "request.h"
+#include "md5base64.h"
 
 // Use a rather arbitrary max size for the document of 64K
 #define ACL_XML_DOC_MAXSIZE (64 * 1024)
@@ -482,45 +476,6 @@ void S3_get_lifecycle(const S3BucketContext *bucketContext,
 }
 
 
-#ifndef __APPLE__
-// Calculate MD5 and encode it as base64
-void generate_content_md5(const char* data, int size,
-                          char* retBuffer, int retBufferSize) {
-    MD5_CTX mdContext;
-    BIO *bio, *b64;
-    BUF_MEM *bufferPtr;
-
-    char md5Buffer[MD5_DIGEST_LENGTH];
-
-    MD5_Init(&mdContext);
-    MD5_Update(&mdContext, data, size);
-    MD5_Final((unsigned char*)md5Buffer, &mdContext);
-
-
-    b64 = BIO_new(BIO_f_base64());
-    bio = BIO_new(BIO_s_mem());
-    bio = BIO_push(b64, bio);
-
-    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //Ignore newlines - write everything in one line
-    BIO_write(bio, md5Buffer, sizeof(md5Buffer));
-    (void) BIO_flush(bio);
-    BIO_get_mem_ptr(bio, &bufferPtr);
-    (void) BIO_set_close(bio, BIO_NOCLOSE);
-
-    if ((unsigned int)retBufferSize + 1 < bufferPtr->length) {
-        retBuffer[0] = '\0';
-        BIO_free_all(bio);
-        return;
-    }
-
-    memcpy(retBuffer, bufferPtr->data, bufferPtr->length);
-    retBuffer[bufferPtr->length] = '\0';
-
-    BIO_free_all(bio);
-}
-#endif
-
-
 void S3_set_lifecycle(const S3BucketContext *bucketContext,
                       const char *lifecycleXmlDocument,
                       S3RequestContext *requestContext,
@@ -535,7 +490,7 @@ void S3_set_lifecycle(const S3BucketContext *bucketContext,
     (*(handler->completeCallback))(S3StatusNotSupported, 0, callbackData);
     return;
 #else
-    char md5Base64[MD5_DIGEST_LENGTH * 2];
+    char md5Base64[MD5_BASE64_BUFFER_LENGTH];
 
     SetXmlData *data = (SetXmlData *) malloc(sizeof(SetXmlData));
     if (!data) {

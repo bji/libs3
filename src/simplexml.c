@@ -122,6 +122,7 @@ static void saxCharacters(void *user_data, const xmlChar *ch, int len)
         return;
     }
 
+    debug_printf("simpleXml->elementPath: %s data:%.*s", simpleXml->elementPath, len, ch);
     simpleXml->status = (*(simpleXml->callback))
         (simpleXml->elementPath, (char *) ch, len, simpleXml->callbackData);
 }
@@ -198,6 +199,8 @@ void simplexml_deinitialize(SimpleXml *simpleXml)
 
 S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen)
 {
+    debug_printf("XML buf: %.*s", dataLen, data);
+
     if (!simpleXml->xmlParser &&
         (!(simpleXml->xmlParser = xmlCreatePushParserCtxt
            (&saxHandlerG, simpleXml, 0, 0, 0)))) {
