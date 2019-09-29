@@ -62,7 +62,14 @@ void generate_content_md5(const char* data, int size,
     BIO_get_mem_ptr(bio, &bufferPtr);
     (void) BIO_set_close(bio, BIO_NOCLOSE);
 
-    if ((unsigned int)retBufferSize + 1 < bufferPtr->length) {
+#if OPENSSL_VERSION_NUMBER < 0x1000207fL
+    // Older version of OpenSSL have buffer lengths as ints
+    // 0x1000207fL is just an arbitrary version based on Ubuntu 16.04
+    if (retBufferSize + 1 < bufferPtr->length) {
+#else
+    // Newer version have size_t instead of int
+    if ((size_t)(retBufferSize + 1UL) < bufferPtr->length) {
+#endif
         retBuffer[0] = '\0';
         BIO_free_all(bio);
         return;
