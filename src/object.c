@@ -34,7 +34,15 @@
 #include <string.h>
 #include "libs3.h"
 #include "request.h"
+#include "md5base64.h"
 
+#ifdef LIBS3_DEBUG
+#define _return(status) \
+    do { debug_printf("%s:%d return %s\n", __FILE__, __LINE__, S3_get_status_name(status)); return status; } while(0)
+#else
+#define _return(status) \
+    return status
+#endif
 
 // put object ----------------------------------------------------------------
 
@@ -400,4 +408,292 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
 
     // Perform the request
     request_perform(&params, requestContext);
+}
+
+// delete multiple objects --------------------------------------------------------------
+
+// Assuming average overhead of 28 chars per key; maximum 1000 keys supported
+#define MULTI_DELETE_XML_DOC_MAXSIZE ((S3_MAX_KEY_SIZE + 28) * 1000)
+
+typedef struct DeleteMultipleObjectsData
+{
+    char md5Base64[MD5_BASE64_BUFFER_LENGTH];
+
+    // bodge to add Content-Type header
+    S3PutProperties putProperties;
+
+    S3ResponsePropertiesCallback *responsePropertiesCallback;
+    S3ResponseCompleteCallback *responseCompleteCallback;
+    void *callbackData;
+
+    string_buffer(deleteXmlDocument, MULTI_DELETE_XML_DOC_MAXSIZE);
+    int  deleteXmlDocumentBytesWritten;
+
+    string_buffer(deleteResponseXmlDocument, MULTI_DELETE_XML_DOC_MAXSIZE);
+
+    int keysCount;;
+
+    DeleteMultipleObjectSingleResult **results;
+    int *resultsLen;
+
+    int *errorCount;
+} DeleteMultipleObjectsData;
+
+static int deleteMultipleObjectDataCallback(int bufferSize, char *buffer, void *callbackData)
+{
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) callbackData;
+
+    int remaining = (dmoData->deleteXmlDocumentLen - dmoData->deleteXmlDocumentBytesWritten);
+debug_printf("bufferSize: %d", bufferSize);
+    int toCopy = bufferSize > remaining ? remaining : bufferSize;
+
+    if (!toCopy) {
+        return 0;
+    }
+
+    memcpy(buffer, &(dmoData->deleteXmlDocument
+                     [dmoData->deleteXmlDocumentBytesWritten]), toCopy);
+
+    dmoData->deleteXmlDocumentBytesWritten += toCopy;
+
+    return toCopy;
+}
+
+static S3Status deleteMultipleObjectPropertiesCallback
+    (const S3ResponseProperties *responseProperties, void *callbackData)
+{
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) callbackData;
+
+debug_printf("dmoData->responsePropertiesCallback %p", dmoData->responsePropertiesCallback);
+
+    return (*(dmoData->responsePropertiesCallback))
+        (responseProperties, dmoData->callbackData);
+}
+
+static S3Status deleteMultipleObjectResponseDataCallback(int bufferSize, const char *buffer,
+                                   void *callbackData)
+{
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) callbackData;
+
+    int fit;
+
+    string_buffer_append(dmoData->deleteResponseXmlDocument, buffer, bufferSize, fit);
+
+    _return((fit ? S3StatusOK : S3StatusXmlDocumentTooLarge));
+}
+
+static S3Status convertDeleteMultipleObjectXmlCallback(const char *elementPath,
+                                      const char *data, int dataLen,
+                                      void *callbackData)
+{
+debug_printf("convertDeleteMultipleObjectXmlCallback: elementPath:%s, data:%.*s", elementPath, dataLen, data);
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) callbackData;
+    static int errorCodeLen = 0;
+    static char errorCode[100] = { '\0' };
+
+    if (data) {
+        if (dmoData->results) {
+            int fit;
+            int deletedNode = (0 == strcmp(elementPath, "DeleteResult/Deleted/Key"));
+            int errorNode = (0 == strcmp(elementPath, "DeleteResult/Error/Key"));
+            if (deletedNode || errorNode) {
+                string_buffer_append(dmoData->results[*(dmoData->resultsLen)]->key, data, dataLen, fit);
+                if (!fit)
+                    return S3StatusKeyTooLong;
+            }
+            else if(!strcmp(elementPath, "DeleteResult/Error/Code")) {
+                dmoData->results[*(dmoData->resultsLen)]->status = S3StatusErrorUnknown;
+                string_buffer_append(errorCode, data, dataLen, fit);
+                if (fit) {
+                    if (!strcmp(errorCode, "AccessDenied"))
+                        dmoData->results[*(dmoData->resultsLen)]->status = S3StatusErrorAccessDenied;
+                    else if (!strcmp(errorCode, "InternalError"))
+                        dmoData->results[*(dmoData->resultsLen)]->status = S3StatusErrorInternalError;
+                }
+            }
+        }
+    } else {
+        if (dmoData->results) {
+            int deletedNode = (0 == strcmp(elementPath, "DeleteResult/Deleted"));
+            int errorNode = (0 == strcmp(elementPath, "DeleteResult/Error"));
+            if (deletedNode || errorNode) {
+
+                (*(dmoData->resultsLen))++;
+
+                if (errorNode && dmoData->errorCount)
+                    (*(dmoData->errorCount))++;
+
+                if (*(dmoData->resultsLen) < dmoData->keysCount) {
+debug_printf("Init: dmoData->resultsLen: %d", *(dmoData->resultsLen));
+debug_printf("Init: dmoData->results[*(dmoData->resultsLen)]->key: %p", dmoData->results[*(dmoData->resultsLen)]->key);
+                    string_buffer_initialize(dmoData->results[*(dmoData->resultsLen)]->key);
+                    dmoData->results[*(dmoData->resultsLen)]->status = errorNode? S3StatusErrorUnknown: S3StatusOK;
+
+                    string_buffer_initialize(errorCode);
+                }
+            }
+        }
+        else if(dmoData->errorCount && !strcmp(elementPath, "DeleteResult/Error")) {
+            (*(dmoData->errorCount))++;
+        }
+    }
+
+       return S3StatusOK;
+}
+
+S3Status S3_convert_delete_multiple_response(DeleteMultipleObjectsData *dmoData)
+{
+    if (dmoData->errorCount || dmoData->results) {
+        // kill valgrind warning
+        string_buffer_initialize(dmoData->results[0]->key);
+
+        // Use a simplexml parser
+        SimpleXml simpleXml;
+        simplexml_initialize(&simpleXml, &convertDeleteMultipleObjectXmlCallback, dmoData);
+
+        S3Status status = simplexml_add(&simpleXml, dmoData->deleteResponseXmlDocument, dmoData->deleteResponseXmlDocumentLen);
+
+        simplexml_deinitialize(&simpleXml);
+
+        return status;
+    }
+
+    return S3StatusOK;
+}
+
+static void deleteMultipleObjectCompleteCallback(S3Status requestStatus,
+                                   const S3ErrorDetails *s3ErrorDetails,
+                                   void *callbackData)
+{
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) callbackData;
+
+    if (requestStatus == S3StatusOK) {
+        // Parse the document
+        requestStatus = S3_convert_delete_multiple_response(dmoData);
+    }
+
+    (*(dmoData->responseCompleteCallback))
+        (requestStatus, s3ErrorDetails, dmoData->callbackData);
+
+    free(dmoData);
+}
+
+S3Status generateDeleteMultipleObjectsXmlDocument(DeleteMultipleObjectsData *dmoData, int keysCount, const char *keys[])
+{
+#define append(fmt, ...)                                        \
+    do {                                                        \
+        dmoData->deleteXmlDocumentLen += snprintf                       \
+            (&(dmoData->deleteXmlDocument[dmoData->deleteXmlDocumentLen]),             \
+             sizeof(dmoData->deleteXmlDocument) - dmoData->deleteXmlDocumentLen - 1, \
+             fmt, __VA_ARGS__);                                 \
+        if ((unsigned int)dmoData->deleteXmlDocumentLen >= sizeof(dmoData->deleteXmlDocument)) {   \
+            _return(S3StatusXmlDocumentTooLarge);                 \
+        } \
+    } while (0)
+
+    append("%s", "<Delete><Quiet>false</Quiet>");
+    int i = 0;
+    for (; i < keysCount; ++i) {
+        append("<Object><Key>%s</Key></Object>", keys[i]);
+    }
+    append("%s", "</Delete>");
+
+    debug_printf("dmoData->deleteXmlDocumentLen: %*s", dmoData->deleteXmlDocumentLen, dmoData->deleteXmlDocument);
+
+    return S3StatusOK;
+}
+
+void S3_delete_multiple_objects(const S3BucketContext *bucketContext,
+                      int keysCount, const char *keys[],
+                      DeleteMultipleObjectSingleResult **results, int *resultsLen, int *errorCount,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData)
+{
+#ifdef __APPLE__
+    /* This request requires calculating MD5 sum.
+     * MD5 sum requires OpenSSL library, which is not used on Apple.
+     * TODO Implement some MD5+Base64 caculation on Apple
+     */
+    (*(handler->completeCallback))(S3StatusNotSupported, 0, callbackData);
+    return;
+#else
+    DeleteMultipleObjectsData *dmoData = (DeleteMultipleObjectsData *) malloc(sizeof(DeleteMultipleObjectsData));
+    if (!dmoData) {
+        (*(handler->completeCallback))(S3StatusOutOfMemory, 0, callbackData);
+        return;
+    }
+
+    dmoData->responsePropertiesCallback = handler->propertiesCallback;
+    dmoData->responseCompleteCallback = handler->completeCallback;
+    dmoData->callbackData = callbackData;
+
+    dmoData->errorCount = errorCount;
+
+    if (resultsLen && results) {
+        dmoData->results = results;
+        dmoData->resultsLen = resultsLen;
+
+        // initialise the result length to 0
+        *resultsLen = 0;
+    } else {
+        dmoData->results = 0;
+        dmoData->resultsLen = 0;
+    }
+
+    dmoData->keysCount = keysCount;
+
+    string_buffer_initialize(dmoData->deleteXmlDocument);
+    dmoData->deleteXmlDocumentBytesWritten = 0;
+
+    string_buffer_initialize(dmoData->deleteResponseXmlDocument);
+
+    *errorCount = 0;
+
+    S3Status status = generateDeleteMultipleObjectsXmlDocument(dmoData, keysCount, keys);
+    if (status != S3StatusOK) {
+        free(dmoData);
+        (*(handler->completeCallback))(status, 0, callbackData);
+        return;
+    }
+
+    // md5 for the request data
+
+    generate_content_md5(dmoData->deleteXmlDocument, dmoData->deleteXmlDocumentLen, dmoData->md5Base64, sizeof(dmoData->md5Base64));
+
+    dmoData->putProperties = (S3PutProperties){ "application/xml", dmoData->md5Base64, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    // Set up the RequestParams
+    RequestParams params =
+    {
+        HttpRequestTypePOST,                  // httpRequestType
+        { bucketContext->hostName                   , // hostname
+          bucketContext->bucketName,                  // bucketName
+          bucketContext->protocol,                    // protocol
+          bucketContext->uriStyle,                    // uriStyle
+          bucketContext->accessKeyId,                 // accessKeyId
+          bucketContext->secretAccessKey,             // secretAccessKey
+          bucketContext->securityToken,               // securityToken
+          bucketContext->authRegion },                // authRegion
+        0,                                            // key
+        0,                                            // queryParams
+        "delete",                                     // subResource
+        0,                                            // copySourceBucketName
+        0,                                            // copySourceKey
+        0,                                            // getConditions
+        0,                                            // startByte
+        0,                                            // byteCount
+        &dmoData->putProperties,                      // putProperties
+        &deleteMultipleObjectPropertiesCallback,      // propertiesCallback
+        &deleteMultipleObjectDataCallback,            // toS3Callback
+        dmoData->deleteXmlDocumentLen,                // toS3CallbackTotalSize
+        &deleteMultipleObjectResponseDataCallback,    // fromS3Callback
+        &deleteMultipleObjectCompleteCallback,        // completeCallback
+        dmoData,                                      // callbackData
+        timeoutMs                                     // timeoutMs
+    };
+
+    // Perform the request
+    request_perform(&params, requestContext);
+#endif
 }

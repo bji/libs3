@@ -2218,6 +2218,40 @@ void S3_delete_object(const S3BucketContext *bucketContext, const char *key,
                       int timeoutMs,
                       const S3ResponseHandler *handler, void *callbackData);
 
+/**
+ * An array of allocated DeleteMultipleObjectSingleResult is passed to
+ * S3_delete_multiple_objects. The array must be allocated and freed by the
+ * client code.
+ **/
+typedef struct DeleteMultipleObjectSingleResult
+{
+	char key[S3_MAX_KEY_SIZE];
+	int keyLen;
+    S3Status status;
+} DeleteMultipleObjectSingleResult;
+
+/**
+ * Deletes multiple object from S3.
+ *
+ * @param bucketContext gives the bucket and associated parameters for this
+ *        request
+ * @param keysCount is has the number of keys in the array
+ * @param keys is an array of key of the objects to delete
+ * @param requestContext if non-NULL, gives the S3RequestContext to add this
+ *        request to, and does not perform the request immediately.  If NULL,
+ *        performs the request immediately and synchronously.
+ * @param timeoutMs if not 0 contains total request timeout in milliseconds
+ * @param handler gives the callbacks to call as the request is processed and
+ *        completed
+ * @param callbackData will be passed in as the callbackData parameter to
+ *        all callbacks for this request
+ **/
+void S3_delete_multiple_objects(const S3BucketContext *bucketContext,
+                      int keysCount, const char *keys[],
+                      DeleteMultipleObjectSingleResult **results, int *resultsLen, int *errorCount,
+                      S3RequestContext *requestContext,
+                      int timeoutMs,
+                      const S3ResponseHandler *handler, void *callbackData);
 
 /** **************************************************************************
  * Access Control List Functions
@@ -2617,6 +2651,17 @@ void S3_list_multipart_uploads(S3BucketContext *bucketContext,
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef LIBS3_DEBUG
+
+#define debug_printf(fmt, ...) \
+	fprintf(stderr, fmt"\n", __VA_ARGS__)
+
+#else
+
+#define debug_printf(fmt, ...)
+
 #endif
 
 #endif /* LIBS3_H */

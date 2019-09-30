@@ -142,6 +142,12 @@ ifndef CFLAGS
     endif
 endif
 
+ifeq ($(LIBS3_DEBUG),YES)
+    CFLAGS += -DLIBS3_DEBUG -DSIGNATURE_DEBUG
+else
+    CFLAGS += -ULIBS3_DEBUG -USIGNATURE_DEBUG -DNDEBUG
+endif
+
 CFLAGS += -Wall -Werror -Wshadow -Wextra -Iinc \
           $(CURL_CFLAGS) $(LIBXML2_CFLAGS) \
           -DLIBS3_VER_MAJOR=\"$(LIBS3_VER_MAJOR)\" \
@@ -245,7 +251,7 @@ libs3: $(LIBS3_SHARED) $(LIBS3_STATIC)
 LIBS3_SOURCES := bucket.c bucket_metadata.c error_parser.c general.c \
                  object.c request.c request_context.c \
                  response_headers_handler.c service_access_logging.c \
-                 service.c simplexml.c util.c multipart.c
+                 service.c simplexml.c util.c multipart.c md5base64.c
 
 $(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
 	$(QUIET_ECHO) $@: Building shared library

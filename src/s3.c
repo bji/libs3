@@ -166,7 +166,10 @@ static char putenvBufG[256];
 #define TARGET_PREFIX_PREFIX_LEN (sizeof(TARGET_PREFIX_PREFIX) - 1)
 #define HTTP_METHOD_PREFIX "method="
 #define HTTP_METHOD_PREFIX_LEN (sizeof(HTTP_METHOD_PREFIX) - 1)
-
+#define BUCKET_PREFIX "bucket="
+#define BUCKET_PREFIX_LEN (sizeof(BUCKET_PREFIX) - 1)
+#define OBJECT_KEY "key="
+#define OBJECT_KEY_LEN (sizeof(OBJECT_KEY) - 1)
 
 // util ----------------------------------------------------------------------
 
@@ -241,6 +244,10 @@ static void usageExit(FILE *out)
 "\n"
 "   delete               : Delete a bucket or key\n"
 "     <bucket>[/<key>]   : Bucket or bucket/key to delete\n"
+"\n"
+"   delete-multiple      : Delete multiple objects from one bucket\n"
+"     bucket             : Bucket to delete from\n"
+"     key                : key(s) to delete\n"
 "\n"
 "   list                 : List bucket contents\n"
 "     <bucket>           : Bucket to list\n"
@@ -2015,6 +2022,104 @@ static void delete_object(int argc, char **argv, int optindex)
     S3_deinitialize();
 }
 
+// delete multiple objects -------------------------------------------------------------
+
+static void delete_multiple_objects(int argc, char **argv, int optindex)
+{
+    (void) argc;
+
+    const char *bucket = 0;
+    const char *keys[1000];
+    int keysCount = 0;
+
+    int errorsCount = 0;
+    int resultsCount = 0;
+    DeleteMultipleObjectSingleResult* results[1000];
+
+    while (optindex < argc) {
+        char *param = argv[optindex++];
+        if (!strncmp(param, OBJECT_KEY, OBJECT_KEY_LEN)) {
+            results[keysCount] = (DeleteMultipleObjectSingleResult*) malloc(sizeof(DeleteMultipleObjectSingleResult));
+            keys[keysCount++] = &(param[OBJECT_KEY_LEN]);
+        }
+        else if (!strncmp(param, BUCKET_PREFIX, BUCKET_PREFIX_LEN)) {
+            bucket = &(param[BUCKET_PREFIX_LEN]);
+        }
+        else {
+            fprintf(stderr, "\nERROR: Unknown param: %s\n", param);
+            usageExit(stderr);
+        }
+    }
+
+    if (!bucket || !keysCount) {
+        if (!bucket)
+            fprintf(stderr, "\nERROR: Bucket not specified\n");
+        if (!keysCount)
+            fprintf(stderr, "\nERROR: No keys specified\n");
+        usageExit(stderr);
+    }
+
+    S3_init();
+
+    S3BucketContext bucketContext =
+            {
+                    0,
+                    bucket,
+                    protocolG,
+                    uriStyleG,
+                    accessKeyIdG,
+                    secretAccessKeyG,
+                    0,
+                    awsRegionG
+            };
+
+    S3ResponseHandler responseHandler =
+            {
+                    &responsePropertiesCallback,
+                    &responseCompleteCallback
+            };
+
+    do {
+        S3_delete_multiple_objects(
+                &bucketContext,
+                keysCount, keys,
+                results, &resultsCount, &errorsCount,
+                0,
+                timeoutMsG,
+                &responseHandler, 0);
+    } while (S3_status_is_retryable(statusG) && should_retry());
+
+    int i;
+    if (statusG != S3StatusOK) {
+        printError();
+    }
+    else {
+        if (keysCount != resultsCount) {
+            fprintf(stderr, "\nERROR: Number of keys does not match results got from S3\n");
+        }
+
+        debug_printf("resultsCount: %d keysCount: %d", resultsCount, keysCount);
+
+        for (i = 0; i < keysCount; ++i) {
+            debug_printf("results[i]->key %s", results[i]->key);
+            if (i < resultsCount) {
+                printf("\n%s/%s ", bucket, results[i]->key);
+                if (results[i]->status) {
+                    printf("ERROR:%s", S3_get_status_name(results[i]->status));
+                }
+                else {
+                    printf("OK");
+                }
+            }
+        }
+        printf("\n");
+    }
+
+    for (i = 0; i < keysCount; ++i)
+        free(results[i]);
+
+    S3_deinitialize();
+}
 
 // put object ----------------------------------------------------------------
 
@@ -4000,6 +4105,9 @@ int main(int argc, char **argv)
         else {
             delete_bucket(argc, argv, optind);
         }
+    }
+    else if (!strcmp(command, "delete-multiple")) {
+        delete_multiple_objects(argc, argv, optind);
     }
     else if (!strcmp(command, "put")) {
         put_object(argc, argv, optind, NULL, NULL, 0);
