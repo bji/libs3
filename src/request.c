@@ -983,7 +983,7 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     len = 0;
-    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH];
+    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH] = { 0 };
 #ifdef __APPLE__
     CC_SHA256(canonicalRequest, strlen(canonicalRequest), canonicalRequestHash);
 #else
@@ -1002,12 +1002,12 @@ static S3Status compose_auth_header(const RequestParams *params,
         awsRegion = params->bucketContext.authRegion;
     }
     char scope[sizeof(values->requestDateISO8601) + sizeof(awsRegion) +
-               sizeof("//s3/aws4_request") + 1];
+               sizeof("//s3/aws4_request") + 1] = { 0 };
     snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request",
              values->requestDateISO8601, awsRegion);
 
     char stringToSign[17 + 17 + sizeof(values->requestDateISO8601) +
-                      sizeof(scope) + sizeof(canonicalRequestHashHex) + 1];
+                      sizeof(scope) + sizeof(canonicalRequestHashHex) + 1] = { 0 };
     snprintf(stringToSign, sizeof(stringToSign), "AWS4-HMAC-SHA256\n%s\n%s\n%s",
              values->requestDateISO8601, scope, canonicalRequestHashHex);
 
@@ -1020,42 +1020,42 @@ static S3Status compose_auth_header(const RequestParams *params,
     snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
 
 #ifdef __APPLE__
-    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey),
            values->requestDateISO8601, 8, dateKey);
-    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, dateKey, S3_SHA256_DIGEST_LENGTH, awsRegion,
            strlen(awsRegion), dateRegionKey);
     unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
     CCHmac(kCCHmacAlgSHA256, dateRegionKey, S3_SHA256_DIGEST_LENGTH, "s3", 2,
            dateRegionServiceKey);
-    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
            "aws4_request", strlen("aws4_request"), signingKey);
 
-    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, signingKey, S3_SHA256_DIGEST_LENGTH, stringToSign,
             strlen(stringToSign), finalSignature);
 #else
     const EVP_MD *sha256evp = EVP_sha256();
-    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, accessKey, strlen(accessKey),
          (const unsigned char*) values->requestDateISO8601, 8, dateKey,
          NULL);
-    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) awsRegion, strlen(awsRegion), dateRegionKey,
          NULL);
-    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateRegionKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) "s3", 2, dateRegionServiceKey, NULL);
-    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) "aws4_request", strlen("aws4_request"),
          signingKey,
          NULL);
 
-    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, signingKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) stringToSign, strlen(stringToSign),
          finalSignature, NULL);
@@ -1762,7 +1762,7 @@ S3Status S3_generate_authenticated_query_string
         resource,
         NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
 
-    RequestComputedValues computed;
+    RequestComputedValues computed = { 0 };
     S3Status status = setup_request(&params, &computed, 1);
     if (status != S3StatusOK) {
         return status;
@@ -1778,7 +1778,7 @@ S3Status S3_generate_authenticated_query_string
                      sizeof("&X-Amz-SignedHeaders=") +
                      sizeof(computed.signedHeaders) +
                      sizeof("&X-Amz-Signature=") +
-                     sizeof(computed.requestSignatureHex) + 1];
+                     sizeof(computed.requestSignatureHex) + 1] = { 0 };
     snprintf(queryParams, sizeof(queryParams),
              "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
              "&X-Amz-Date=%s&X-Amz-Expires=%d"
