@@ -53,7 +53,7 @@
 #define REQUEST_STACK_SIZE 32
 #define SIGNATURE_SCOPE_SIZE 64
 
-#define SIGNATURE_DEBUG
+//#define SIGNATURE_DEBUG
 
 static int verifyPeer;
 
