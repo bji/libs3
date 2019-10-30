@@ -1303,11 +1303,7 @@ static S3Status gqs_compose_auth_header(const RequestParams *params,
     for (i = 0; i < S3_SHA256_DIGEST_LENGTH; i++) {
         buf_append(values->requestSignatureHex, "%02x", finalSignature[i]);
     }
-#if 0
-    snprintf(values->authCredential, sizeof(values->authCredential),
-             "%s/%.8s/%s/s3/aws4_request", params->bucketContext.accessKeyId,
-             values->requestDateISO8601, awsRegion);
-#endif
+
     snprintf(values->authorizationHeader,
              sizeof(values->authorizationHeader),
              "Authorization: AWS4-HMAC-SHA256 Credential=%s,SignedHeaders=%s,Signature=%s",
@@ -1802,9 +1798,11 @@ static S3Status setup_request(const RequestParams *params,
 /* Setup request for gqs command. */
 static S3Status gqs_setup_request(const RequestParams *params,
                               RequestComputedValues *computed,
-                              int forceUnsignedPayload, int expires)
+                              int forceUnsignedPayload, int expires, int queryParams_size)
 {
     S3Status status;
+    const char *awsRegion = S3_DEFAULT_REGION;
+
 
     // Validate the bucket name
     if (params->bucketContext.bucketName
@@ -1844,35 +1842,30 @@ static S3Status gqs_setup_request(const RequestParams *params,
     canonicalize_resource(&params->bucketContext, computed->urlEncodedKey,
                           computed->canonicalURI,
                           sizeof(computed->canonicalURI));
-#if 0
-    snprintf(computed->authCredential, sizeof(computed->authCredential),
+ 
+    /* compose auth credential based on time and region.
+       Caution: must change '/'to '%2F' and cannot use coutent below, or the 'SignatureDoesNotMatch' error
+       will be returned from server.
+       snprintf(computed->authCredential, sizeof(computed->authCredential),
              "%s/%.8s/%s/s3/aws4_request", params->bucketContext.accessKeyId,
              computed->requestDateISO8601, S3_DEFAULT_REGION);
-#else
-
+    */
+    if (params->bucketContext.authRegion) {
+        awsRegion = params->bucketContext.authRegion;
+    }
     snprintf(computed->authCredential, sizeof(computed->authCredential),
              "%s%%2F%.8s%%2F%s%%2Fs3%%2Faws4_request", params->bucketContext.accessKeyId,
-             computed->requestDateISO8601, S3_DEFAULT_REGION);
+             computed->requestDateISO8601, awsRegion);
 
-#endif
-
-    // compose params
-    char queryParams[sizeof("X-Amz-Algorithm=AWS4-HMAC-SHA256") +
-                     sizeof("&X-Amz-Credential=") +
-                     sizeof(computed->authCredential) +
-                     sizeof("&X-Amz-Date=") +
-                     sizeof(computed->requestDateISO8601) +
-                     sizeof("&X-Amz-Expires=") + 64 +
-                     sizeof("&X-Amz-SignedHeaders=") +
-                     sizeof(computed->signedHeaders) + 1] = { 0 };
-    snprintf(queryParams, sizeof(queryParams),
+    // compose quary params
+    snprintf(params->queryParams, queryParams_size,
              "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
              "&X-Amz-Date=%s&X-Amz-Expires=%d"
              "&X-Amz-SignedHeaders=%s",
              computed->authCredential, computed->requestDateISO8601, expires,
              computed->signedHeaders);
 
-    canonicalize_query_string(queryParams, params->subResource,
+    canonicalize_query_string(params->queryParams, params->subResource,
                               computed->canonicalQueryString,
                               sizeof(computed->canonicalQueryString));
 
@@ -2082,25 +2075,9 @@ S3Status S3_generate_authenticated_query_string
     // maximum expiration period is seven days (in seconds)
 #define MAX_EXPIRES 604800
 
-    if (expires < 0) {
-        expires = MAX_EXPIRES;
-    }
-    else if (expires > MAX_EXPIRES) {
-        expires = MAX_EXPIRES;
-    }
-
-    RequestParams params =
-    { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
-        resource,
-        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
-
     RequestComputedValues computed = { 0 };
-    S3Status status = gqs_setup_request(&params, &computed, 1, expires);
-    if (status != S3StatusOK) {
-        return status;
-    }
 
-    // Finally, compose the URI, with params
+    // Set query parameter array.
     char queryParams[sizeof("X-Amz-Algorithm=AWS4-HMAC-SHA256") +
                      sizeof("&X-Amz-Credential=") +
                      sizeof(computed.authCredential) +
@@ -2111,14 +2088,33 @@ S3Status S3_generate_authenticated_query_string
                      sizeof(computed.signedHeaders) +
                      sizeof("&X-Amz-Signature=") +
                      sizeof(computed.requestSignatureHex) + 1] = { 0 };
-    snprintf(queryParams, sizeof(queryParams),
-             "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
-             "&X-Amz-Date=%s&X-Amz-Expires=%d"
-             "&X-Amz-SignedHeaders=%s&X-Amz-Signature=%s",
-             computed.authCredential, computed.requestDateISO8601, expires,
-             computed.signedHeaders, computed.requestSignatureHex);
+    int queryParams_len = 0;
+    
+    if (expires < 0) {
+        expires = MAX_EXPIRES;
+    }
+    else if (expires > MAX_EXPIRES) {
+        expires = MAX_EXPIRES;
+    }
+
+    RequestParams params =
+    { http_request_method_to_type(httpMethod), *bucketContext, key, queryParams,
+        resource,
+        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
+
+    
+    S3Status status = gqs_setup_request(&params, &computed, 1, expires, sizeof(queryParams));
+    if (status != S3StatusOK) {
+        return status;
+    }
+
+    // compose the URI with signature params
+    queryParams_len = strlen(queryParams);
+    snprintf(queryParams + queryParams_len, sizeof(queryParams) - queryParams_len,
+             "&X-Amz-Signature=%s", computed.requestSignatureHex);
 
     return compose_uri(buffer, S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE,
                        bucketContext, computed.urlEncodedKey, resource,
                        queryParams);
 }
+
