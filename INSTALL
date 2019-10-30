@@ -123,3 +123,11 @@ Generate url for object named "mydog".
 
 - s3 -u gqs nvrbucket/mydog
 
+You can get all S3 protocol details from aws webset:
+--------------------------------------------------------------
+
+​	https://aws.amazon.com
+
+​	https://docs.aws.amazon.com/index.html
+
+​	https://docs.aws.amazon.com/s3/
