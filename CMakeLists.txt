@@ -2,23 +2,23 @@ cmake_minimum_required(VERSION 3.2)
 
 include("cmake/HunterGate.cmake")
 HunterGate(
-    URL "https://github.com/ruslo/hunter/archive/v0.23.214.tar.gz"
-    SHA1 "e14bc153a7f16d6a5eeec845fb0283c8fad8c358"
+    URL "https://github.com/cpp-pm/hunter/archive/v0.23.262.tar.gz"
+    SHA1 "eb51e633e08cdbe2153caf255e9c23968fecb29d"
 )
 
 project(s3 VERSION 4.1)
 
 add_library(
     s3
-    src/bucket.c
+    src/bucket.cpp
     src/bucket_metadata.c
     src/error_parser.c
     src/general.c
-    src/multipart.c
+    src/multipart.cpp
     src/object.c
-    src/request.c
-    src/request_context.c
-    src/response_headers_handler.c
+    src/request.cpp
+    src/request_context.cpp
+    src/response_headers_handler.cpp
     src/service.c
     src/service_access_logging.c
     src/simplexml.c
@@ -45,10 +45,19 @@ target_compile_definitions(
     LIBS3_VER="${PROJECT_VERSION}"
     __STRICT_ANSI__
     _ISOC99_SOURCE
+    _CRT_SECURE_NO_WARNINGS
 )
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
   target_compile_definitions(s3 PRIVATE _POSIX_C_SOURCE=200112L)
+endif()
+
+if(NOT MSVC)  ## Useful as a linker symbols validation test that someone didn't forget to annotate extern "C"
+  add_executable(s3exe
+      src/s3.c
+  )
+  target_link_libraries(s3exe PRIVATE s3)
+  set_target_properties(s3exe PROPERTIES OUTPUT_NAME "s3")
 endif()
 
 ### Installation (https://github.com/forexample/package-example) {

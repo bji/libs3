@@ -32,10 +32,10 @@
 
 #include <curl/curl.h>
 #include <stdlib.h>
-#include <sys/select.h>
 #include "request.h"
 #include "request_context.h"
 
+extern "C" {
 
 S3Status S3_create_request_context_ex(S3RequestContext **requestContextReturn,
                                       CURLM *curlm,
@@ -104,27 +104,10 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext)
 {
     int requestsRemaining;
     do {
-        fd_set readfds, writefds, exceptfds;
-        FD_ZERO(&readfds);
-        FD_ZERO(&writefds);
-        FD_ZERO(&exceptfds);
-        int maxfd;
-        S3Status status = S3_get_request_context_fdsets
-            (requestContext, &readfds, &writefds, &exceptfds, &maxfd);
-        if (status != S3StatusOK) {
-            return status;
-        }
-        // curl will return -1 if it hasn't even created any fds yet because
-        // none of the connections have started yet.  In this case, don't
-        // do the select at all, because it will wait forever; instead, just
-        // skip it and go straight to running the underlying CURL handles
-        if (maxfd != -1) {
-            int64_t timeout = S3_get_request_context_timeout(requestContext);
-            struct timeval tv = { timeout / 1000, (timeout % 1000) * 1000 };
-            select(maxfd + 1, &readfds, &writefds, &exceptfds,
-                   (timeout == -1) ? 0 : &tv);
-        }
-        status = S3_runonce_request_context(requestContext,
+        int numfds = 0;
+        (void) curl_multi_wait(requestContext->curlm, NULL, 0,
+          S3_get_request_context_timeout(requestContext), &numfds);
+        S3Status status = S3_runonce_request_context(requestContext,
                                             &requestsRemaining);
         if (status != S3StatusOK) {
             return status;
@@ -224,6 +207,7 @@ S3Status S3_process_request_context(S3RequestContext *requestContext)
 }
 
 
+#if 0  // select() is no longer usable in modern code
 S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                                        fd_set *readFdSet, fd_set *writeFdSet,
                                        fd_set *exceptFdSet, int *maxFd)
@@ -232,6 +216,7 @@ S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                               exceptFdSet, maxFd) == CURLM_OK) ?
             S3StatusOK : S3StatusInternalError);
 }
+#endif
 
 int64_t S3_get_request_context_timeout(S3RequestContext *requestContext)
 {
@@ -250,3 +235,5 @@ void S3_set_request_context_verify_peer(S3RequestContext *requestContext,
     requestContext->verifyPeerSet = 1;
     requestContext->verifyPeer = (verifyPeer != 0);
 }
+
+}  // extern "C"

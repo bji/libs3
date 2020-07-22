@@ -38,6 +38,10 @@
 #include <stdint.h>
 #include "libs3.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // acl groups
 #define ACS_URL "http://acs.amazonaws.com/groups/"
 
@@ -92,5 +96,9 @@ uint64_t parseUnsignedInt(const char *str);
 // Because Windows seems to be missing isblank(), use our own; it's a very
 // easy function to write in any case
 int is_blank(char c);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* UTIL_H */

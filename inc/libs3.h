@@ -34,8 +34,6 @@
 #define LIBS3_H
 
 #include <stdint.h>
-#include <sys/select.h>
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -1734,6 +1732,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
 S3Status S3_process_request_context(S3RequestContext *requestContext);
 
 
+#if 0  // select() is no longer usable in modern code
 /**
  * This function, in conjunction allows callers to manually manage a set of
  * requests using an S3RequestContext.  This function returns the set of file
@@ -1767,7 +1766,7 @@ S3Status S3_process_request_context(S3RequestContext *requestContext);
 S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,
                                        fd_set *readFdSet, fd_set *writeFdSet,
                                        fd_set *exceptFdSet, int *maxFd);
-
+#endif
 
 /**
  * This function returns the maximum number of milliseconds that the caller of
