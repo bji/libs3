@@ -982,6 +982,13 @@ static S3Status compose_auth_header(const RequestParams *params,
     printf("--\nCanonical Request:\n%s\n", canonicalRequest);
 #endif
 
+    if (params->bucketContext.accessKeyId == NULL || params->bucketContext.secretAccessKey == NULL) {
+#ifdef SIGNATURE_DEBUG
+    printf("--\nNo authorization header\n");
+#endif
+      return S3StatusOK;
+    }
+
     len = 0;
     unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH];
 #ifdef __APPLE__
