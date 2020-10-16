@@ -100,6 +100,7 @@ typedef struct CopyObjectData
 } CopyObjectData;
 
 
+#if 0
 static S3Status copyObjectXmlCallback(const char *elementPath,
                                       const char *data, int dataLen,
                                       void *callbackData)
@@ -113,6 +114,39 @@ static S3Status copyObjectXmlCallback(const char *elementPath,
             string_buffer_append(coData->lastModified, data, dataLen, fit);
         }
         else if (!strcmp(elementPath, "CopyObjectResult/ETag")) {
+            if (coData->eTagReturnSize && coData->eTagReturn) {
+                coData->eTagReturnLen +=
+                    snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
+                             coData->eTagReturnSize -
+                             coData->eTagReturnLen - 1,
+                             "%.*s", dataLen, data);
+                if (coData->eTagReturnLen >= coData->eTagReturnSize) {
+                    return S3StatusXmlParseFailure;
+                }
+            }
+        }
+    }
+
+    /* Avoid compiler error about variable set but not used */
+    (void) fit;
+
+    return S3StatusOK;
+}
+#endif
+
+static S3Status copyPartXmlCallback(const char *elementPath,
+                                      const char *data, int dataLen,
+                                      void *callbackData)
+{
+    CopyObjectData *coData = (CopyObjectData *) callbackData;
+
+    int fit;
+
+    if (data) {
+        if (!strcmp(elementPath, "CopyPartResult/LastModified")) {
+            string_buffer_append(coData->lastModified, data, dataLen, fit);
+        }
+        else if (!strcmp(elementPath, "CopyPartResult/ETag")) {
             if (coData->eTagReturnSize && coData->eTagReturn) {
                 coData->eTagReturnLen +=
                     snprintf(&(coData->eTagReturn[coData->eTagReturnLen]),
@@ -216,7 +250,7 @@ void S3_copy_object_range(const S3BucketContext *bucketContext, const char *key,
         return;
     }
 
-    simplexml_initialize(&(data->simpleXml), &copyObjectXmlCallback, data);
+    simplexml_initialize(&(data->simpleXml), &copyPartXmlCallback, data);
 
     data->responsePropertiesCallback = handler->propertiesCallback;
     data->responseCompleteCallback = handler->completeCallback;
