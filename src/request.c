@@ -405,9 +405,12 @@ static S3Status compose_amz_headers(const RequestParams *params,
                      params->startByte, params->startByte + params->byteCount);
             append_amz_header(values, 0, "x-amz-copy-source-range", byteRange);
         }
-        // And the x-amz-metadata-directive header
-        if (properties) {
-            append_amz_header(values, 0, "x-amz-metadata-directive", "REPLACE");
+        else {
+            // Add the x-amz-metadata-directive header
+            // Only for CopyObject, not UploadPartCopy (above)
+            if (properties) {
+                append_amz_header(values, 0, "x-amz-metadata-directive", "REPLACE");
+            }
         }
     }
 
