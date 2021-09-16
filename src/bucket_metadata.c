@@ -38,6 +38,23 @@
     #include <openssl/bio.h>
     #include <openssl/evp.h>
     #include <openssl/buffer.h>
+
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+static EVP_MD_CTX* EVP_MD_CTX_new(void) {
+  EVP_MD_CTX* ctx = (EVP_MD_CTX*)malloc(sizeof(EVP_MD_CTX));
+  if(ctx) {
+    EVP_MD_CTX_init(ctx);
+  }
+  return ctx;
+}
+
+static void EVP_MD_CTX_free(EVP_MD_CTX* ctx) {
+  if(ctx) {
+    EVP_MD_CTX_cleanup(ctx);
+    free(ctx);
+  }
+}
+#endif
 #endif
 
 #include "libs3.h"
@@ -486,16 +503,17 @@ void S3_get_lifecycle(const S3BucketContext *bucketContext,
 // Calculate MD5 and encode it as base64
 void generate_content_md5(const char* data, int size,
                           char* retBuffer, int retBufferSize) {
-    MD5_CTX mdContext;
+    EVP_MD_CTX *mdContext;
     BIO *bio, *b64;
     BUF_MEM *bufferPtr;
 
     char md5Buffer[MD5_DIGEST_LENGTH];
 
-    MD5_Init(&mdContext);
-    MD5_Update(&mdContext, data, size);
-    MD5_Final((unsigned char*)md5Buffer, &mdContext);
-
+    mdContext = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdContext, EVP_md5(), NULL);
+    EVP_DigestUpdate(mdContext, data, size);
+    EVP_DigestFinal_ex(mdContext, (unsigned char*)md5Buffer, NULL);
+    EVP_MD_CTX_free(mdContext);
 
     b64 = BIO_new(BIO_f_base64());
     bio = BIO_new(BIO_s_mem());
