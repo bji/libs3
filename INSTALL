@@ -103,7 +103,7 @@ environment example:
 
 ​	export S3_ACCESS_KEY_ID=cKc863uvDSWJZZkRijts
 ​	export S3_SECRET_ACCESS_KEY=TQxnjYQeK3VQpxd4HhjX5r8JO1ma9zrHFOvDUmuz
-​	export S3_HOSTNAME=pub1-bjyt.s3.360.cn
+​	export S3_HOSTNAME=pub1-bjyt.s3.xxx.cn
 
 - source /etc/profile (make the configuration valid)
 
