@@ -3158,7 +3158,7 @@ static void generate_query_string(int argc, char **argv, int optindex)
         awsRegionG
     };
 
-    char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE];
+    char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE] = { 0 };
 
     S3Status status = S3_generate_authenticated_query_string
         (buffer, &bucketContext, key, expires, resource, httpMethod);

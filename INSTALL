@@ -29,6 +29,22 @@ This will produce a Debian package in the build/pkg directory.
 
 DESTDIR defaults to /usr
 
+for example:
+
+Install dependency packages
+
+* sudo apt-get install libxml2
+* sudo apt-get install libxml2-dev
+* sudo apt-get install libcurl4-openssl-dev
+
+Compile and install library
+
+- cd libs3-folder
+- sudo make uninstall (type when want to uninstall old lib)
+- sudo make clean
+- make
+- sudo make install
+
 
 To install libs3 on a Microsoft Windows system:
 -----------------------------------------------
@@ -71,3 +87,47 @@ DESTDIR defaults to libs3-<version>
 * DESTDIR can be zipped up into a .zip file for distribution.  For best
   results, the dependent libraries (curl, openssl, etc) should be included,
   along with their licenses.
+
+To execute libs3 command-line  on a POSIX system (except Microsoft Windows):
+--------------------------------------------------------------
+
+You must set the s3 environment before using command-line:
+
+   S3_ACCESS_KEY_ID  : S3 access key ID (required)
+   S3_SECRET_ACCESS_KEY : S3 secret access key (required)
+   S3_HOSTNAME  : specify alternative S3 host (optional)
+
+environment example:
+
+- sudo vim /etc/profile (add command below, then save and close file)
+
+​	export S3_ACCESS_KEY_ID=cKc863uvDSWJZZkRijts
+​	export S3_SECRET_ACCESS_KEY=TQxnjYQeK3VQpxd4HhjX5r8JO1ma9zrHFOvDUmuz
+​	export S3_HOSTNAME=pub1-bjyt.s3.xxx.cn
+
+- source /etc/profile (make the configuration valid)
+
+Caution: If the command operation does not reply, you can try adding the -u character to use unencrypted mode.
+
+command example:
+
+Create bucket named "xxxx" in unencrypted mode.
+
+- s3 -u create xxxx
+
+Put object named "mydog" to bucket "nvrbucket".
+
+- s3 -u put nvrbucket/mydog filename=dog.jpeg -s
+
+Generate url for object named "mydog".
+
+- s3 -u gqs nvrbucket/mydog
+
+You can get all S3 protocol details from aws webset:
+--------------------------------------------------------------
+
+​	https://aws.amazon.com
+
+​	https://docs.aws.amazon.com/index.html
+
+​	https://docs.aws.amazon.com/s3/

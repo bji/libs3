@@ -788,6 +788,105 @@ static void canonicalize_signature_headers(RequestComputedValues *values)
 }
 
 
+// Canonicalizes the signature headers into the canonicalizedSignatureHeaders buffer
+static void gqs_canonicalize_signature_headers(RequestComputedValues *values)
+{
+    // Make a copy of the headers that will be sorted
+    const char *sortedHeaders[S3_MAX_METADATA_COUNT + 3];
+
+#if 0
+    memcpy(sortedHeaders, values->amzHeaders,
+           (values->amzHeadersCount * sizeof(sortedHeaders[0])));
+
+    // add the content-type header and host header
+    int headerCount = values->amzHeadersCount;
+#else
+    int headerCount = 0;
+#endif
+
+    if (values->contentTypeHeader[0]) {
+        sortedHeaders[headerCount++] = values->contentTypeHeader;
+    }
+    if (values->hostHeader[0]) {
+        sortedHeaders[headerCount++] = values->hostHeader;
+    }
+    if (values->rangeHeader[0]) {
+        sortedHeaders[headerCount++] = values->rangeHeader;
+    }
+    if (values->md5Header[0]) {
+        sortedHeaders[headerCount++] = values->md5Header;
+    }
+
+    // Now sort these
+    kv_gnome_sort(sortedHeaders, headerCount, ':');
+
+    // Now copy this sorted list into the buffer, all the while:
+    // - folding repeated headers into single lines, and
+    // - folding multiple lines
+    // - removing the space after the colon
+    int lastHeaderLen = 0;
+    char *buffer = values->canonicalizedSignatureHeaders;
+    char *hbuf = values->signedHeaders;
+    int i = 0;
+    for (; i < headerCount; i++) {
+        const char *header = sortedHeaders[i];
+        const char *c = header;
+        char v;
+        // If the header names are the same, append the next value
+        if ((i > 0) &&
+            !strncmp(header, sortedHeaders[i - 1], lastHeaderLen)) {
+            // Replacing the previous newline with a comma
+            *(buffer - 1) = ',';
+            // Skip the header name and space
+            c += (lastHeaderLen + 1);
+        }
+        // Else this is a new header
+        else {
+            // Copy in everything up to the space in the ": "
+            while (*c != ' ') {
+                v = tolower(*c++);
+                *buffer++ = v;
+                *hbuf++ = v;
+            }
+            // replace the ":" with a ";"
+            *(hbuf - 1) = ';';
+            // Save the header len since it's a new header
+            lastHeaderLen = c - header;
+            // Skip the space
+            c++;
+        }
+        // Now copy in the value, folding the lines
+        while (*c) {
+            // If c points to a \r\n[whitespace] sequence, then fold
+            // this newline out
+            if ((*c == '\r') && (*(c + 1) == '\n') && is_blank(*(c + 2))) {
+                c += 3;
+                while (is_blank(*c)) {
+                    c++;
+                }
+                // Also, what has most recently been copied into buffer may
+                // have been whitespace, and since we're folding whitespace
+                // out around this newline sequence, back buffer up over
+                // any whitespace it contains
+                while (is_blank(*(buffer - 1))) {
+                    buffer--;
+                }
+                continue;
+            }
+            *buffer++ = *c++;
+        }
+        // Finally, add the newline
+        *buffer++ = '\n';
+    }
+    // Remove the extra trailing semicolon from the header name list
+    // and terminate the string.
+    *(hbuf - 1) = '\0';
+
+    // Terminate the buffer
+    *buffer = 0;
+}
+
+
 // Canonicalizes the resource into params->canonicalizedResource
 static void canonicalize_resource(const S3BucketContext *context,
                                   const char *urlEncodedKey,
@@ -983,7 +1082,7 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     len = 0;
-    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH];
+    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH] = { 0 };
 #ifdef __APPLE__
     CC_SHA256(canonicalRequest, strlen(canonicalRequest), canonicalRequestHash);
 #else
@@ -1002,12 +1101,12 @@ static S3Status compose_auth_header(const RequestParams *params,
         awsRegion = params->bucketContext.authRegion;
     }
     char scope[sizeof(values->requestDateISO8601) + sizeof(awsRegion) +
-               sizeof("//s3/aws4_request") + 1];
+               sizeof("//s3/aws4_request") + 1] = { 0 };
     snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request",
              values->requestDateISO8601, awsRegion);
 
     char stringToSign[17 + 17 + sizeof(values->requestDateISO8601) +
-                      sizeof(scope) + sizeof(canonicalRequestHashHex) + 1];
+                      sizeof(scope) + sizeof(canonicalRequestHashHex) + 1] = { 0 };
     snprintf(stringToSign, sizeof(stringToSign), "AWS4-HMAC-SHA256\n%s\n%s\n%s",
              values->requestDateISO8601, scope, canonicalRequestHashHex);
 
@@ -1020,42 +1119,42 @@ static S3Status compose_auth_header(const RequestParams *params,
     snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
 
 #ifdef __APPLE__
-    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey),
            values->requestDateISO8601, 8, dateKey);
-    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, dateKey, S3_SHA256_DIGEST_LENGTH, awsRegion,
            strlen(awsRegion), dateRegionKey);
     unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
     CCHmac(kCCHmacAlgSHA256, dateRegionKey, S3_SHA256_DIGEST_LENGTH, "s3", 2,
            dateRegionServiceKey);
-    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
            "aws4_request", strlen("aws4_request"), signingKey);
 
-    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
     CCHmac(kCCHmacAlgSHA256, signingKey, S3_SHA256_DIGEST_LENGTH, stringToSign,
             strlen(stringToSign), finalSignature);
 #else
     const EVP_MD *sha256evp = EVP_sha256();
-    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, accessKey, strlen(accessKey),
          (const unsigned char*) values->requestDateISO8601, 8, dateKey,
          NULL);
-    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) awsRegion, strlen(awsRegion), dateRegionKey,
          NULL);
-    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateRegionKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) "s3", 2, dateRegionServiceKey, NULL);
-    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH];
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) "aws4_request", strlen("aws4_request"),
          signingKey,
          NULL);
 
-    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH];
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
     HMAC(sha256evp, signingKey, S3_SHA256_DIGEST_LENGTH,
          (const unsigned char*) stringToSign, strlen(stringToSign),
          finalSignature, NULL);
@@ -1070,6 +1169,140 @@ static S3Status compose_auth_header(const RequestParams *params,
     snprintf(values->authCredential, sizeof(values->authCredential),
              "%s/%.8s/%s/s3/aws4_request", params->bucketContext.accessKeyId,
              values->requestDateISO8601, awsRegion);
+
+    snprintf(values->authorizationHeader,
+             sizeof(values->authorizationHeader),
+             "Authorization: AWS4-HMAC-SHA256 Credential=%s,SignedHeaders=%s,Signature=%s",
+             values->authCredential, values->signedHeaders,
+             values->requestSignatureHex);
+
+#ifdef SIGNATURE_DEBUG
+    printf("--\nAuthorization Header:\n%s\n", values->authorizationHeader);
+#endif
+
+    return S3StatusOK;
+
+#undef buf_append
+
+}
+
+// Composes the Authorization header for the request
+static S3Status gqs_compose_auth_header(const RequestParams *params,
+                                    RequestComputedValues *values)
+{
+    const char *httpMethod = http_request_type_to_verb(params->httpRequestType);
+    int canonicalRequestLen = strlen(httpMethod) + 1 +
+    strlen(values->canonicalURI) + 1 +
+    strlen(values->canonicalQueryString) + 1 +
+    strlen(values->canonicalizedSignatureHeaders) + 1 +
+    strlen(values->signedHeaders) + 1 +
+    2 * S3_SHA256_DIGEST_LENGTH + 1; // 2 hex digits for each byte
+
+    int len = 0;
+
+    char canonicalRequest[canonicalRequestLen];
+
+#define buf_append(buf, format, ...)                    \
+    len += snprintf(&(buf[len]), sizeof(buf) - len,     \
+                    format, __VA_ARGS__)
+
+    canonicalRequest[0] = '\0';
+    buf_append(canonicalRequest, "%s\n", httpMethod);
+    buf_append(canonicalRequest, "%s\n", values->canonicalURI);
+    buf_append(canonicalRequest, "%s\n", values->canonicalQueryString);
+    buf_append(canonicalRequest, "%s\n", values->canonicalizedSignatureHeaders);
+    buf_append(canonicalRequest, "%s\n", values->signedHeaders);
+
+    buf_append(canonicalRequest, "%s", values->payloadHash);
+
+#ifdef SIGNATURE_DEBUG
+    printf("--\nCanonical Request:\n%s\n", canonicalRequest);
+#endif
+
+    len = 0;
+    unsigned char canonicalRequestHash[S3_SHA256_DIGEST_LENGTH] = { 0 };
+#ifdef __APPLE__
+    CC_SHA256(canonicalRequest, strlen(canonicalRequest), canonicalRequestHash);
+#else
+    const unsigned char *rqstData = (const unsigned char*) canonicalRequest;
+    SHA256(rqstData, strlen(canonicalRequest), canonicalRequestHash);
+#endif
+    char canonicalRequestHashHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
+    canonicalRequestHashHex[0] = '\0';
+    int i = 0;
+    for (; i < S3_SHA256_DIGEST_LENGTH; i++) {
+        buf_append(canonicalRequestHashHex, "%02x", canonicalRequestHash[i]);
+    }
+
+    const char *awsRegion = S3_DEFAULT_REGION;
+    if (params->bucketContext.authRegion) {
+        awsRegion = params->bucketContext.authRegion;
+    }
+    char scope[sizeof(values->requestDateISO8601) + sizeof(awsRegion) +
+               sizeof("//s3/aws4_request") + 1] = { 0 };
+    snprintf(scope, sizeof(scope), "%.8s/%s/s3/aws4_request",
+             values->requestDateISO8601, awsRegion);
+
+    char stringToSign[17 + 17 + sizeof(values->requestDateISO8601) +
+                      sizeof(scope) + sizeof(canonicalRequestHashHex) + 1] = { 0 };
+    snprintf(stringToSign, sizeof(stringToSign), "AWS4-HMAC-SHA256\n%s\n%s\n%s",
+             values->requestDateISO8601, scope, canonicalRequestHashHex);
+
+#ifdef SIGNATURE_DEBUG
+    printf("--\nString to Sign:\n%s\n", stringToSign);
+#endif
+
+    const char *secretAccessKey = params->bucketContext.secretAccessKey;
+    char accessKey[strlen(secretAccessKey) + 5];
+    snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
+
+#ifdef __APPLE__
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    CCHmac(kCCHmacAlgSHA256, accessKey, strlen(accessKey),
+           values->requestDateISO8601, 8, dateKey);
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    CCHmac(kCCHmacAlgSHA256, dateKey, S3_SHA256_DIGEST_LENGTH, awsRegion,
+           strlen(awsRegion), dateRegionKey);
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH];
+    CCHmac(kCCHmacAlgSHA256, dateRegionKey, S3_SHA256_DIGEST_LENGTH, "s3", 2,
+           dateRegionServiceKey);
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    CCHmac(kCCHmacAlgSHA256, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
+           "aws4_request", strlen("aws4_request"), signingKey);
+
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    CCHmac(kCCHmacAlgSHA256, signingKey, S3_SHA256_DIGEST_LENGTH, stringToSign,
+            strlen(stringToSign), finalSignature);
+#else
+    const EVP_MD *sha256evp = EVP_sha256();
+    unsigned char dateKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    HMAC(sha256evp, accessKey, strlen(accessKey),
+         (const unsigned char*) values->requestDateISO8601, 8, dateKey,
+         NULL);
+    unsigned char dateRegionKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    HMAC(sha256evp, dateKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) awsRegion, strlen(awsRegion), dateRegionKey,
+         NULL);
+    unsigned char dateRegionServiceKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    HMAC(sha256evp, dateRegionKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) "s3", 2, dateRegionServiceKey, NULL);
+    unsigned char signingKey[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    HMAC(sha256evp, dateRegionServiceKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) "aws4_request", strlen("aws4_request"),
+         signingKey,
+         NULL);
+
+    unsigned char finalSignature[S3_SHA256_DIGEST_LENGTH] = { 0 };
+    HMAC(sha256evp, signingKey, S3_SHA256_DIGEST_LENGTH,
+         (const unsigned char*) stringToSign, strlen(stringToSign),
+         finalSignature, NULL);
+#endif
+
+    len = 0;
+    values->requestSignatureHex[0] = '\0';
+    for (i = 0; i < S3_SHA256_DIGEST_LENGTH; i++) {
+        buf_append(values->requestSignatureHex, "%02x", finalSignature[i]);
+    }
 
     snprintf(values->authorizationHeader,
              sizeof(values->authorizationHeader),
@@ -1561,6 +1794,98 @@ static S3Status setup_request(const RequestParams *params,
     return status;
 }
 
+
+/* Setup request for gqs command. */
+static S3Status gqs_setup_request(const RequestParams *params,
+                              RequestComputedValues *computed,
+                              int forceUnsignedPayload, int expires, int queryParams_size)
+{
+    S3Status status;
+    const char *awsRegion = S3_DEFAULT_REGION;
+
+
+    // Validate the bucket name
+    if (params->bucketContext.bucketName
+        && ((status = S3_validate_bucket_name(params->bucketContext.bucketName,
+                                              params->bucketContext.uriStyle))
+            != S3StatusOK)) {
+        return status;
+    }
+
+    time_t now = time(NULL);
+    struct tm gmt;
+    gmtime_r(&now, &gmt);
+
+    strftime(computed->requestDateISO8601, sizeof(computed->requestDateISO8601),
+             "%Y%m%dT%H%M%SZ", &gmt);
+
+    // Compose the amz headers
+    if ((status = compose_amz_headers(params, forceUnsignedPayload, computed))
+        != S3StatusOK) {
+        return status;
+    }
+
+    // Compose standard headers
+    if ((status = compose_standard_headers(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+    // URL encode the key
+    if ((status = encode_key(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+    // Compute the canonicalized amz headers
+    gqs_canonicalize_signature_headers(computed);
+
+    // Compute the canonicalized resource
+    canonicalize_resource(&params->bucketContext, computed->urlEncodedKey,
+                          computed->canonicalURI,
+                          sizeof(computed->canonicalURI));
+ 
+    /* compose auth credential based on time and region.
+       Caution: must change '/'to '%2F' and cannot use coutent below, or the 'SignatureDoesNotMatch' error
+       will be returned from server.
+       snprintf(computed->authCredential, sizeof(computed->authCredential),
+             "%s/%.8s/%s/s3/aws4_request", params->bucketContext.accessKeyId,
+             computed->requestDateISO8601, S3_DEFAULT_REGION);
+    */
+    if (params->bucketContext.authRegion) {
+        awsRegion = params->bucketContext.authRegion;
+    }
+    snprintf(computed->authCredential, sizeof(computed->authCredential),
+             "%s%%2F%.8s%%2F%s%%2Fs3%%2Faws4_request", params->bucketContext.accessKeyId,
+             computed->requestDateISO8601, awsRegion);
+
+    // compose quary params
+    snprintf(params->queryParams, queryParams_size,
+             "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
+             "&X-Amz-Date=%s&X-Amz-Expires=%d"
+             "&X-Amz-SignedHeaders=%s",
+             computed->authCredential, computed->requestDateISO8601, expires,
+             computed->signedHeaders);
+
+    canonicalize_query_string(params->queryParams, params->subResource,
+                              computed->canonicalQueryString,
+                              sizeof(computed->canonicalQueryString));
+
+    // Compose Authorization header
+    if ((status = gqs_compose_auth_header(params, computed)) != S3StatusOK) {
+        return status;
+    }
+
+#ifdef SIGNATURE_DEBUG
+    int i = 0;
+    printf("\n--\nAMZ Headers:\n");
+    for (; i < computed->amzHeadersCount; i++) {
+        printf("%s\n", computed->amzHeaders[i]);
+    }
+#endif
+
+    return status;
+}
+
+
 void request_perform(const RequestParams *params, S3RequestContext *context)
 {
     Request *request;
@@ -1750,25 +2075,9 @@ S3Status S3_generate_authenticated_query_string
     // maximum expiration period is seven days (in seconds)
 #define MAX_EXPIRES 604800
 
-    if (expires < 0) {
-        expires = MAX_EXPIRES;
-    }
-    else if (expires > MAX_EXPIRES) {
-        expires = MAX_EXPIRES;
-    }
+    RequestComputedValues computed = { 0 };
 
-    RequestParams params =
-    { http_request_method_to_type(httpMethod), *bucketContext, key, NULL,
-        resource,
-        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
-
-    RequestComputedValues computed;
-    S3Status status = setup_request(&params, &computed, 1);
-    if (status != S3StatusOK) {
-        return status;
-    }
-
-    // Finally, compose the URI, with params
+    // Set query parameter array.
     char queryParams[sizeof("X-Amz-Algorithm=AWS4-HMAC-SHA256") +
                      sizeof("&X-Amz-Credential=") +
                      sizeof(computed.authCredential) +
@@ -1778,15 +2087,34 @@ S3Status S3_generate_authenticated_query_string
                      sizeof("&X-Amz-SignedHeaders=") +
                      sizeof(computed.signedHeaders) +
                      sizeof("&X-Amz-Signature=") +
-                     sizeof(computed.requestSignatureHex) + 1];
-    snprintf(queryParams, sizeof(queryParams),
-             "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=%s"
-             "&X-Amz-Date=%s&X-Amz-Expires=%d"
-             "&X-Amz-SignedHeaders=%s&X-Amz-Signature=%s",
-             computed.authCredential, computed.requestDateISO8601, expires,
-             computed.signedHeaders, computed.requestSignatureHex);
+                     sizeof(computed.requestSignatureHex) + 1] = { 0 };
+    int queryParams_len = 0;
+    
+    if (expires < 0) {
+        expires = MAX_EXPIRES;
+    }
+    else if (expires > MAX_EXPIRES) {
+        expires = MAX_EXPIRES;
+    }
+
+    RequestParams params =
+    { http_request_method_to_type(httpMethod), *bucketContext, key, queryParams,
+        resource,
+        NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0};
+
+    
+    S3Status status = gqs_setup_request(&params, &computed, 1, expires, sizeof(queryParams));
+    if (status != S3StatusOK) {
+        return status;
+    }
+
+    // compose the URI with signature params
+    queryParams_len = strlen(queryParams);
+    snprintf(queryParams + queryParams_len, sizeof(queryParams) - queryParams_len,
+             "&X-Amz-Signature=%s", computed.requestSignatureHex);
 
     return compose_uri(buffer, S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE,
                        bucketContext, computed.urlEncodedKey, resource,
                        queryParams);
 }
+
