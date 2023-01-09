@@ -238,6 +238,18 @@ extern "C" {
 #define S3_DEFAULT_REGION                  "us-east-1"
 
 
+/**
+ * Maximal length of AWS access key
+ */
+#define S3_MAX_ACCESS_KEY_ID_LENGTH 128
+
+
+/**
+ * Maximal length of AWS region name
+ */
+#define S3_MAX_REGION_LENGTH 32
+
+
 /** **************************************************************************
  * Enumerations
  ************************************************************************** **/
