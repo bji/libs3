@@ -35,6 +35,9 @@
 
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Declare a string_buffer with the given name of the given maximum length
 #define string_buffer(name, len)                                        \
@@ -109,5 +112,9 @@
         string_multibuffer_add(smb, str, len, all_fit);                 \
     } while (0)
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* STRING_BUFFER_H */

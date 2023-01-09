@@ -37,6 +37,9 @@
 #include "simplexml.h"
 #include "string_buffer.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define EXTRA_DETAILS_SIZE 8
 
@@ -84,5 +87,8 @@ void error_parser_convert_status(ErrorParser *errorParser, S3Status *status);
 // Always call this
 void error_parser_deinitialize(ErrorParser *errorParser);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ERROR_PARSER_H */

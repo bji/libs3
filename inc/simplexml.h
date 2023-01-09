@@ -35,6 +35,9 @@
 
 #include "libs3.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Simple XML callback.
 //
@@ -78,5 +81,9 @@ S3Status simplexml_add(SimpleXml *simpleXml, const char *data, int dataLen);
 // Always call this
 void simplexml_deinitialize(SimpleXml *simpleXml);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SIMPLEXML_H */

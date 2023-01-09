@@ -38,6 +38,10 @@
 #include "response_headers_handler.h"
 #include "util.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Describes a type of HTTP request (these are our supported HTTP "verbs")
 typedef enum
 {
@@ -193,5 +197,9 @@ void request_finish(Request *request);
 // Convert a CURLE code to an S3Status
 S3Status request_curl_code_to_status(CURLcode code);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* REQUEST_H */
