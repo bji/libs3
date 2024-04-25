@@ -1,4 +1,5 @@
 This directory contains the libs3 library.
 
-The libs3 library is free software.  See the file LICENSE for copying
-permission.
+The libs3 library is free software.  See the file LICENSE for copying permission.
+
+All details about S3 protocol please refer "https://docs.aws.amazon.com/s3/index.html".
