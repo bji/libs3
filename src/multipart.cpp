@@ -36,6 +36,9 @@
 #include "request.h"
 #include "simplexml.h"
 
+#include "vla.hpp"
+
+extern "C" {
 
 typedef struct InitialMultipartData
 {
@@ -545,7 +548,7 @@ static S3Status make_list_multipart_callback(ListMultipartData *lmData)
                        !strcmp(lmData->isTruncated, "1")) ? 1 : 0;
 
     // Convert the contents
-    S3ListMultipartUpload uploads[lmData->uploadsCount];
+    vla<S3ListMultipartUpload> uploads(lmData->uploadsCount);
 
     int uploadsCount = lmData->uploadsCount;
     for (i = 0; i < uploadsCount; i++) {
@@ -565,7 +568,7 @@ static S3Status make_list_multipart_callback(ListMultipartData *lmData)
 
     // Make the common prefixes array
     int commonPrefixesCount = lmData->commonPrefixesCount;
-    char *commonPrefixes[commonPrefixesCount];
+    vla<char *> commonPrefixes(commonPrefixesCount);
     for (i = 0; i < commonPrefixesCount; i++) {
         commonPrefixes[i] = lmData->commonPrefixes[i];
     }
@@ -573,7 +576,7 @@ static S3Status make_list_multipart_callback(ListMultipartData *lmData)
     return (*(lmData->listMultipartCallback))
         (isTruncated, lmData->nextKeyMarker, lmData->nextUploadIdMarker,
          uploadsCount, uploads, commonPrefixesCount,
-         (const char **) commonPrefixes, lmData->callbackData);
+         (const char **) (char **) commonPrefixes, lmData->callbackData);
 }
 
 
@@ -586,7 +589,7 @@ static S3Status make_list_parts_callback(ListPartsData *lpData)
                        !strcmp(lpData->isTruncated, "1")) ? 1 : 0;
 
     // Convert the contents
-    S3ListPart Parts[lpData->partsCount];
+    vla<S3ListPart> Parts(lpData->partsCount);
     int partsCount = lpData->partsCount;
     for (i = 0; i < partsCount; i++) {
         S3ListPart *partDest = &(Parts[i]);
@@ -1105,3 +1108,5 @@ void S3_list_parts(S3BucketContext *bucketContext, const char *key,
         // Perform the request
         request_perform(&params, requestContext);
 }
+
+}  // extern "C"

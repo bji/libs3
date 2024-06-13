@@ -31,14 +31,15 @@
  ************************************************************************** **/
 
 #include <ctype.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/utsname.h>
 #include <libxml/parser.h>
 #include "request.h"
 #include "request_context.h"
 #include "response_headers_handler.h"
+
+#include "vla.hpp"
+#include <mutex>
 
 #ifdef __APPLE__
 #include <CommonCrypto/CommonHMAC.h>
@@ -55,11 +56,13 @@
 
 //#define SIGNATURE_DEBUG
 
+extern "C" {
+  
 static int verifyPeer;
 
 static char userAgentG[USER_AGENT_SIZE];
 
-static pthread_mutex_t requestStackMutexG;
+static std::mutex requestStackMutexG;
 
 static Request *requestStackG[REQUEST_STACK_SIZE];
 
@@ -67,6 +70,24 @@ static int requestStackCountG;
 
 char defaultHostNameG[S3_MAX_HOSTNAME_SIZE];
 
+#ifdef _MSC_VER
+#define strtok_r strtok_s
+inline struct tm* gmtime_r(const time_t* timer, struct tm* buf) {
+  gmtime_s(buf, timer);
+  return buf;
+}
+struct utsname {
+  char sysname[32];
+  char machine[64];
+};
+inline int uname(struct utsname* buf) {
+  memcpy(buf->sysname, "Windows", 9);
+  memcpy(buf->machine, "x86_64", 7);
+  return 0;
+}
+#else
+#include <sys/utsname.h>
+#endif
 
 typedef struct RequestComputedValues
 {
@@ -829,7 +850,7 @@ static void sort_query_string(const char *queryString, char *result,
         tmp++;
     }
 
-    const char* params[numParams];
+    vla<const char*> params(numParams);
 
     // Where did strdup go?!??
     int queryStringLen = strlen(queryString);
@@ -880,12 +901,12 @@ static void canonicalize_query_string(const char *queryParams,
 
     *buffer = 0;
 
-#define append(str) len += snprintf(&(buffer[len]), buffer_size - len, "%s", str)
+#define append(str) len += snprintf(&(buffer[len]), buffer_size - len, "%s", (const char *) str)
 
     if (queryParams && queryParams[0]) {
-        char sorted[strlen(queryParams) * 2];
+        vla<char> sorted(strlen(queryParams) * 2);
         sorted[0] = '\0';
-        sort_query_string(queryParams, sorted, sizeof(sorted));
+        sort_query_string(queryParams, sorted, sorted.size_bytes());
         append(sorted);
     }
 
@@ -963,23 +984,26 @@ static S3Status compose_auth_header(const RequestParams *params,
 
     int len = 0;
 
-    char canonicalRequest[canonicalRequestLen];
+    vla<char> canonicalRequest(canonicalRequestLen);
 
+#define canonicalbuf_append(format, ...)                    \
+    len += snprintf(&(canonicalRequest[len]), canonicalRequest.size_bytes() - len,     \
+                    format, __VA_ARGS__)
 #define buf_append(buf, format, ...)                    \
     len += snprintf(&(buf[len]), sizeof(buf) - len,     \
                     format, __VA_ARGS__)
 
     canonicalRequest[0] = '\0';
-    buf_append(canonicalRequest, "%s\n", httpMethod);
-    buf_append(canonicalRequest, "%s\n", values->canonicalURI);
-    buf_append(canonicalRequest, "%s\n", values->canonicalQueryString);
-    buf_append(canonicalRequest, "%s\n", values->canonicalizedSignatureHeaders);
-    buf_append(canonicalRequest, "%s\n", values->signedHeaders);
+    canonicalbuf_append("%s\n", httpMethod);
+    canonicalbuf_append("%s\n", values->canonicalURI);
+    canonicalbuf_append("%s\n", values->canonicalQueryString);
+    canonicalbuf_append("%s\n", values->canonicalizedSignatureHeaders);
+    canonicalbuf_append("%s\n", values->signedHeaders);
 
-    buf_append(canonicalRequest, "%s", values->payloadHash);
+    canonicalbuf_append("%s", values->payloadHash);
 
 #ifdef SIGNATURE_DEBUG
-    printf("--\nCanonical Request:\n%s\n", canonicalRequest);
+    printf("--\nCanonical Request:\n%s\n", (char *) canonicalRequest);
 #endif
 
     len = 0;
@@ -987,7 +1011,7 @@ static S3Status compose_auth_header(const RequestParams *params,
 #ifdef __APPLE__
     CC_SHA256(canonicalRequest, strlen(canonicalRequest), canonicalRequestHash);
 #else
-    const unsigned char *rqstData = (const unsigned char*) canonicalRequest;
+    const unsigned char *rqstData = (const unsigned char*) (char *) canonicalRequest;
     SHA256(rqstData, strlen(canonicalRequest), canonicalRequestHash);
 #endif
     char canonicalRequestHashHex[2 * S3_SHA256_DIGEST_LENGTH + 1];
@@ -1016,8 +1040,8 @@ static S3Status compose_auth_header(const RequestParams *params,
 #endif
 
     const char *secretAccessKey = params->bucketContext.secretAccessKey;
-    char accessKey[strlen(secretAccessKey) + 5];
-    snprintf(accessKey, sizeof(accessKey), "AWS4%s", secretAccessKey);
+    vla<char> accessKey(strlen(secretAccessKey) + 5);
+    snprintf(accessKey, accessKey.size_bytes(), "AWS4%s", secretAccessKey);
 
 #ifdef __APPLE__
     unsigned char dateKey[S3_SHA256_DIGEST_LENGTH];
@@ -1328,13 +1352,13 @@ static S3Status request_get(const RequestParams *params,
 
     // Try to get one from the request stack.  We hold the lock for the
     // shortest time possible here.
-    pthread_mutex_lock(&requestStackMutexG);
+    requestStackMutexG.lock();
 
     if (requestStackCountG) {
         request = requestStackG[--requestStackCountG];
     }
 
-    pthread_mutex_unlock(&requestStackMutexG);
+    requestStackMutexG.unlock();
 
     // If we got one, deinitialize it for re-use
     if (request) {
@@ -1424,11 +1448,11 @@ static void request_destroy(Request *request)
 
 static void request_release(Request *request)
 {
-    pthread_mutex_lock(&requestStackMutexG);
+    requestStackMutexG.lock();
 
     // If the request stack is full, destroy this one
     if (requestStackCountG == REQUEST_STACK_SIZE) {
-        pthread_mutex_unlock(&requestStackMutexG);
+        requestStackMutexG.unlock();
         request_destroy(request);
     }
     // Else put this one at the front of the request stack; we do this because
@@ -1437,7 +1461,7 @@ static void request_release(Request *request)
     // times out
     else {
         requestStackG[requestStackCountG++] = request;
-        pthread_mutex_unlock(&requestStackMutexG);
+        requestStackMutexG.unlock();
     }
 }
 
@@ -1460,8 +1484,6 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
                  "%s", defaultHostName) >= S3_MAX_HOSTNAME_SIZE) {
         return S3StatusUriTooLong;
     }
-
-    pthread_mutex_init(&requestStackMutexG, 0);
 
     requestStackCountG = 0;
 
@@ -1490,8 +1512,6 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
 
 void request_api_deinitialize()
 {
-    pthread_mutex_destroy(&requestStackMutexG);
-
     xmlCleanupParser();
     while (requestStackCountG--) {
         request_destroy(requestStackG[requestStackCountG]);
@@ -1790,3 +1810,5 @@ S3Status S3_generate_authenticated_query_string
                        bucketContext, computed.urlEncodedKey, resource,
                        queryParams);
 }
+
+}  // extern "C"

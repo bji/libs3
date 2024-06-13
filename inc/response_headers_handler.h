@@ -37,6 +37,9 @@
 #include "string_buffer.h"
 #include "util.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct ResponseHeadersHandler
 {
@@ -66,5 +69,9 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
 
 void response_headers_handler_done(ResponseHeadersHandler *handler, 
                                    CURL *curl);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* RESPONSE_HEADERS_HANDLER_H */

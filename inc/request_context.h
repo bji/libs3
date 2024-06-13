@@ -35,6 +35,9 @@
 
 #include "libs3.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum
 {
@@ -57,5 +60,9 @@ struct S3RequestContext
     void *setupCurlCallbackData;
 };
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* REQUEST_CONTEXT_H */

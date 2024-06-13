@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+find_package(libxml2 CONFIG REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/@TARGETS_EXPORT_NAME@.cmake")
+check_required_components("@PROJECT_NAME@")

@@ -38,6 +38,10 @@
 #include <stdint.h>
 #include "libs3.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // acl groups
 #define ACS_URL "http://acs.amazonaws.com/groups/"
 
@@ -69,12 +73,10 @@
 #define MAX_CANONICALIZED_RESOURCE_SIZE \
     (1 + 255 + 1 + MAX_URLENCODED_KEY_SIZE + (sizeof("?torrent") - 1) + 1)
 
-#define MAX_ACCESS_KEY_ID_LENGTH 32
-
 // Maximum length of a credential string
 // <access key>/<yyyymmdd>/<region>/s3/aws4_request
 #define MAX_CREDENTIAL_SIZE \
-   (MAX_ACCESS_KEY_ID_LENGTH + 1) + 8 + 1 + 32 + sizeof("/s3/aws4_request")
+   (S3_MAX_ACCESS_KEY_ID_LENGTH + 1) + 8 + 1 + S3_MAX_REGION_LENGTH + sizeof("/s3/aws4_request")
 
 // Utilities -----------------------------------------------------------------
 
@@ -92,5 +94,9 @@ uint64_t parseUnsignedInt(const char *str);
 // Because Windows seems to be missing isblank(), use our own; it's a very
 // easy function to write in any case
 int is_blank(char c);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* UTIL_H */

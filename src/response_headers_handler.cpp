@@ -32,9 +32,15 @@
 
 #include <ctype.h>
 #include <string.h>
-#include <strings.h>
 #include "response_headers_handler.h"
 
+#ifdef _MSC_VER
+#define strncasecmp _strnicmp
+#else
+#include <strings.h>
+#endif
+
+extern "C" {
 
 void response_headers_handler_initialize(ResponseHeadersHandler *handler)
 {
@@ -220,3 +226,5 @@ void response_headers_handler_done(ResponseHeadersHandler *handler, CURL *curl)
     
     handler->done = 1;
 }
+
+}  // extern "C"
