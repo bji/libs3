@@ -48,6 +48,8 @@ void response_headers_handler_initialize(ResponseHeadersHandler *handler)
     handler->responseProperties.metaDataCount = 0;
     handler->responseProperties.metaData = 0;
     handler->responseProperties.usesServerSideEncryption = 0;
+    handler->responseProperties.versionId = 0;
+    handler->responseProperties.deleteMarker = 0;
     handler->done = 0;
     string_multibuffer_initialize(handler->responsePropertyStrings);
     string_multibuffer_initialize(handler->responseMetaDataStrings);
@@ -204,6 +206,15 @@ void response_headers_handler_add(ResponseHeadersHandler *handler,
         // Ignore other values - only AES256 is expected, anything else is
         // assumed to be "None" or some other value indicating no server-side
         // encryption
+    }
+    else if (!strncasecmp(header, "x-amz-version-id", namelen)) {
+        responseProperties->versionId =
+            string_multibuffer_current(handler->responsePropertyStrings);
+        string_multibuffer_add(handler->responsePropertyStrings, c,
+                               valuelen, fit);
+    }
+    else if (!strncasecmp(header, "x-amz-delete-marker", namelen)) {
+        responseProperties->deleteMarker = 1;
     }
 }
 
